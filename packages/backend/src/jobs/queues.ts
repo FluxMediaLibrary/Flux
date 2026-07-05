@@ -14,9 +14,9 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 
 // ─── Job payload shapes (stubs — refined in later phases) ─────────────────────
 
-/** TODO(phase 5): fields for renaming/moving/season-pack splitting. */
 export interface TorrentPostprocessJob {
   torrentId: string;
+  infoHash: string;
 }
 
 /** TODO(phase 6): fields for an on-demand HLS transcode session. */

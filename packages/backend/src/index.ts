@@ -14,6 +14,17 @@ async function main(): Promise<void> {
   await seedBootstrapAdmin(app);
   startWorkers();
 
+  // Resume any torrents that were downloading/seeding when we last shut down.
+  try {
+    const { resumeTorrents } = await import('./lib/webtorrent.js');
+    const resumed = await resumeTorrents();
+    if (resumed > 0) {
+      app.log.info(`Resumed ${resumed} torrent(s) on boot`);
+    }
+  } catch (err) {
+    app.log.warn(`Failed to resume torrents on boot: ${String(err)}`);
+  }
+
   await app.listen({ host: '0.0.0.0', port: config.BACKEND_PORT });
 
   const shutdown = async (signal: string): Promise<void> => {
