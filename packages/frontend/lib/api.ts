@@ -374,6 +374,15 @@ export const api = {
     const q = qs.toString();
     return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}${q ? `?${q}` : ''}`;
   },
+  /** Ask the server whether this file can be direct-played or needs HLS. */
+  getPlaybackInfo(mediaItemId: string, episodeId?: string, signal?: AbortSignal) {
+    const qs = episodeId ? `?episodeId=${encodeURIComponent(episodeId)}` : '';
+    return request<{
+      directPlay: boolean;
+      videoCodec: string | null;
+      audioCodec: string | null;
+    }>(`/api/stream/${encodeURIComponent(mediaItemId)}/info${qs}`, { signal });
+  },
   getHlsUrl(mediaItemId: string, episodeId?: string): string {
     if (typeof window === 'undefined') return '';
     const qs = new URLSearchParams();

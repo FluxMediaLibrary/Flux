@@ -80,17 +80,27 @@ export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
     },
     include: {
       mediaItem: true,
-      episode: true,
+      // Episode-level progress has no direct mediaItem — resolve it via the
+      // episode's parent so continue-watching can show the show.
+      episode: { include: { mediaItem: true } },
     },
     orderBy: { updatedAt: 'desc' },
     take: 10,
   });
 
-  const continueWatching: ContinueWatchingItemDTO[] = progressRows.map((p) => ({
-    mediaItem: mapMediaItemToDTO(p.mediaItem!),
-    episode: p.episode ? mapEpisodeToDTO(p.episode) : null,
-    progress: mapProgressToDTO(p),
-  }));
+  const continueWatching: ContinueWatchingItemDTO[] = progressRows.flatMap(
+    (p) => {
+      const mediaItem = p.mediaItem ?? p.episode?.mediaItem;
+      if (!mediaItem) return []; // orphaned progress row — skip
+      return [
+        {
+          mediaItem: mapMediaItemToDTO(mediaItem),
+          episode: p.episode ? mapEpisodeToDTO(p.episode) : null,
+          progress: mapProgressToDTO(p),
+        },
+      ];
+    },
+  );
 
   // 2. Recently Added
   const recentRows = await prisma.mediaItem.findMany({

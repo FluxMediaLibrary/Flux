@@ -88,6 +88,42 @@ export function probeMedia(filePath: string): Promise<MediaProbe> {
   });
 }
 
+/** Containers a browser can demux for direct play (by file extension). */
+const DIRECT_CONTAINERS = new Set(['.mp4', '.m4v', '.mov', '.webm']);
+/** Video codecs browsers decode natively. */
+const DIRECT_VIDEO = new Set(['h264', 'vp9', 'vp8', 'av1']);
+/** Audio codecs browsers decode natively (AC3/EAC3/DTS are NOT here). */
+const DIRECT_AUDIO = new Set(['aac', 'mp3', 'opus', 'vorbis', 'flac']);
+
+export interface PlaybackDecision {
+  /** True when the browser can play the file as-is (no transcode/remux). */
+  directPlay: boolean;
+  videoCodec: string | null;
+  audioCodec: string | null;
+}
+
+/**
+ * Decide, Plex-style, whether a file can be direct-played by a browser or must
+ * go through HLS. Direct play needs a browser-friendly container AND both a
+ * decodable video and audio codec — the audio check is what stops "video plays
+ * but there's no sound" for AC3/DTS tracks.
+ */
+export async function decidePlayback(
+  filePath: string,
+): Promise<PlaybackDecision> {
+  const probe = await probeMedia(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+  const containerOk = DIRECT_CONTAINERS.has(ext);
+  const videoOk = probe.videoCodec != null && DIRECT_VIDEO.has(probe.videoCodec);
+  const audioOk =
+    probe.audioCodec == null || DIRECT_AUDIO.has(probe.audioCodec);
+  return {
+    directPlay: containerOk && videoOk && audioOk,
+    videoCodec: probe.videoCodec,
+    audioCodec: probe.audioCodec,
+  };
+}
+
 /**
  * Build codec-aware FFmpeg args for an HLS session (Plex-style):
  *   - video already H.264  → stream-copy (remux, no re-encode → near-instant)
