@@ -61,7 +61,7 @@ COPY --from=build /app/packages/backend/prisma ./packages/backend/prisma
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 
 WORKDIR /app/packages/backend
-EXPOSE 4000
+EXPOSE 6948
 
 # Apply migrations, then start. `prisma migrate deploy` is idempotent.
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

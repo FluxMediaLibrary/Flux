@@ -39,7 +39,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
+ENV PORT=4938
 ENV HOSTNAME=0.0.0.0
 
 # Run as an unprivileged user.
@@ -51,6 +51,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/.next/static ./
 COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/public ./packages/frontend/public
 
 USER nextjs
-EXPOSE 3000
+EXPOSE 4938
 
 CMD ["node", "packages/frontend/server.js"]
