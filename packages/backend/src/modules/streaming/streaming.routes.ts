@@ -9,16 +9,17 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import {
   getMediaFilePath,
-  getHlsPath,
   probeMedia,
   buildHlsFfmpegArgs,
   decidePlayback,
 } from './streaming.service.js';
 import { safeJoin } from '../../lib/media-paths.js';
+import { config } from '../../config.js';
 import { ApiError } from '../../lib/errors.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 
 // ── In-memory session tracking ──────────────────────────────────────────────
 // Maps a (mediaItemId, episodeId) pair → sessionDir so segment routes know
@@ -218,28 +219,27 @@ export const streamingRoutes: FastifyPluginAsync = async (
           .header('Cache-Control', 'no-store')
           .send(tokenizeManifest(raw, token, episodeId));
 
-      // Reuse an existing session if its manifest is already on disk.
-      const existingSession = hlsSessions.get(key);
-      if (existingSession) {
-        const existingManifest = path.join(existingSession, 'index.m3u8');
-        if (fs.existsSync(existingManifest)) {
-          return sendManifest(fs.readFileSync(existingManifest, 'utf-8'));
+      let sessionDir = hlsSessions.get(key);
+      if (!sessionDir) {
+        // 404 if the source file doesn't exist — before reserving a session.
+        const { filePath: sourceFile } = await getMediaFilePath(
+          mediaItemId,
+          episodeId,
+        );
+        // Re-check after the await: the set below is synchronous, so two
+        // concurrent requests can't both spawn a transcode for the same key.
+        sessionDir = hlsSessions.get(key);
+        if (!sessionDir) {
+          sessionDir = safeJoin(config.TRANSCODE_ROOT, randomUUID());
+          hlsSessions.set(key, sessionDir);
+          await fs.promises.mkdir(sessionDir, { recursive: true });
+          await spawnTranscode(sourceFile, sessionDir);
         }
       }
 
-      // Create a fresh session.
-      const hls = await getHlsPath(mediaItemId, episodeId);
-      const { manifestPath, sessionDir } = hls;
-      hlsSessions.set(key, sessionDir);
-
-      // Resolve the source file for FFmpeg.
-      const { filePath: sourceFile } = await getMediaFilePath(mediaItemId, episodeId);
-
-      // Probe + fire-and-forget the codec-aware transcode in the background.
-      await spawnTranscode(sourceFile, sessionDir);
-
-      // Poll for the manifest (up to 30 attempts × 500 ms = 15 s).
-      const ready = await pollForFile(manifestPath, 30, 500);
+      // Poll for the manifest (up to 40 attempts × 500 ms = 20 s).
+      const manifestPath = path.join(sessionDir, 'index.m3u8');
+      const ready = await pollForFile(manifestPath, 40, 500);
       if (!ready) {
         throw ApiError.badRequest(
           'HLS transcode timed out — try again shortly',

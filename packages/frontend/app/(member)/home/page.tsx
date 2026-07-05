@@ -105,7 +105,7 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div>
+      <div className="page">
         <h1 style={{ fontSize: '1.9rem', marginBottom: 4 }}>
           Welcome back{activeProfile ? `, ${activeProfile.name}` : ''}
         </h1>
@@ -125,7 +125,7 @@ export default function HomePage() {
 
   if (error) {
     return (
-      <div>
+      <div className="page">
         <h1 style={{ fontSize: '1.9rem', marginBottom: 4 }}>Home</h1>
         <div className="form-error">{error}</div>
         <button className="btn btn-primary" onClick={fetchHome} style={{ marginTop: 12 }}>
@@ -151,7 +151,7 @@ export default function HomePage() {
     null;
 
   return (
-    <div>
+    <div className="page">
       {featured && (
         <div className="disc-hero">
           <div className="disc-hero-bg">

@@ -154,6 +154,10 @@ export function buildHlsFfmpegArgs(
     '-f', 'hls',
     '-hls_time', '4',
     '-hls_list_size', '0',
+    // EVENT = a growing-but-seekable-from-start playlist. Without this the
+    // manifest reads as a live stream and players jump to the live edge
+    // (→ "starts on a random part of the show").
+    '-hls_playlist_type', 'event',
     '-hls_flags', 'independent_segments',
     '-hls_segment_type', 'mpegts',
     '-start_number', '0',

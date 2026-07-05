@@ -1,52 +1,90 @@
 'use client';
 
 /**
- * Ambient backdrop — a fixed, blurred, darkened image layer that gives the dark
- * UI its colour (Jellyfin-style). Pages set the current backdrop via `useAmbient`;
- * the layer cross-fades when it changes and falls back to a gradient when unset.
+ * BackgroundLayer — a fixed, heavily-blurred, dark-overlaid backdrop generated
+ * from the currently selected media item. Backdrops crossfade when the selection
+ * changes. Pages set the current backdrop via `useAmbient(backdropPath)`.
+ *
+ * Exported as AmbientProvider/useAmbient (stable names used across pages) and
+ * BackgroundProvider/useBackdrop (spec aliases).
  */
 import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 
 const BACKDROP_BASE = 'https://image.tmdb.org/t/p/w1280';
 
-const AmbientContext = createContext<(src: string | null) => void>(() => {});
+const BackdropContext = createContext<(src: string | null) => void>(() => {});
 
-export function AmbientProvider({ children }: { children: ReactNode }) {
-  const [src, setSrc] = useState<string | null>(null);
+interface Layer { id: number; src: string; }
 
+function BackdropImage({ src }: { src: string }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const r = requestAnimationFrame(() => setShown(true));
+    return () => cancelAnimationFrame(r);
+  }, []);
   return (
-    <AmbientContext.Provider value={setSrc}>
-      <div className="ambient" aria-hidden="true">
-        {src && (
-          <img
-            key={src}
-            className="ambient-img"
-            src={`${BACKDROP_BASE}${src}`}
-            alt=""
-            fetchPriority="low"
-          />
-        )}
-        <div className="ambient-veil" />
-      </div>
-      <div className="member-content">{children}</div>
-    </AmbientContext.Provider>
+    <img
+      className={`bg-layer__img${shown ? ' shown' : ''}`}
+      src={`${BACKDROP_BASE}${src}`}
+      alt=""
+      aria-hidden="true"
+      fetchPriority="low"
+    />
   );
 }
 
-/**
- * Set the ambient backdrop to a TMDb backdrop path (or clear it) for as long as
- * the calling component is mounted.
- */
-export function useAmbient(backdropPath: string | null | undefined): void {
-  const setSrc = useContext(AmbientContext);
+function BackgroundLayer({ src }: { src: string | null }) {
+  const [layers, setLayers] = useState<Layer[]>([]);
+  const idRef = useRef(0);
+
   useEffect(() => {
-    setSrc(backdropPath ?? null);
-    return () => setSrc(null);
+    if (!src) return;
+    const id = (idRef.current += 1);
+    // Keep the previous layer beneath the new one so they crossfade.
+    setLayers((prev) => [...prev.slice(-1), { id, src }]);
+    const t = setTimeout(
+      () => setLayers((prev) => prev.filter((l) => l.id === id)),
+      800,
+    );
+    return () => clearTimeout(t);
+  }, [src]);
+
+  return (
+    <div className="bg-layer" aria-hidden="true">
+      {layers.map((l) => (
+        <BackdropImage key={l.id} src={l.src} />
+      ))}
+      <div className="bg-layer__overlay" />
+      <div className="bg-layer__vignette" />
+    </div>
+  );
+}
+
+export function AmbientProvider({ children }: { children: ReactNode }) {
+  const [src, setSrc] = useState<string | null>(null);
+  return (
+    <BackdropContext.Provider value={setSrc}>
+      <BackgroundLayer src={src} />
+      <div className="app-shell">{children}</div>
+    </BackdropContext.Provider>
+  );
+}
+
+/** Set the ambient backdrop to a TMDb backdrop path while mounted. */
+export function useAmbient(backdropPath: string | null | undefined): void {
+  const setSrc = useContext(BackdropContext);
+  useEffect(() => {
+    if (backdropPath) setSrc(backdropPath);
   }, [backdropPath, setSrc]);
 }
+
+// Spec-named aliases.
+export const BackgroundProvider = AmbientProvider;
+export const useBackdrop = useAmbient;
