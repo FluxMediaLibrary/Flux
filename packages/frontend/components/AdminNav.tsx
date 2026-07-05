@@ -31,7 +31,7 @@ export function AdminNav() {
           );
         })}
       </nav>
-      <Link href="/home" className="admin-back">
+      <Link href="/library" className="admin-back">
         ← Back to app
       </Link>
     </aside>

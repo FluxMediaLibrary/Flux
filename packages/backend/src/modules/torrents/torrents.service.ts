@@ -23,12 +23,39 @@ import {
   getLiveStats,
   stopSeeding,
   removeTorrent,
+  type TorrentLiveStats,
 } from '../../lib/webtorrent.js';
 import type { ConfirmTorrentInput } from './torrents.schema.js';
 import { torrentPostprocessQueue } from '../../jobs/queues.js';
 
 // Track torrents already enqueued for postprocessing (prevents duplicates)
 const postprocessEnqueued = new Set<string>();
+
+/**
+ * Enqueue a finished download's post-process job exactly once. Gates on
+ * Transmission's authoritative `done` flag (leftUntilDone === 0), NOT a
+ * `progress >= 1` float compare — a finished torrent can report percentDone a
+ * hair under 1.0, which would strand it in DOWNLOADING. Shared by the on-demand
+ * dashboard listing and the background poller.
+ */
+function enqueuePostprocessIfDone(row: Torrent, live: TorrentLiveStats): void {
+  if (row.status !== 'DOWNLOADING' || !live.done || postprocessEnqueued.has(row.id)) {
+    return;
+  }
+  postprocessEnqueued.add(row.id);
+  console.log(`[Torrent] Done! Triggering postprocess for ${row.name} (${row.infoHash})`);
+  torrentPostprocessQueue
+    .add('torrent-postprocess', {
+      torrentId: row.id,
+      infoHash: row.infoHash,
+    })
+    .catch((err) => {
+      // Enqueue failed (e.g. a Redis blip). Drop the dedupe marker so the next
+      // sweep can retry instead of stranding the torrent forever.
+      postprocessEnqueued.delete(row.id);
+      console.error('[Torrent] Failed to enqueue postprocess:', err);
+    });
+}
 
 // ─── DTO mapping ─────────────────────────────────────────────────────────────
 
@@ -149,22 +176,50 @@ export async function listTorrents(): Promise<TorrentDTO[]> {
   const rows = await prisma.torrent.findMany({
     orderBy: { createdAt: 'desc' },
   });
-  const dtos = await Promise.all(rows.map((r) => overlayLiveStats(mapTorrentToDTO(r))));
 
-  // Check for completed torrents and trigger postprocessing
-  for (const dto of dtos) {
-    const row = rows.find((r) => r.id === dto.id);
-    if (row && row.status === 'DOWNLOADING' && dto.progress >= 1 && !postprocessEnqueued.has(row.id)) {
-      postprocessEnqueued.add(row.id);
-      console.log(`[Torrent] Done! Triggering postprocess for ${row.name} (${row.infoHash})`);
-      torrentPostprocessQueue.add('torrent-postprocess', {
-        torrentId: row.id,
-        infoHash: row.infoHash,
-      }).catch((err) => console.error('[Torrent] Failed to enqueue postprocess:', err));
-    }
-  }
+  const dtos = await Promise.all(
+    rows.map(async (row) => {
+      const dto = mapTorrentToDTO(row);
+      if (row.status !== 'DOWNLOADING' && row.status !== 'SEEDING') return dto;
+
+      const live = await getLiveStats(row.infoHash);
+      if (!live) return dto;
+
+      const overlaid: TorrentDTO = {
+        ...dto,
+        progress: live.progress,
+        downloadSpeed: live.downloadSpeed,
+        uploadSpeed: live.uploadSpeed,
+        peers: live.numPeers,
+        totalBytes: live.length,
+        uploadedBytes: live.uploaded,
+        ratio: live.ratio,
+      };
+
+      // Trigger post-processing the moment the download completes.
+      enqueuePostprocessIfDone(row, live);
+
+      return overlaid;
+    }),
+  );
 
   return dtos;
+}
+
+/**
+ * Background sweep: enqueue post-processing for any torrent that has finished
+ * downloading. Runs on a timer (see jobs/torrent-poller.ts) so completion is
+ * detected even when no admin has the dashboard open — the dashboard listing
+ * does the same check on demand via {@link listTorrents}.
+ */
+export async function reconcileCompletedTorrents(): Promise<void> {
+  const rows = await prisma.torrent.findMany({
+    where: { status: 'DOWNLOADING' },
+  });
+  for (const row of rows) {
+    const live = await getLiveStats(row.infoHash);
+    if (live) enqueuePostprocessIfDone(row, live);
+  }
 }
 
 /** Get a single torrent by id. */

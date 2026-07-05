@@ -17,7 +17,7 @@ export default function LoginPage() {
   // Already signed in? Skip the form.
   useEffect(() => {
     if (status === 'authenticated') {
-      router.replace(activeProfileId ? '/home' : '/profiles');
+      router.replace(activeProfileId ? '/library' : '/profiles');
     }
   }, [status, activeProfileId, router]);
 

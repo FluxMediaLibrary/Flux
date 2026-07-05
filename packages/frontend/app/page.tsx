@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/auth-context';
  * Entry redirector. Sends the visitor to the right place based on session:
  *   anonymous            -> /login
  *   authed, no profile   -> /profiles
- *   authed, has profile  -> /home
+ *   authed, has profile  -> /library
  */
 export default function RootPage() {
   const { status, activeProfileId } = useAuth();
@@ -18,7 +18,7 @@ export default function RootPage() {
     if (status === 'loading') return;
     if (status === 'anonymous') router.replace('/login');
     else if (!activeProfileId) router.replace('/profiles');
-    else router.replace('/home');
+    else router.replace('/library');
   }, [status, activeProfileId, router]);
 
   return (
