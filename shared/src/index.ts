@@ -100,6 +100,8 @@ export interface TmdbSearchResult {
   overview: string;
   posterPath: string | null;
   backdropPath: string | null;
+  /** TMDb average vote (0–10), or null when unrated. */
+  voteAverage: number | null;
   /** True if this title already exists in the library (Play vs Request). */
   inLibrary: boolean;
   /** Present when inLibrary — the local media item id to play. */
@@ -111,6 +113,18 @@ export interface TmdbCastMember {
   character: string;
   profilePath: string | null;
 }
+
+/** A TMDb genre (id + display name), used for discover filters. */
+export interface TmdbGenreDTO {
+  id: number;
+  name: string;
+}
+
+/** Discovery feeds share the same card shape as search results. */
+export type TmdbDiscoverResult = TmdbSearchResult;
+
+/** Time window for the trending feed. */
+export type TrendingWindow = 'day' | 'week';
 
 export interface TmdbDetail extends TmdbSearchResult {
   genres: string[];
@@ -149,6 +163,21 @@ export interface EpisodeDTO {
 export interface MediaItemDetailDTO extends MediaItemDTO {
   episodes?: EpisodeDTO[];
   progress?: WatchProgressDTO | null;
+}
+
+/**
+ * A library grid item — a MediaItemDTO plus the per-profile playback state the
+ * grid badges encode (watched ✓ vs unplayed-episode count).
+ */
+export interface LibraryItemDTO extends MediaItemDTO {
+  /** Available (has-file) episode count for shows; 0 for movies. */
+  episodeCount: number;
+  /** Unplayed available episodes for the active profile (shows); null for movies. */
+  unplayedCount: number | null;
+  /** Fully watched: movie completed, or all available episodes completed. */
+  watched: boolean;
+  /** Whether anything is playable yet (movie file, or ≥1 available episode). */
+  available: boolean;
 }
 
 export interface HomeRowsDTO {

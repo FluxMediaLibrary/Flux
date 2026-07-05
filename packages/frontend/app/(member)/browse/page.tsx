@@ -1,83 +1,167 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Image from 'next/image';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
+import { useAmbient } from '@/components/AmbientBackdrop';
 import type {
   TmdbSearchResult,
+  TmdbGenreDTO,
   MediaType,
   RequestStatus,
 } from '@flux/shared';
 
-type FilterType = MediaType | 'ALL';
+const BACKDROP_BASE = 'https://image.tmdb.org/t/p/w1280';
+const POSTER_BASE = 'https://image.tmdb.org/t/p/w342';
+const HERO_ROTATE_MS = 7000;
 
 function requestKey(tmdbId: number, mediaType: MediaType): string {
   return `${tmdbId}:${mediaType}`;
 }
 
+function statusLabel(status: RequestStatus): string {
+  switch (status) {
+    case 'PENDING':
+      return 'Pending';
+    case 'APPROVED':
+      return 'Approved';
+    case 'DOWNLOADING':
+      return 'Downloading';
+    case 'FULFILLED':
+      return 'In Library';
+    case 'REJECTED':
+      return 'Rejected';
+  }
+}
+
+function statusPillClass(status: RequestStatus): string {
+  switch (status) {
+    case 'FULFILLED':
+    case 'APPROVED':
+      return 'pill ok';
+    case 'REJECTED':
+      return 'pill err';
+    case 'DOWNLOADING':
+      return 'pill active';
+    default:
+      return 'pill';
+  }
+}
+
 export default function BrowsePage() {
   const { activeProfile } = useAuth();
 
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<FilterType>('ALL');
+  const [mediaType, setMediaType] = useState<MediaType>('MOVIE');
+  const [genres, setGenres] = useState<TmdbGenreDTO[]>([]);
+  const [activeGenre, setActiveGenre] = useState<number | null>(null);
+
+  const [hero, setHero] = useState<TmdbSearchResult[]>([]);
+  const [heroIndex, setHeroIndex] = useState(0);
+
   const [results, setResults] = useState<TmdbSearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searched, setSearched] = useState(false);
+
+  const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+
   const [requests, setRequests] = useState<Map<string, RequestStatus>>(
     new Map(),
   );
   const [requestingIds, setRequestingIds] = useState<Set<string>>(new Set());
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const abortRef = useRef<AbortController>(undefined);
+  const gridAbortRef = useRef<AbortController>(undefined);
 
-  // ── Fetch existing requests on mount ────────────────────────────────────
+  // ── Existing requests (to disable already-requested titles) ───────────────
   useEffect(() => {
     if (!activeProfile) return;
     api
       .listMyRequests()
       .then((reqs) => {
         const map = new Map<string, RequestStatus>();
-        for (const r of reqs) {
-          map.set(requestKey(r.tmdbId, r.mediaType), r.status);
-        }
+        for (const r of reqs) map.set(requestKey(r.tmdbId, r.mediaType), r.status);
         setRequests(map);
       })
       .catch(() => {
-        // Silently fail — we just won't show disabled states.
+        /* non-fatal */
       });
   }, [activeProfile]);
 
-  // ── Search logic ────────────────────────────────────────────────────────
-  const doSearch = useCallback(
-    async (q: string, f: FilterType) => {
-      if (abortRef.current) abortRef.current.abort();
-      if (!q.trim()) {
-        setResults([]);
-        setSearched(false);
-        setError(null);
-        return;
-      }
+  // ── Genres + hero (trending) load on mediaType change ─────────────────────
+  useEffect(() => {
+    const controller = new AbortController();
+    setActiveGenre(null);
+    setHeroIndex(0);
 
+    api
+      .listGenres(mediaType, controller.signal)
+      .then(setGenres)
+      .catch(() => {
+        /* non-fatal */
+      });
+
+    api
+      .trending(mediaType, 'week', controller.signal)
+      .then((items) => setHero(items.filter((i) => i.backdropPath).slice(0, 5)))
+      .catch(() => {
+        /* non-fatal — hero just won't render */
+      });
+
+    return () => controller.abort();
+  }, [mediaType]);
+
+  // ── Hero auto-rotation ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (hero.length <= 1) return;
+    const t = setInterval(
+      () => setHeroIndex((i) => (i + 1) % hero.length),
+      HERO_ROTATE_MS,
+    );
+    return () => clearInterval(t);
+  }, [hero]);
+
+  // ── Load the main grid: popular / discover(genre) — when not searching ────
+  const loadFeed = useCallback(
+    async (type: MediaType, genreId: number | null) => {
+      if (gridAbortRef.current) gridAbortRef.current.abort();
       const controller = new AbortController();
-      abortRef.current = controller;
+      gridAbortRef.current = controller;
       setLoading(true);
       setError(null);
-      setSearched(true);
-
       try {
-        if (f === 'ALL') {
-          const [movies, shows] = await Promise.all([
-            api.searchTmdb(q, 'MOVIE', controller.signal),
-            api.searchTmdb(q, 'SHOW', controller.signal),
-          ]);
-          setResults([...movies, ...shows]);
-        } else {
-          const res = await api.searchTmdb(q, f, controller.signal);
-          setResults(res);
-        }
+        const items =
+          genreId === null
+            ? await api.popular(type, controller.signal)
+            : await api.discover(type, genreId, controller.signal);
+        setResults(items);
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setError(err instanceof Error ? err.message : 'Failed to load titles.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (searching) return;
+    loadFeed(mediaType, activeGenre);
+  }, [mediaType, activeGenre, searching, loadFeed]);
+
+  // ── Search ────────────────────────────────────────────────────────────────
+  const runSearch = useCallback(
+    async (q: string, type: MediaType) => {
+      if (gridAbortRef.current) gridAbortRef.current.abort();
+      const controller = new AbortController();
+      gridAbortRef.current = controller;
+      setLoading(true);
+      setError(null);
+      try {
+        const items = await api.searchTmdb(q, type, controller.signal);
+        setResults(items);
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setError(err instanceof Error ? err.message : 'Search failed.');
@@ -88,241 +172,326 @@ export default function BrowsePage() {
     [],
   );
 
-  // ── Debounced input handler ─────────────────────────────────────────────
-  const handleInput = useCallback(
+  const handleQueryChange = useCallback(
     (val: string) => {
       setQuery(val);
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => doSearch(val, filter), 300);
+      const trimmed = val.trim();
+      if (!trimmed) {
+        setSearching(false);
+        return;
+      }
+      setSearching(true);
+      debounceRef.current = setTimeout(() => runSearch(trimmed, mediaType), 320);
     },
-    [filter, doSearch],
+    [mediaType, runSearch],
   );
 
-  const handleSearch = useCallback(
-    () => doSearch(query, filter),
-    [query, filter, doSearch],
-  );
+  const clearSearch = useCallback(() => {
+    setQuery('');
+    setSearching(false);
+  }, []);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') handleSearch();
-    },
-    [handleSearch],
-  );
-
-  const handleFilterChange = useCallback(
-    (f: FilterType) => {
-      setFilter(f);
-      if (query.trim()) doSearch(query, f);
-    },
-    [query, doSearch],
-  );
-
-  // ── Request action ──────────────────────────────────────────────────────
-  const handleRequest = useCallback(
-    async (item: TmdbSearchResult) => {
-      const key = requestKey(item.tmdbId, item.mediaType);
+  // ── Request action ────────────────────────────────────────────────────────
+  const handleRequest = useCallback(async (item: TmdbSearchResult) => {
+    const key = requestKey(item.tmdbId, item.mediaType);
+    setRequestingIds((prev) => new Set(prev).add(key));
+    try {
+      await api.createRequest({
+        tmdbId: item.tmdbId,
+        mediaType: item.mediaType,
+        title: item.title,
+      });
+      setRequests((prev) => new Map(prev).set(key, 'PENDING'));
+    } catch {
+      /* keep enabled so the user can retry */
+    } finally {
       setRequestingIds((prev) => {
         const next = new Set(prev);
-        next.add(key);
+        next.delete(key);
         return next;
       });
-      try {
-        await api.createRequest({
-          tmdbId: item.tmdbId,
-          mediaType: item.mediaType,
-          title: item.title,
-        });
-        setRequests((prev) => {
-          const next = new Map(prev);
-          next.set(key, 'PENDING');
-          return next;
-        });
-      } catch {
-        // Keep button enabled on failure so they can retry.
-      } finally {
-        setRequestingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(key);
-          return next;
-        });
-      }
+    }
+  }, []);
+
+  // ── Cleanup ───────────────────────────────────────────────────────────────
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (gridAbortRef.current) gridAbortRef.current.abort();
     },
     [],
   );
 
-  // ── Helpers ─────────────────────────────────────────────────────────────
-  const getRequestStatus = useCallback(
-    (item: TmdbSearchResult): RequestStatus | null =>
-      requests.get(requestKey(item.tmdbId, item.mediaType)) ?? null,
-    [requests],
-  );
+  const heroItem = hero[heroIndex];
+  useAmbient(heroItem?.backdropPath ?? null);
 
-  function statusLabel(status: RequestStatus): string {
-    switch (status) {
-      case 'PENDING':
-        return 'Pending';
-      case 'APPROVED':
-        return 'Approved';
-      case 'DOWNLOADING':
-        return 'Downloading';
-      case 'FULFILLED':
-        return 'In Library';
-      case 'REJECTED':
-        return 'Rejected';
-    }
-  }
+  const sectionTitle = searching
+    ? `Results for “${query.trim()}”`
+    : activeGenre !== null
+      ? genres.find((g) => g.id === activeGenre)?.name ?? 'Discover'
+      : mediaType === 'MOVIE'
+        ? 'Popular Movies'
+        : 'Popular Shows';
 
-  function statusPillClass(status: RequestStatus): string {
-    switch (status) {
-      case 'FULFILLED':
-      case 'APPROVED':
-        return 'pill ok';
-      case 'REJECTED':
-        return 'pill err';
-      case 'DOWNLOADING':
-        return 'pill active';
-      default:
-        return 'pill';
-    }
-  }
-
-  // ── Cleanup debounce + abort on unmount ──────────────────────────────
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (abortRef.current) abortRef.current.abort();
-    };
-  }, []);
-
-  // ── Render ───────────────────────────────────────────────────────────
   return (
     <div>
       <div className="section-head">
-        <h1>Browse &amp; Request</h1>
+        <h1>Browse</h1>
       </div>
 
-      {/* Search bar */}
+      {/* Search (secondary) */}
       <div className="search-row">
         <input
           className="input"
           type="text"
           placeholder="Search for a movie or TV show…"
           value={query}
-          onChange={(e) => handleInput(e.target.value)}
-          onKeyDown={handleKeyDown}
+          onChange={(e) => handleQueryChange(e.target.value)}
         />
-        <button
-          className="btn btn-primary"
-          onClick={handleSearch}
-          disabled={loading}
-        >
-          Search
-        </button>
+        {query && (
+          <button className="btn btn-ghost" onClick={clearSearch}>
+            Clear
+          </button>
+        )}
       </div>
 
-      {/* Type filter */}
-      <div className="browse-filter-row">
-        <div className="toggle-group">
-          {(['ALL', 'MOVIE', 'SHOW'] as const).map((t) => (
-            <button
-              key={t}
-              className={`toggle${filter === t ? ' active' : ''}`}
-              onClick={() => handleFilterChange(t)}
-            >
-              {t === 'ALL' ? 'All' : t === 'MOVIE' ? 'Movies' : 'TV Shows'}
-            </button>
-          ))}
+      {/* Hero carousel — hidden while searching */}
+      {!searching && heroItem && (
+        <div className="disc-hero" style={{ marginTop: 22 }}>
+          <div className="disc-hero-bg">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`${BACKDROP_BASE}${heroItem.backdropPath}`}
+              alt=""
+              key={heroItem.tmdbId}
+            />
+          </div>
+          <div className="disc-hero-content">
+            <span className="disc-hero-kicker">🔥 Trending this week</span>
+            <h2 className="disc-hero-title">{heroItem.title}</h2>
+            <div className="disc-hero-meta">
+              {heroItem.year && <span>{heroItem.year}</span>}
+              <span>{heroItem.mediaType === 'MOVIE' ? 'Movie' : 'TV'}</span>
+              {heroItem.voteAverage !== null && (
+                <span style={{ color: '#ffd479' }}>
+                  ★ {heroItem.voteAverage.toFixed(1)}
+                </span>
+              )}
+            </div>
+            {heroItem.overview && (
+              <p className="disc-hero-overview">{heroItem.overview}</p>
+            )}
+            <div className="disc-hero-actions">
+              <HeroAction
+                item={heroItem}
+                status={requests.get(requestKey(heroItem.tmdbId, heroItem.mediaType)) ?? null}
+                requesting={requestingIds.has(requestKey(heroItem.tmdbId, heroItem.mediaType))}
+                onRequest={() => handleRequest(heroItem)}
+              />
+            </div>
+          </div>
+          {hero.length > 1 && (
+            <div className="disc-hero-dots">
+              {hero.map((h, i) => (
+                <button
+                  key={h.tmdbId}
+                  className={`disc-hero-dot${i === heroIndex ? ' active' : ''}`}
+                  onClick={() => setHeroIndex(i)}
+                  aria-label={`Show ${h.title}`}
+                />
+              ))}
+            </div>
+          )}
         </div>
+      )}
+
+      {/* Type + genre toolbar — hidden while searching */}
+      {!searching && (
+        <>
+          <div className="browse-toolbar">
+            <div className="toggle-group">
+              {(['MOVIE', 'SHOW'] as const).map((t) => (
+                <button
+                  key={t}
+                  className={`toggle${mediaType === t ? ' active' : ''}`}
+                  onClick={() => setMediaType(t)}
+                >
+                  {t === 'MOVIE' ? 'Movies' : 'TV Shows'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {genres.length > 0 && (
+            <div className="genre-bar">
+              <button
+                className={`genre-pill${activeGenre === null ? ' active' : ''}`}
+                onClick={() => setActiveGenre(null)}
+              >
+                Popular
+              </button>
+              {genres.map((g) => (
+                <button
+                  key={g.id}
+                  className={`genre-pill${activeGenre === g.id ? ' active' : ''}`}
+                  onClick={() => setActiveGenre(g.id)}
+                >
+                  {g.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Section header */}
+      <div className="disc-section-head" style={{ marginTop: 20 }}>
+        <h2>{sectionTitle}</h2>
+        {!loading && results.length > 0 && (
+          <span className="disc-count">{results.length} titles</span>
+        )}
       </div>
 
       {/* Error */}
-      {error && (
-        <div className="form-error" style={{ marginTop: 16 }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="form-error">{error}</div>}
 
-      {/* Loading */}
+      {/* Loading skeleton */}
       {loading && (
-        <div className="browse-state">
-          <div className="spinner" />
+        <div className="poster-grid">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div className="poster-skel" key={i} />
+          ))}
         </div>
       )}
 
-      {/* Empty — before searching */}
-      {!loading && !searched && !error && (
+      {/* Empty */}
+      {!loading && !error && results.length === 0 && (
         <div className="empty">
-          <p>Search for a movie or TV show to browse and request.</p>
+          <p>
+            {searching
+              ? 'No results found. Try a different search.'
+              : 'Nothing to show here yet.'}
+          </p>
         </div>
       )}
 
-      {/* Empty — searched, no results */}
-      {!loading && searched && results.length === 0 && !error && (
-        <div className="empty">
-          <p>No results found. Try a different search.</p>
-        </div>
-      )}
-
-      {/* Results grid */}
-      {results.length > 0 && !loading && (
-        <div className="browse-grid">
+      {/* Grid */}
+      {!loading && results.length > 0 && (
+        <div className="poster-grid">
           {results.map((item) => {
-            const reqStatus = getRequestStatus(item);
-            const isRequesting = requestingIds.has(
-              requestKey(item.tmdbId, item.mediaType),
-            );
-
+            const key = requestKey(item.tmdbId, item.mediaType);
             return (
-              <article
-                key={requestKey(item.tmdbId, item.mediaType)}
-                className="browse-card"
-              >
-                <div className="browse-poster">
-                  {item.posterPath ? (
-                    <Image
-                      src={`https://image.tmdb.org/t/p/w342${item.posterPath}`}
-                      alt={item.title}
-                      width={342}
-                      height={513}
-                      className="browse-poster-img"
-                      sizes="(max-width: 600px) 140px, (max-width: 900px) 180px, 220px"
-                    />
-                  ) : (
-                    <div className="browse-poster-placeholder">
-                      <span className="dim">No Poster</span>
-                    </div>
-                  )}
-                </div>
-                <div className="browse-card-body">
-                  <h3 className="browse-card-title">{item.title}</h3>
-                  {item.year && (
-                    <span className="browse-card-year dim">{item.year}</span>
-                  )}
-                  <p className="browse-card-overview">{item.overview}</p>
-                  <div className="browse-card-action">
-                    {item.inLibrary ? (
-                      <span className="pill ok">In Library</span>
-                    ) : reqStatus ? (
-                      <span className={statusPillClass(reqStatus)}>
-                        {statusLabel(reqStatus)}
-                      </span>
-                    ) : (
-                      <button
-                        className="btn btn-sm"
-                        onClick={() => handleRequest(item)}
-                        disabled={isRequesting}
-                      >
-                        {isRequesting ? 'Requesting…' : 'Request'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </article>
+              <MediaCard
+                key={key}
+                item={item}
+                status={requests.get(key) ?? null}
+                requesting={requestingIds.has(key)}
+                onRequest={() => handleRequest(item)}
+              />
             );
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Hero call-to-action ───────────────────────────────────────────────────────
+
+function HeroAction({
+  item,
+  status,
+  requesting,
+  onRequest,
+}: {
+  item: TmdbSearchResult;
+  status: RequestStatus | null;
+  requesting: boolean;
+  onRequest: () => void;
+}) {
+  if (item.inLibrary && item.mediaItemId) {
+    return (
+      <Link href={`/library/${item.mediaItemId}`} className="btn btn-primary">
+        ▶ Play
+      </Link>
+    );
+  }
+  if (status) {
+    return <span className={statusPillClass(status)}>{statusLabel(status)}</span>;
+  }
+  return (
+    <button className="btn btn-primary" onClick={onRequest} disabled={requesting}>
+      {requesting ? 'Requesting…' : '+ Request'}
+    </button>
+  );
+}
+
+// ── Poster card ───────────────────────────────────────────────────────────────
+
+function MediaCard({
+  item,
+  status,
+  requesting,
+  onRequest,
+}: {
+  item: TmdbSearchResult;
+  status: RequestStatus | null;
+  requesting: boolean;
+  onRequest: () => void;
+}) {
+  const inLibrary = item.inLibrary && item.mediaItemId;
+
+  return (
+    <div className="media-card">
+      <div className="media-poster">
+        {item.posterPath ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`${POSTER_BASE}${item.posterPath}`}
+            alt={item.title}
+            loading="lazy"
+          />
+        ) : (
+          <div className="media-poster-ph">No poster</div>
+        )}
+        {item.voteAverage !== null && (
+          <span className="media-rating">★ {item.voteAverage.toFixed(1)}</span>
+        )}
+        {inLibrary ? (
+          <span className="media-badge">In Library</span>
+        ) : status && status !== 'REJECTED' ? (
+          <span className="media-badge req">{statusLabel(status)}</span>
+        ) : null}
+      </div>
+      <div className="media-caption">
+        <p className="media-caption-title">{item.title}</p>
+        <p className="media-caption-sub">
+          {item.year ?? '—'} · {item.mediaType === 'MOVIE' ? 'Movie' : 'TV'}
+        </p>
+        <div style={{ marginTop: 8 }}>
+          {inLibrary ? (
+            <Link
+              href={`/library/${item.mediaItemId}`}
+              className="btn btn-sm btn-primary"
+              style={{ width: '100%' }}
+            >
+              ▶ Play
+            </Link>
+          ) : status ? (
+            <span className={statusPillClass(status)}>{statusLabel(status)}</span>
+          ) : (
+            <button
+              className="btn btn-sm"
+              style={{ width: '100%' }}
+              onClick={onRequest}
+              disabled={requesting}
+            >
+              {requesting ? 'Requesting…' : '+ Request'}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

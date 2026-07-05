@@ -21,6 +21,8 @@ import type {
   TmdbSearchResult,
   TmdbDetail,
   TmdbCastMember,
+  TmdbGenreDTO,
+  TrendingWindow,
 } from '@flux/shared';
 import { prisma } from '../../lib/db.js';
 import { config } from '../../config.js';
@@ -55,9 +57,13 @@ interface TmdbSearchItemRaw {
   backdrop_path?: string | null;
   release_date?: string; // movie
   first_air_date?: string; // tv
+  vote_average?: number;
 }
 interface TmdbSearchResponseRaw {
   results?: TmdbSearchItemRaw[];
+}
+interface TmdbGenreListRaw {
+  genres?: TmdbGenre[];
 }
 interface TmdbSeasonRaw {
   season_number: number;
@@ -167,6 +173,10 @@ function mapSearchItem(
     overview: raw.overview ?? '',
     posterPath: raw.poster_path ?? null,
     backdropPath: raw.backdrop_path ?? null,
+    voteAverage:
+      typeof raw.vote_average === 'number' && raw.vote_average > 0
+        ? raw.vote_average
+        : null,
     inLibrary: false,
   };
 }
@@ -223,6 +233,61 @@ export async function search(
       );
   }
 
+  return annotateLibrary(mapped);
+}
+
+// ─── Discovery (trending / popular / genres / discover) ───────────────────────
+
+/** Trending movies or TV for a time window (`day` | `week`). */
+export async function getTrending(
+  type: MediaType,
+  window: TrendingWindow,
+): Promise<TmdbSearchResult[]> {
+  const segment = tmdbPathSegment(type);
+  const data = await tmdbFetch<TmdbSearchResponseRaw>(
+    `/trending/${segment}/${window}`,
+  );
+  const mapped = (data.results ?? []).map((r) => mapSearchItem(r, type));
+  return annotateLibrary(mapped);
+}
+
+/** Popular movies or TV. */
+export async function getPopular(
+  type: MediaType,
+  page = 1,
+): Promise<TmdbSearchResult[]> {
+  const segment = tmdbPathSegment(type);
+  const data = await tmdbFetch<TmdbSearchResponseRaw>(`/${segment}/popular`, {
+    page: String(page),
+  });
+  const mapped = (data.results ?? []).map((r) => mapSearchItem(r, type));
+  return annotateLibrary(mapped);
+}
+
+/** The TMDb genre list for movies or TV. */
+export async function getGenres(type: MediaType): Promise<TmdbGenreDTO[]> {
+  const segment = tmdbPathSegment(type);
+  const data = await tmdbFetch<TmdbGenreListRaw>(`/genre/${segment}/list`);
+  return (data.genres ?? []).map((g) => ({ id: g.id, name: g.name }));
+}
+
+/** Discover movies or TV, optionally filtered by a single genre id. */
+export async function discover(
+  type: MediaType,
+  opts: { genreId?: number; page?: number } = {},
+): Promise<TmdbSearchResult[]> {
+  const segment = tmdbPathSegment(type);
+  const params: Record<string, string> = {
+    sort_by: 'popularity.desc',
+    include_adult: 'false',
+    page: String(opts.page ?? 1),
+  };
+  if (opts.genreId !== undefined) params.with_genres = String(opts.genreId);
+  const data = await tmdbFetch<TmdbSearchResponseRaw>(
+    `/discover/${segment}`,
+    params,
+  );
+  const mapped = (data.results ?? []).map((r) => mapSearchItem(r, type));
   return annotateLibrary(mapped);
 }
 

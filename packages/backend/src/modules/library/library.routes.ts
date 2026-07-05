@@ -11,8 +11,13 @@ import { z } from 'zod';
 import {
   getHomepage,
   getMediaItemDetail,
+  listLibrary,
   saveProgress,
 } from './library.service.js';
+
+const listQuerySchema = z.object({
+  type: z.enum(['movie', 'tv', 'show', 'all']).optional().default('all'),
+});
 
 const saveProgressSchema = z
   .object({
@@ -36,6 +41,15 @@ export const libraryRoutes: FastifyPluginAsync = async (
 
   app.get('/home', async (request) => {
     return getHomepage(request.activeProfileId!);
+  });
+
+  // ── Library grid (all items, per-profile badge state) ───────────────────
+
+  app.get('/items', async (request) => {
+    const { type } = listQuerySchema.parse(request.query);
+    const mt =
+      type === 'all' ? undefined : type === 'movie' ? 'MOVIE' : 'SHOW';
+    return listLibrary(request.activeProfileId!, mt);
   });
 
   // ── Media item detail ───────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import type {
   HomeRowsDTO,
   MediaItemDTO,
   MediaItemDetailDTO,
+  LibraryItemDTO,
   EpisodeDTO,
   WatchProgressDTO,
   SaveProgressRequest,
@@ -131,6 +132,71 @@ export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
     }));
 
   return { continueWatching, recentlyAdded, byGenre };
+}
+
+/**
+ * List the whole library (optionally filtered by type) as grid items, annotated
+ * with per-profile playback state so the UI can render watched/unplayed badges.
+ * Sorted by title for the A–Z rail.
+ */
+export async function listLibrary(
+  profileId: string,
+  type?: MediaType,
+): Promise<LibraryItemDTO[]> {
+  const items = await prisma.mediaItem.findMany({
+    where: type ? { type } : undefined,
+    include: { episodes: { select: { id: true, filePath: true } } },
+    orderBy: { title: 'asc' },
+  });
+  if (items.length === 0) return [];
+
+  const mediaIds = items.map((i) => i.id);
+  const episodeIds = items.flatMap((i) => i.episodes.map((e) => e.id));
+
+  // Completed movie progress + completed episode progress for this profile.
+  const [movieDone, episodeDone] = await Promise.all([
+    prisma.watchProgress.findMany({
+      where: { profileId, mediaItemId: { in: mediaIds }, completed: true },
+      select: { mediaItemId: true },
+    }),
+    episodeIds.length
+      ? prisma.watchProgress.findMany({
+          where: { profileId, episodeId: { in: episodeIds }, completed: true },
+          select: { episodeId: true },
+        })
+      : Promise.resolve([] as { episodeId: string | null }[]),
+  ]);
+
+  const completedMovies = new Set(movieDone.map((p) => p.mediaItemId));
+  const completedEpisodes = new Set(episodeDone.map((p) => p.episodeId));
+
+  return items.map((item) => {
+    const base = mapMediaItemToDTO(item);
+
+    if (item.type === 'MOVIE') {
+      return {
+        ...base,
+        episodeCount: 0,
+        unplayedCount: null,
+        available: item.filePath != null,
+        watched: completedMovies.has(item.id),
+      };
+    }
+
+    const availableEps = item.episodes.filter((e) => e.filePath != null);
+    const episodeCount = availableEps.length;
+    const unplayed = availableEps.filter(
+      (e) => !completedEpisodes.has(e.id),
+    ).length;
+
+    return {
+      ...base,
+      episodeCount,
+      unplayedCount: episodeCount > 0 ? unplayed : null,
+      available: episodeCount > 0,
+      watched: episodeCount > 0 && unplayed === 0,
+    };
+  });
 }
 
 /**
