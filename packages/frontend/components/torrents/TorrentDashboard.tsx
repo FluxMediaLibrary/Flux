@@ -12,7 +12,7 @@ import {
   formatSpeed,
 } from '@/lib/format';
 
-const POLL_MS = 2000;
+const POLL_MS = 500;
 
 const STATUS_LABEL: Record<TorrentStatus, string> = {
   PENDING_CONFIRM: 'Pending',
