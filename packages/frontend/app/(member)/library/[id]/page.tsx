@@ -129,7 +129,7 @@ export default function LibraryDetailPage() {
     [];
 
   return (
-    <div>
+    <div className="page">
       {/* Backdrop hero */}
       <div className="detail-hero">
         {item.backdropPath ? (
@@ -242,6 +242,9 @@ export default function LibraryDetailPage() {
                     <span className="episode-title">
                       {ep.title ?? `Episode ${ep.episode}`}
                     </span>
+                    <div className="episode-meta">
+                      {ep.runtime && <span>{ep.runtime} min</span>}
+                    </div>
                     {ep.overview && (
                       <span className="episode-overview">{ep.overview}</span>
                     )}
@@ -249,19 +252,18 @@ export default function LibraryDetailPage() {
                   {ep.available ? (
                     <Link
                       href={`/watch/${item.id}?episode=${ep.id}`}
-                      className="btn btn-ghost"
+                      className="btn btn-ghost episode-play"
                       style={{
                         padding: '6px 14px',
                         fontSize: '0.85rem',
-                        flexShrink: 0,
                       }}
                     >
                       ▶ Play
                     </Link>
                   ) : (
                     <span
-                      className="tag"
-                      style={{ opacity: 0.5, flexShrink: 0 }}
+                      className="tag episode-play"
+                      style={{ opacity: 0.5 }}
                     >
                       Unavailable
                     </span>

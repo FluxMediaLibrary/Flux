@@ -424,6 +424,7 @@ label {
   max-width: var(--maxw);
   margin: 0 auto;
   padding: 32px 24px 64px;
+  overflow-x: hidden;
 }
 
 /* ── Placeholder pages ─────────────────────────────────────────────────────── */
@@ -1187,7 +1188,9 @@ table.data tr:last-child td {
 
 .detail-hero {
   position: relative;
-  margin: -32px -24px 0;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  margin-top: -32px;
   overflow: hidden;
 }
 .detail-backdrop {
@@ -1236,31 +1239,40 @@ table.data tr:last-child td {
 }
 
 /* Episodes */
+.episodes-section {
+  margin-bottom: 32px;
+}
 .episodes-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 2px;
   border: 1px solid var(--surface-border);
   border-radius: var(--radius);
   overflow: hidden;
+  background: var(--bg-elev);
 }
 .episode-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 12px 16px;
+  gap: 16px;
+  padding: 16px 20px;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--surface-border);
+  transition: background 0.15s ease;
+}
+.episode-row:hover {
+  background: var(--bg-elev-2);
 }
 .episode-row:last-child {
   border-bottom: none;
 }
 .episode-num {
-  font-size: 1.3rem;
+  font-size: 1.4rem;
   font-weight: 700;
   color: var(--text-dim);
-  min-width: 36px;
+  min-width: 42px;
   text-align: center;
+  flex-shrink: 0;
 }
 .episode-info {
   flex: 1;
@@ -1268,23 +1280,37 @@ table.data tr:last-child td {
 }
 .episode-title {
   font-weight: 600;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
+}
+.episode-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 3px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
 }
 .episode-overview {
   display: block;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: 6px;
+  line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.episode-play {
+  flex-shrink: 0;
+}
 
 @media (max-width: 600px) {
   .detail-hero {
-    margin: -24px -16px 0;
+    margin-left: -16px;
+    margin-right: -16px;
+    margin-top: -24px;
   }
   .detail-hero-overlay {
     padding: 40px 16px 28px;
@@ -1485,9 +1511,10 @@ table.data tr:last-child td {
   gap: 8px;
   overflow-x: auto;
   padding: 2px 0 8px;
-  scrollbar-width: thin;
+  scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }
+.genre-bar::-webkit-scrollbar { display: none; }
 .genre-pill {
   flex-shrink: 0;
   padding: 7px 15px;
@@ -2347,11 +2374,6 @@ html { scroll-behavior: smooth; }
   font-size: 1.06rem;
   letter-spacing: -0.01em;
   white-space: nowrap;
-}
-.navbar__brand-dot {
-  width: 10px; height: 10px; border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 14px var(--accent-glow);
 }
 .navbar__request {
   display: inline-flex; align-items: center; gap: 7px;

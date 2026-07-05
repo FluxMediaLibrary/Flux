@@ -8,9 +8,6 @@ import { SearchOverlay } from '@/components/SearchOverlay';
 const TABS = [
   { label: 'Movies', href: '/library', query: 'movie' },
   { label: 'Shows', href: '/library', query: 'tv' },
-  { label: 'Genres', href: '/browse', query: null },
-  { label: 'TV Networks', href: '/browse', query: null },
-  { label: 'Episodes', href: '/library', query: 'tv' },
 ] as const;
 
 function initials(name?: string): string {
@@ -50,7 +47,7 @@ export function Navbar() {
 
   const go = (t: (typeof TABS)[number]) => {
     setMenu(null);
-    router.push(t.query ? `${t.href}?type=${t.query}` : t.href);
+    router.push(`${t.href}?type=${t.query}`);
   };
 
   return (
@@ -65,7 +62,6 @@ export function Navbar() {
             <IconMenu />
           </button>
           <div className="navbar__brand">
-            <span className="navbar__brand-dot" />
             Library
           </div>
           <button className="navbar__request" onClick={() => router.push('/browse')}>
