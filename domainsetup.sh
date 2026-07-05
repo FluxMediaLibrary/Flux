@@ -55,7 +55,7 @@ while IFS= read -r line; do
       echo "FRONTEND_ORIGIN=https://$DOMAIN"
       ;;
     NEXT_PUBLIC_API_BASE_URL=*)
-      echo "NEXT_PUBLIC_API_BASE_URL=https://$DOMAIN/api"
+      echo "NEXT_PUBLIC_API_BASE_URL=https://$DOMAIN"
       ;;
     *)
       echo "$line"
