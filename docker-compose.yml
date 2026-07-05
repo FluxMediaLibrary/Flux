@@ -42,6 +42,9 @@ services:
       USER: ${TRANSMISSION_USER:-admin}
       PASS: ${TRANSMISSION_PASS:-flux}
       PEERPORT: 51413
+      TRANSMISSION_DOWNLOAD_DIR: /data/downloads
+      TRANSMISSION_INCOMPLETE_DIR: /data/downloads/incomplete
+      TRANSMISSION_WATCH_DIR: /data/downloads/watch
     ports:
       - "51413:51413"
       - "51413:51413/udp"
