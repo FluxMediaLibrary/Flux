@@ -9,6 +9,7 @@ export const metadata: Metadata = {
     template: '%s · Flux',
   },
   description: 'Self-hosted media library — movies & TV, your server.',
+  icons: { icon: '/favicon.svg' },
 };
 
 export const viewport: Viewport = {
