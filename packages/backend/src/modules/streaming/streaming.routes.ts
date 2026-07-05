@@ -10,6 +10,8 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import {
   getMediaFilePath,
   getHlsPath,
+  probeMedia,
+  buildHlsFfmpegArgs,
 } from './streaming.service.js';
 import { safeJoin } from '../../lib/media-paths.js';
 import { ApiError } from '../../lib/errors.js';
@@ -92,27 +94,27 @@ function parseRange(
 }
 
 /**
- * Fire-and-forget FFmpeg HLS transcode in a background child process.
- * The promise resolves on spawn success (so we know the process started);
- * any exit errors are logged but never propagated to the HTTP response.
+ * Probe the source, then fire-and-forget a codec-aware FFmpeg HLS session:
+ * H.264/AAC are stream-copied (remux → near-instant), everything else is
+ * transcoded. Errors are logged but never propagated to the HTTP response.
  */
-function spawnTranscode(sourceFile: string, sessionDir: string): void {
-  const args = [
-    '-i', sourceFile,
-    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
-    '-c:a', 'aac', '-b:a', '128k',
-    '-f', 'hls', '-hls_time', '4', '-hls_list_size', '0',
-    '-hls_segment_filename', path.join(sessionDir, 'segment_%05d.ts'),
-    path.join(sessionDir, 'index.m3u8'),
-  ];
+async function spawnTranscode(
+  sourceFile: string,
+  sessionDir: string,
+): Promise<void> {
+  const probe = await probeMedia(sourceFile);
+  const args = buildHlsFfmpegArgs(probe, sourceFile, sessionDir);
+  console.log(
+    `[Transcode] video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} → ${args.includes('copy') ? 'remux/partial-copy' : 'transcode'}`,
+  );
 
   const proc = spawn('ffmpeg', args, { stdio: 'ignore' });
-
   proc.on('error', (err) => {
     console.error('[Transcode] FFmpeg spawn error:', err);
   });
   proc.on('exit', (code) => {
-    if (code !== 0) {
+    if (code !== 0 && code !== 255) {
+      // 255 = killed/interrupted (e.g., client stopped watching) — not an error.
       console.error(`[Transcode] FFmpeg exited with code ${code}`);
     }
   });
@@ -219,8 +221,8 @@ export const streamingRoutes: FastifyPluginAsync = async (
       // Resolve the source file for FFmpeg.
       const { filePath: sourceFile } = await getMediaFilePath(mediaItemId, episodeId);
 
-      // Fire-and-forget transcode in the background.
-      spawnTranscode(sourceFile, sessionDir);
+      // Probe + fire-and-forget the codec-aware transcode in the background.
+      await spawnTranscode(sourceFile, sessionDir);
 
       // Poll for the manifest (up to 30 attempts × 500 ms = 15 s).
       const ready = await pollForFile(manifestPath, 30, 500);

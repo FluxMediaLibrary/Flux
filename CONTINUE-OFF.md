@@ -203,6 +203,12 @@ curl -s -u admin:flux -H "X-Transmission-Session-Id: $SID" \
   header OR `?token=` query), because `<video>`/hls.js segment loads can't set headers. The HLS
   manifest route rewrites segment URIs to carry the token (+`episodeId`). `getStreamUrl`/`getHlsUrl`
   in `lib/api.ts` append the stored token. HLS sessions are keyed per `(mediaItemId, episodeId)`.
+- **Playback = Plex-style pipeline.** Client (`components/FluxPlayer.tsx`, custom controls)
+  **direct-plays** the original file via the range endpoint first (instant, seekable). On a decode
+  error it falls back to **HLS**, which is now **codec-aware**: `probeMedia()` (ffprobe) → H.264 video
+  is stream-copied (`-c:v copy`, remux, near-instant), AAC audio copied, else re-encoded to
+  H.264/AAC. Shows opened without `?episode=` auto-resolve to the first available episode. All in
+  `modules/streaming/`. Remaining weak spot: seeking *during* a long full transcode.
 - **UI direction = Jellyfin library look** (user-pinned). `components/AmbientBackdrop.tsx` renders a
   fixed blurred backdrop layer; pages call `useAmbient(backdropPath)` to feed it. `GET /api/library/items?type=`
   → `LibraryItemDTO[]` (per-profile `watched` / `unplayedCount` for the grid badges), served by
