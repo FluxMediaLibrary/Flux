@@ -1,193 +1,154 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAmbient } from '@/components/AmbientBackdrop';
+import { PosterGrid } from '@/components/PosterGrid';
+import { PosterCard } from '@/components/PosterCard';
+import { AlphabetIndex } from '@/components/AlphabetIndex';
+import { FilterToolbar, type SortKey, type WatchFilter } from '@/components/FilterToolbar';
 import type { LibraryItemDTO, MediaType } from '@flux/shared';
 
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w342';
-const LETTERS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+type TypeFilter = 'ALL' | MediaType;
 
-type Filter = 'ALL' | MediaType;
-
-/** Sort key: ignore a leading "The ", uppercase; non-letters bucket under '#'. */
-function sortKey(title: string): string {
+function sortTitleKey(title: string): string {
   return title.replace(/^(the|a|an)\s+/i, '').trim().toUpperCase();
 }
 function letterOf(title: string): string {
-  const c = sortKey(title).charAt(0);
+  const c = sortTitleKey(title).charAt(0);
   return c >= 'A' && c <= 'Z' ? c : '#';
 }
 
-const CheckIcon = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 6 9 17l-5-5" />
-  </svg>
-);
-
 export default function LibraryPage() {
-  const [filter, setFilter] = useState<Filter>('ALL');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const typeParam = searchParams.get('type'); // movie | tv | null
+  const typeFilter: TypeFilter =
+    typeParam === 'movie' ? 'MOVIE' : typeParam === 'tv' ? 'SHOW' : 'ALL';
+
   const [items, setItems] = useState<LibraryItemDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortKey>('title');
+  const [watch, setWatch] = useState<WatchFilter>('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const cardRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
-  const load = useCallback((f: Filter, signal?: AbortSignal) => {
+  useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
     api
-      .listLibrary(f, signal)
-      .then((data) => {
-        setItems(data);
-        setLoading(false);
-      })
+      .listLibrary(typeFilter, controller.signal)
+      .then((data) => { setItems(data); setLoading(false); })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setError(err instanceof Error ? err.message : 'Failed to load library.');
         setLoading(false);
       });
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    load(filter, controller.signal);
     return () => controller.abort();
-  }, [filter, load]);
+  }, [typeFilter]);
 
-  // Feed the ambient backdrop from the first item that has one.
-  const ambientSrc = items.find((i) => i.backdropPath)?.backdropPath ?? null;
-  useAmbient(ambientSrc);
+  // Sort + watched-filter
+  const visible = useMemo(() => {
+    let list = items;
+    if (watch === 'watched') list = list.filter((i) => i.watched);
+    else if (watch === 'unwatched') list = list.filter((i) => !i.watched);
+    const sorted = [...list];
+    if (sort === 'title') sorted.sort((a, b) => sortTitleKey(a.title).localeCompare(sortTitleKey(b.title)));
+    else if (sort === 'year') sorted.sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+    else sorted.sort((a, b) => (a.addedAt < b.addedAt ? 1 : -1));
+    return sorted;
+  }, [items, watch, sort]);
 
-  // Letters that actually have titles → enable those jump buttons.
+  // Selected item drives the backdrop; default to the first visible item.
+  useEffect(() => {
+    if (visible.length === 0) { setSelectedId(null); return; }
+    setSelectedId((cur) => (cur && visible.some((i) => i.id === cur) ? cur : visible[0]!.id));
+  }, [visible]);
+
+  const selected = visible.find((i) => i.id === selectedId) ?? null;
+  useAmbient(selected?.backdropPath ?? null);
+
   const presentLetters = useMemo(() => {
     const set = new Set<string>();
-    for (const it of items) set.add(letterOf(it.title));
+    for (const it of visible) set.add(letterOf(it.title));
     return set;
-  }, [items]);
+  }, [visible]);
 
   const firstIdByLetter = useMemo(() => {
     const map = new Map<string, string>();
-    for (const it of items) {
+    // Match against title order regardless of current sort.
+    const byTitle = [...visible].sort((a, b) => sortTitleKey(a.title).localeCompare(sortTitleKey(b.title)));
+    for (const it of byTitle) {
       const l = letterOf(it.title);
       if (!map.has(l)) map.set(l, it.id);
     }
     return map;
-  }, [items]);
+  }, [visible]);
 
   const jumpTo = useCallback((letter: string) => {
     const id = firstIdByLetter.get(letter);
-    if (!id) return;
-    cardRefs.current
-      .get(id)
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (id) cardRefs.current.get(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [firstIdByLetter]);
 
-  return (
-    <div className="lib-page">
-      <div className="lib-head">
-        <h1>Library</h1>
-        {!loading && !error && (
-          <span className="lib-count">{items.length} titles</span>
-        )}
-      </div>
+  const title =
+    typeFilter === 'MOVIE' ? 'Movies' : typeFilter === 'SHOW' ? 'Shows' : 'Library';
 
-      {/* Filter toolbar */}
-      <div className="lib-toolbar" role="group" aria-label="Filter library">
-        {(['ALL', 'MOVIE', 'SHOW'] as const).map((f) => (
-          <button
-            key={f}
-            type="button"
-            className={`lib-tool${filter === f ? ' active' : ''}`}
-            aria-pressed={filter === f}
-            onClick={() => setFilter(f)}
-          >
-            {f === 'ALL' ? 'All' : f === 'MOVIE' ? 'Movies' : 'TV Shows'}
-          </button>
-        ))}
+  return (
+    <div className="lib2">
+      <div className="lib2__head">
+        <h1 className="lib2__title">{title}</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {!loading && !error && <span className="lib2__count">{visible.length} titles</span>}
+          <FilterToolbar sort={sort} onSort={setSort} filter={watch} onFilter={setWatch} />
+        </div>
       </div>
 
       {error && <div className="form-error">{error}</div>}
 
       {loading && (
-        <div className="lib-grid">
+        <PosterGrid>
           {Array.from({ length: 18 }).map((_, i) => (
-            <div className="poster-skel" key={i} />
+            <div key={i} className="poster-skel" style={{ borderRadius: 14 }} />
           ))}
+        </PosterGrid>
+      )}
+
+      {!loading && !error && visible.length === 0 && (
+        <div className="state-center">
+          {items.length === 0
+            ? 'Nothing in the library yet. Browse and request something to fill it.'
+            : 'No titles match this filter.'}
         </div>
       )}
 
-      {!loading && !error && items.length === 0 && (
-        <div className="lib-empty">
-          <p>Nothing in the library yet. Browse and request something to fill it.</p>
-        </div>
-      )}
-
-      {!loading && !error && items.length > 0 && (
-        <div className="lib-grid">
-          {items.map((item) => (
-            <Link
+      {!loading && visible.length > 0 && (
+        <PosterGrid>
+          {visible.map((item) => (
+            <PosterCard
               key={item.id}
-              href={`/library/${item.id}`}
-              className="lib-card"
-              ref={(el) => {
+              cardRef={(el) => {
                 if (el) cardRefs.current.set(item.id, el);
                 else cardRefs.current.delete(item.id);
               }}
-            >
-              <div className="lib-poster">
-                {item.posterPath ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={`${POSTER_BASE}${item.posterPath}`}
-                    alt={item.title}
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="lib-poster-ph">{item.title}</div>
-                )}
-                {item.watched ? (
-                  <span className="lib-badge check" title="Watched">
-                    {CheckIcon}
-                  </span>
-                ) : item.unplayedCount && item.unplayedCount > 0 ? (
-                  <span
-                    className="lib-badge count"
-                    title={`${item.unplayedCount} unplayed`}
-                  >
-                    {item.unplayedCount}
-                  </span>
-                ) : null}
-              </div>
-              <div className="lib-cap">
-                <div className="lib-cap-title">{item.title}</div>
-                <div className="lib-cap-sub">
-                  {item.year ?? '—'}
-                  {item.type === 'SHOW' && item.episodeCount > 0
-                    ? ` · ${item.episodeCount} ep`
-                    : ''}
-                </div>
-              </div>
-            </Link>
+              posterPath={item.posterPath}
+              title={item.title}
+              meta={item.year ? String(item.year) : undefined}
+              watched={item.watched}
+              count={item.unplayedCount}
+              selected={item.id === selectedId}
+              onHover={() => setSelectedId(item.id)}
+              onClick={() => router.push(`/library/${item.id}`)}
+            />
           ))}
-        </div>
+        </PosterGrid>
       )}
 
-      {/* A–Z jump rail */}
-      {!loading && items.length > 0 && (
-        <nav className="az-rail" aria-label="Jump to letter">
-          {LETTERS.map((l) => (
-            <button
-              key={l}
-              type="button"
-              disabled={!presentLetters.has(l)}
-              onClick={() => jumpTo(l)}
-            >
-              {l}
-            </button>
-          ))}
-        </nav>
+      {!loading && visible.length > 0 && (
+        <AlphabetIndex present={presentLetters} onJump={jumpTo} />
       )}
     </div>
   );

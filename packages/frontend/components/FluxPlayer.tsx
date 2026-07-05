@@ -122,17 +122,45 @@ export function FluxPlayer({
           setError('Your browser cannot play this video.');
           return;
         }
-        const hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+          startPosition: 0, // start at the beginning, not the live edge
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          manifestLoadingMaxRetry: 6,
+          manifestLoadingRetryDelay: 1000,
+          levelLoadingMaxRetry: 8,
+          fragLoadingMaxRetry: 8,
+          fragLoadingRetryDelay: 1000,
+        });
         hlsRef.current = hls;
         hls.loadSource(url);
         hls.attachMedia(video!);
+
+        // Self-heal: transient network errors (a segment the transcoder hasn't
+        // flushed yet) → resume loading; media/buffer errors → recover; only
+        // give up on a hard failure or a genuine 404.
+        let recover = 0;
         hls.on(Hls.Events.ERROR, (_e: string, data: any) => {
           if (!data.fatal) return;
           const code = data?.response?.code;
-          if (code === 404) {
+          if (code === 404 && String(data.details ?? '').startsWith('manifest')) {
             setError('This title has no playable file yet — it may still be downloading or processing.');
-          } else {
-            setError('Could not start the stream. It may still be transcoding — retry in a moment.');
+            hls.destroy();
+            return;
+          }
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              if (recover < 4) { recover += 1; hls.recoverMediaError(); }
+              else { setError('Playback keeps stalling. Retry in a moment.'); hls.destroy(); }
+              break;
+            default:
+              setError('Playback error. Please retry.');
+              hls.destroy();
           }
         });
       } catch {
@@ -157,7 +185,13 @@ export function FluxPlayer({
 
     const onLoaded = () => {
       setDuration(video.duration || 0);
-      if (startedAt.current > 0 && startedAt.current < (video.duration || Infinity)) {
+      // Only resume for direct play — an HLS transcode isn't seekable past the
+      // point it has produced yet, so resuming mid-file there causes stalls.
+      if (
+        mode === 'direct' &&
+        startedAt.current > 0 &&
+        startedAt.current < (video.duration || Infinity)
+      ) {
         video.currentTime = startedAt.current;
         startedAt.current = 0;
       }

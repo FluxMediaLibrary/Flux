@@ -235,7 +235,7 @@ export default function BrowsePage() {
         : 'Popular Shows';
 
   return (
-    <div>
+    <div className="page">
       <div className="section-head">
         <h1>Browse</h1>
       </div>
