@@ -5,8 +5,23 @@
  *   GET /api/tmdb/:mediaType/:tmdbId
  */
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { searchQuerySchema, detailParamsSchema } from './tmdb.schema.js';
-import { search, getDetail, normalizeMediaType } from './tmdb.service.js';
+import {
+  searchQuerySchema,
+  detailParamsSchema,
+  trendingQuerySchema,
+  popularQuerySchema,
+  genresQuerySchema,
+  discoverQuerySchema,
+} from './tmdb.schema.js';
+import {
+  search,
+  getDetail,
+  getTrending,
+  getPopular,
+  getGenres,
+  discover,
+  normalizeMediaType,
+} from './tmdb.service.js';
 
 export const tmdbRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   // Browsing TMDb is a per-profile activity (requests log against a profile).
@@ -15,6 +30,30 @@ export const tmdbRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.get('/search', async (request) => {
     const { q, type } = searchQuerySchema.parse(request.query);
     return search(q, type);
+  });
+
+  // ── Discovery feeds ───────────────────────────────────────────────────────
+  // NOTE: these static paths are declared BEFORE `/:mediaType/:tmdbId` so they
+  // are not swallowed by the catch-all detail route.
+
+  app.get('/trending', async (request) => {
+    const { type, window } = trendingQuerySchema.parse(request.query);
+    return getTrending(normalizeMediaType(type), window);
+  });
+
+  app.get('/popular', async (request) => {
+    const { type, page } = popularQuerySchema.parse(request.query);
+    return getPopular(normalizeMediaType(type), page);
+  });
+
+  app.get('/genres', async (request) => {
+    const { type } = genresQuerySchema.parse(request.query);
+    return getGenres(normalizeMediaType(type));
+  });
+
+  app.get('/discover', async (request) => {
+    const { type, genre, page } = discoverQuerySchema.parse(request.query);
+    return discover(normalizeMediaType(type), { genreId: genre, page });
   });
 
   app.get('/:mediaType/:tmdbId', async (request) => {

@@ -7,7 +7,8 @@ import { useAuth } from '@/lib/auth-context';
 
 const LINKS = [
   { href: '/home', label: 'Home' },
-  { href: '/browse', label: 'Browse / Request' },
+  { href: '/library', label: 'Library' },
+  { href: '/browse', label: 'Browse' },
 ];
 
 function initials(name: string): string {

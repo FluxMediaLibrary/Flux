@@ -4,7 +4,12 @@
 > exactly where we left off. Keep it updated after every meaningful step.
 > Read alongside: `media-server-spec.md` (product scope), `AGENTS.md` (conventions).
 
-**Last updated:** 2026-07-05 — **ALL 10 PHASES COMPLETE. Full build green. Production running on VPS at flux.personal.deadstudios.xyz.**
+**Last updated:** 2026-07-05 (session 2) — **ALL 10 PHASES COMPLETE + post-build feature pass:**
+TMDb discovery (trending/popular/genres/discover) added, `/browse` redesigned as a discovery
+experience, library-detail + homepage polished, and **video playback root-caused & fixed in code**
+(stream auth via `?token=`, manifest segment tokenization, per-episode HLS sessions, watch-page
+mount-order fix). Full build green. ⚠️ Playback still needs real-media verification in Docker —
+see `ISSUES.md` P2. Production on VPS at flux.personal.deadstudios.xyz.
 
 ---
 
@@ -124,8 +129,9 @@ the BullMQ `torrent-postprocess` job. Uses a `Set<string>` to prevent duplicate 
 | `/login` | Static | Login form |
 | `/signup` | Static | Signup with invite code |
 | `/profiles` | Static | Profile picker / create |
-| `/home` | Static | Homepage: continue watching, recently added, by genre |
-| `/browse` | Static | TMDb search browser with Request/Play buttons |
+| `/home` | Static | Homepage: featured hero + continue watching, recently added, by genre |
+| `/library` | Static | Jellyfin-style grid: all items, watched/unplayed badges, A–Z rail, type filter |
+| `/browse` | Static | TMDb discovery: trending hero + popular/genre grid, secondary search |
 | `/library/[id]` | Dynamic | Movie/TV detail with backdrop, episodes, Play button |
 | `/watch/[id]` | Dynamic | hls.js player with progress tracking |
 | `/admin/torrents` | Static | Upload, confirm, dashboard |
@@ -193,6 +199,15 @@ curl -s -u admin:flux -H "X-Transmission-Session-Id: $SID" \
 - **Never commit `.env`** or credentials.
 - **Path traversal** guarded by `safeJoin()` in `media-paths.ts` on all media/download paths.
 - **Hardlinks won't work** — `downloads` and `media` are separate Docker volumes. Use copy.
+- **Streaming auth** — `/api/stream/*` uses `requireProfileStream` (JWT via `Authorization`
+  header OR `?token=` query), because `<video>`/hls.js segment loads can't set headers. The HLS
+  manifest route rewrites segment URIs to carry the token (+`episodeId`). `getStreamUrl`/`getHlsUrl`
+  in `lib/api.ts` append the stored token. HLS sessions are keyed per `(mediaItemId, episodeId)`.
+- **UI direction = Jellyfin library look** (user-pinned). `components/AmbientBackdrop.tsx` renders a
+  fixed blurred backdrop layer; pages call `useAmbient(backdropPath)` to feed it. `GET /api/library/items?type=`
+  → `LibraryItemDTO[]` (per-profile `watched` / `unplayedCount` for the grid badges), served by
+  `listLibrary()`. `/library` page = grid + A–Z rail + type filter. All `.lib-*`, `.ambient*`, badge,
+  and `.az-rail` styles live in `globals.css`.
 
 ---
 

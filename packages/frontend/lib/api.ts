@@ -8,15 +8,19 @@ import type {
   CreateRequestRequest,
   HomeRowsDTO,
   InviteDTO,
+  LibraryItemDTO,
   LoginRequest,
   MediaItemDetailDTO,
   MediaType,
   NotificationSettingsDTO,
+  TmdbDetail,
   ProfileDTO,
   RequestDTO,
   SaveProgressRequest,
   SignupRequest,
+  TmdbGenreDTO,
   TmdbSearchResult,
+  TrendingWindow,
   TorrentDTO,
   TorrentParseResult,
   UpdateNotificationSettingsRequest,
@@ -253,6 +257,42 @@ export const api = {
     });
   },
 
+  // TMDb discovery — trending / popular / discover / genres. The wire `type`
+  // is movie|tv; map the shared MOVIE|SHOW enum on the way out.
+  trending(type: MediaType, window: TrendingWindow = 'week', signal?: AbortSignal) {
+    const qs = new URLSearchParams({
+      type: type === 'SHOW' ? 'tv' : 'movie',
+      window,
+    });
+    return request<TmdbSearchResult[]>(`/api/tmdb/trending?${qs.toString()}`, {
+      signal,
+    });
+  },
+  popular(type: MediaType, signal?: AbortSignal) {
+    const qs = new URLSearchParams({ type: type === 'SHOW' ? 'tv' : 'movie' });
+    return request<TmdbSearchResult[]>(`/api/tmdb/popular?${qs.toString()}`, {
+      signal,
+    });
+  },
+  discover(type: MediaType, genreId?: number, signal?: AbortSignal) {
+    const qs = new URLSearchParams({ type: type === 'SHOW' ? 'tv' : 'movie' });
+    if (genreId !== undefined) qs.set('genre', String(genreId));
+    return request<TmdbSearchResult[]>(`/api/tmdb/discover?${qs.toString()}`, {
+      signal,
+    });
+  },
+  listGenres(type: MediaType, signal?: AbortSignal) {
+    const qs = new URLSearchParams({ type: type === 'SHOW' ? 'tv' : 'movie' });
+    return request<TmdbGenreDTO[]>(`/api/tmdb/genres?${qs.toString()}`, {
+      signal,
+    });
+  },
+  /** Rich TMDb detail (cast, runtime, genres, trailer) for a known title. */
+  tmdbDetail(type: MediaType, tmdbId: number, signal?: AbortSignal) {
+    const segment = type === 'SHOW' ? 'tv' : 'movie';
+    return request<TmdbDetail>(`/api/tmdb/${segment}/${tmdbId}`, { signal });
+  },
+
   // Torrents (admin)
   /** Upload a .torrent for parsing. Does NOT start a download. */
   uploadTorrent(file: File, signal?: AbortSignal) {
@@ -307,6 +347,14 @@ export const api = {
   homepage(signal?: AbortSignal) {
     return request<HomeRowsDTO>('/api/library/home', { signal });
   },
+  /** Whole library as grid items with per-profile watched/unplayed badges. */
+  listLibrary(type: MediaType | 'ALL' = 'ALL', signal?: AbortSignal) {
+    const wire = type === 'ALL' ? 'all' : type === 'SHOW' ? 'tv' : 'movie';
+    return request<LibraryItemDTO[]>(
+      `/api/library/items?type=${wire}`,
+      { signal },
+    );
+  },
   getMediaItem(id: string, signal?: AbortSignal) {
     return request<MediaItemDetailDTO>(
       `/api/library/items/${encodeURIComponent(id)}`,
@@ -315,19 +363,25 @@ export const api = {
   },
 
   // Streaming
+  // The token rides in the query string because <video> / hls.js segment
+  // requests cannot set an Authorization header (see requireProfileStream).
   getStreamUrl(mediaItemId: string, episodeId?: string): string {
     if (typeof window === 'undefined') return '';
-    const base = `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}`;
-    return episodeId
-      ? `${base}?episodeId=${encodeURIComponent(episodeId)}`
-      : base;
+    const qs = new URLSearchParams();
+    if (episodeId) qs.set('episodeId', episodeId);
+    const token = getToken();
+    if (token) qs.set('token', token);
+    const q = qs.toString();
+    return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}${q ? `?${q}` : ''}`;
   },
   getHlsUrl(mediaItemId: string, episodeId?: string): string {
     if (typeof window === 'undefined') return '';
-    const base = `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/hls/index.m3u8`;
-    return episodeId
-      ? `${base}?episodeId=${encodeURIComponent(episodeId)}`
-      : base;
+    const qs = new URLSearchParams();
+    if (episodeId) qs.set('episodeId', episodeId);
+    const token = getToken();
+    if (token) qs.set('token', token);
+    const q = qs.toString();
+    return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/hls/index.m3u8${q ? `?${q}` : ''}`;
   },
 
   // Watch progress

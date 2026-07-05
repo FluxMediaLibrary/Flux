@@ -18,8 +18,58 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 
 // ── In-memory session tracking ──────────────────────────────────────────────
-// Maps mediaItemId → sessionDir so segment routes know where .ts files live.
+// Maps a (mediaItemId, episodeId) pair → sessionDir so segment routes know
+// where .ts files live. Keyed per-episode so switching episodes of the same
+// show does not replay the previous episode's manifest.
 const hlsSessions = new Map<string, string>();
+
+function sessionKey(mediaItemId: string, episodeId?: string): string {
+  return `${mediaItemId}::${episodeId ?? ''}`;
+}
+
+/**
+ * Resolve the raw JWT from a stream request — either the Authorization header
+ * or the `?token=` query param. Returns '' if absent (the preHandler has
+ * already enforced auth, so this is only for propagating the token onward to
+ * segment URLs in the rewritten manifest).
+ */
+function streamToken(request: {
+  headers: { authorization?: string };
+  query: unknown;
+}): string {
+  const header = request.headers.authorization;
+  if (header && header.startsWith('Bearer ')) {
+    const t = header.slice('Bearer '.length).trim();
+    if (t) return t;
+  }
+  const q = (request.query as { token?: unknown })?.token;
+  return typeof q === 'string' ? q : '';
+}
+
+/**
+ * Rewrite the segment URIs in an HLS manifest so each carries the auth `token`
+ * (and `episodeId` when present) as query params. Browser media loaders cannot
+ * attach an Authorization header to segment requests, so the credential must
+ * ride along in the URL. Comment/tag lines (`#…`) are left untouched.
+ */
+function tokenizeManifest(
+  manifest: string,
+  token: string,
+  episodeId?: string,
+): string {
+  if (!token) return manifest;
+  return manifest
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return line;
+      const params = new URLSearchParams({ token });
+      if (episodeId) params.set('episodeId', episodeId);
+      const sep = trimmed.includes('?') ? '&' : '?';
+      return `${trimmed}${sep}${params.toString()}`;
+    })
+    .join('\n');
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -93,7 +143,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
 
   app.get(
     '/:mediaItemId',
-    { preHandler: [app.requireProfile] },
+    { preHandler: [app.requireProfileStream] },
     async (request, reply) => {
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { episodeId } = request.query as { episodeId?: string };
@@ -139,27 +189,32 @@ export const streamingRoutes: FastifyPluginAsync = async (
 
   app.get(
     '/:mediaItemId/hls/index.m3u8',
-    { preHandler: [app.requireProfile] },
+    { preHandler: [app.requireProfileStream] },
     async (request, reply) => {
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { episodeId } = request.query as { episodeId?: string };
+      const key = sessionKey(mediaItemId, episodeId);
+      const token = streamToken(request);
+
+      const sendManifest = (raw: string) =>
+        reply
+          .header('Content-Type', 'application/vnd.apple.mpegurl')
+          .header('Cache-Control', 'no-store')
+          .send(tokenizeManifest(raw, token, episodeId));
 
       // Reuse an existing session if its manifest is already on disk.
-      const existingSession = hlsSessions.get(mediaItemId);
+      const existingSession = hlsSessions.get(key);
       if (existingSession) {
         const existingManifest = path.join(existingSession, 'index.m3u8');
         if (fs.existsSync(existingManifest)) {
-          const content = fs.readFileSync(existingManifest, 'utf-8');
-          return reply
-            .header('Content-Type', 'application/vnd.apple.mpegurl')
-            .send(content);
+          return sendManifest(fs.readFileSync(existingManifest, 'utf-8'));
         }
       }
 
       // Create a fresh session.
       const hls = await getHlsPath(mediaItemId, episodeId);
       const { manifestPath, sessionDir } = hls;
-      hlsSessions.set(mediaItemId, sessionDir);
+      hlsSessions.set(key, sessionDir);
 
       // Resolve the source file for FFmpeg.
       const { filePath: sourceFile } = await getMediaFilePath(mediaItemId, episodeId);
@@ -176,10 +231,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
         );
       }
 
-      const content = fs.readFileSync(manifestPath, 'utf-8');
-      return reply
-        .header('Content-Type', 'application/vnd.apple.mpegurl')
-        .send(content);
+      return sendManifest(fs.readFileSync(manifestPath, 'utf-8'));
     },
   );
 
@@ -187,14 +239,15 @@ export const streamingRoutes: FastifyPluginAsync = async (
 
   app.get(
     '/:mediaItemId/hls/:segment',
-    { preHandler: [app.requireProfile] },
+    { preHandler: [app.requireProfileStream] },
     async (request, reply) => {
       const { mediaItemId, segment } = request.params as {
         mediaItemId: string;
         segment: string;
       };
+      const { episodeId } = request.query as { episodeId?: string };
 
-      const sessionDir = hlsSessions.get(mediaItemId);
+      const sessionDir = hlsSessions.get(sessionKey(mediaItemId, episodeId));
       if (!sessionDir) {
         throw ApiError.notFound('No active HLS session for this media item');
       }

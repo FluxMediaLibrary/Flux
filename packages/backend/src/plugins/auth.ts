@@ -37,6 +37,12 @@ declare module 'fastify' {
     requireAuth: preHandlerHookHandler;
     requireAdmin: preHandlerHookHandler;
     requireProfile: preHandlerHookHandler;
+    /**
+     * Like requireProfile, but also accepts the JWT via a `?token=` query
+     * param. Needed for media streaming: <video> elements and hls.js segment
+     * loads cannot attach an Authorization header.
+     */
+    requireProfileStream: preHandlerHookHandler;
   }
 }
 
@@ -52,9 +58,35 @@ function extractBearer(request: FastifyRequest): string {
   return token;
 }
 
+/**
+ * Resolve the JWT from the Authorization header, falling back to a `?token=`
+ * query param. The query fallback exists only for streaming endpoints where a
+ * browser media request cannot set headers.
+ */
+function extractTokenAllowQuery(request: FastifyRequest): string {
+  const header = request.headers.authorization;
+  if (header && header.startsWith('Bearer ')) {
+    const token = header.slice('Bearer '.length).trim();
+    if (token) return token;
+  }
+  const q = (request.query as { token?: unknown } | undefined)?.token;
+  if (typeof q === 'string' && q.trim()) return q.trim();
+  throw ApiError.unauthorized('Missing bearer token');
+}
+
 /** Populate request.account/activeProfileId from a valid JWT, else 401. */
 function authenticate(request: FastifyRequest): void {
   const token = extractBearer(request);
+  applyClaims(request, token);
+}
+
+/** Same as authenticate but allows the token to arrive via `?token=`. */
+function authenticateAllowQuery(request: FastifyRequest): void {
+  const token = extractTokenAllowQuery(request);
+  applyClaims(request, token);
+}
+
+function applyClaims(request: FastifyRequest, token: string): void {
   let claims;
   try {
     claims = verifyToken(token);
@@ -100,9 +132,23 @@ const authPlugin = fp(async (app: FastifyInstance) => {
     }
   };
 
+  const requireProfileStream: preHandlerHookHandler = async (
+    request: FastifyRequest,
+    _reply: FastifyReply,
+  ) => {
+    authenticateAllowQuery(request);
+    if (!request.activeProfileId) {
+      throw ApiError.forbidden(
+        'No active profile selected. Activate a profile first.',
+        'NO_ACTIVE_PROFILE',
+      );
+    }
+  };
+
   app.decorate('requireAuth', requireAuth);
   app.decorate('requireAdmin', requireAdmin);
   app.decorate('requireProfile', requireProfile);
+  app.decorate('requireProfileStream', requireProfileStream);
 });
 
 export default authPlugin;

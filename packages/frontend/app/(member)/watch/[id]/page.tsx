@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import type { MediaItemDetailDTO } from '@flux/shared';
 
@@ -13,7 +14,7 @@ export default function WatchPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
   const [item, setItem] = useState<MediaItemDetailDTO | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [buffering, setBuffering] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resumeMsg, setResumeMsg] = useState<string | null>(null);
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -22,8 +23,8 @@ export default function WatchPage() {
   useEffect(() => {
     let cancelled = false;
     api.getMediaItem(id).then(
-      (data) => { if (!cancelled) { setItem(data); setLoading(false); } },
-      (err) => { if (!cancelled) { setError(err.message ?? 'Failed to load'); setLoading(false); } },
+      (data) => { if (!cancelled) setItem(data); },
+      (err) => { if (!cancelled) setError(err.message ?? 'Failed to load'); },
     );
     return () => { cancelled = true; };
   }, [id]);
@@ -58,7 +59,6 @@ export default function WatchPage() {
           videoRef.current!.src = hlsUrl;
         } else {
           setError('Your browser does not support HLS playback.');
-          setLoading(false);
         }
       } catch (err: any) {
         if (!destroyed) setError(err.message ?? 'Failed to initialize player');
@@ -125,15 +125,6 @@ export default function WatchPage() {
     };
   }, [reportProgress]);
 
-  if (loading) {
-    return (
-      <div className="centered-viewport">
-        <div className="spinner" />
-        <p className="muted">Loading video...</p>
-      </div>
-    );
-  }
-
   if (error) {
     return (
       <div className="centered-viewport">
@@ -147,25 +138,37 @@ export default function WatchPage() {
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 24px 64px' }}>
-      {item && (
-        <h2 style={{ marginBottom: 16, fontSize: '1.3rem' }}>
-          {item.title}
-          {episodeId && item.episodes && (() => {
-            const ep = item.episodes.find((e) => e.id === episodeId);
-            return ep ? ` — S${ep.season} E${ep.episode}` : '';
-          })()}
-        </h2>
-      )}
+      <div className="player-topbar">
+        <Link href={`/library/${id}`} className="player-back">
+          ‹ Back
+        </Link>
+        {item && (
+          <h2 style={{ margin: 0, fontSize: '1.2rem' }}>
+            {item.title}
+            {episodeId && item.episodes && (() => {
+              const ep = item.episodes.find((e) => e.id === episodeId);
+              return ep ? ` — S${ep.season} E${ep.episode}` : '';
+            })()}
+          </h2>
+        )}
+      </div>
 
       <div className="player-wrap">
         {resumeMsg && <div className="resume-toast">{resumeMsg}</div>}
+        {buffering && (
+          <div className="player-loading-overlay">
+            <div className="spinner" />
+            <p>Preparing stream…</p>
+          </div>
+        )}
         <video
           ref={videoRef}
           controls
           autoPlay
           playsInline
           className="player-video"
-          onLoadedData={() => setLoading(false)}
+          onPlaying={() => setBuffering(false)}
+          onWaiting={() => setBuffering(true)}
           onError={() => setError('Video failed to load')}
         />
       </div>
