@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { useAmbient } from '@/components/AmbientBackdrop';
@@ -72,7 +73,25 @@ function Rail({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/**
+ * /home now redirects to /library — the library is the app's landing surface.
+ * The original home experience (featured hero + rails) is preserved below as
+ * {@link LegacyHomePage} so it can be re-wired if we want it back.
+ */
 export default function HomePage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/library');
+  }, [router]);
+  return (
+    <div className="centered-viewport">
+      <div className="spinner" aria-hidden />
+      <p className="muted">Redirecting…</p>
+    </div>
+  );
+}
+
+function LegacyHomePage() {
   const { activeProfile } = useAuth();
   const [data, setData] = useState<HomeRowsDTO | null>(null);
   const [loading, setLoading] = useState(true);

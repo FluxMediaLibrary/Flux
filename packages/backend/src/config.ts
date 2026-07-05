@@ -26,6 +26,13 @@ const envSchema = z.object({
   DOWNLOAD_ROOT: z.string().min(1).default('/data/downloads'),
   TRANSCODE_ROOT: z.string().min(1).default('/data/transcode'),
 
+  /** How often the background poller sweeps for finished torrents (ms). */
+  TORRENT_POLL_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .default(15000),
+
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(8).optional(),
 });

@@ -49,7 +49,7 @@ export function RequireProfile({ children }: { children: ReactNode }) {
 }
 
 /**
- * Requires auth + active profile + ADMIN role. Non-admins -> /home.
+ * Requires auth + active profile + ADMIN role. Non-admins -> /library.
  */
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const { status, activeProfileId, isAdmin } = useAuth();
@@ -59,7 +59,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
     if (status === 'anonymous') router.replace('/login');
     else if (status === 'authenticated') {
       if (!activeProfileId) router.replace('/profiles');
-      else if (!isAdmin) router.replace('/home');
+      else if (!isAdmin) router.replace('/library');
     }
   }, [status, activeProfileId, isAdmin, router]);
 

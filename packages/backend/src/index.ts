@@ -7,12 +7,14 @@ import { prisma } from './lib/db.js';
 import { redisConnection } from './lib/redis.js';
 import { buildServer, seedBootstrapAdmin } from './server.js';
 import { startWorkers, stopWorkers } from './jobs/worker.js';
+import { startTorrentPoller, stopTorrentPoller } from './jobs/torrent-poller.js';
 
 async function main(): Promise<void> {
   const app = await buildServer();
 
   await seedBootstrapAdmin(app);
   startWorkers();
+  startTorrentPoller(app.log);
 
   // Resume any torrents that were downloading/seeding when we last shut down.
   try {
@@ -30,6 +32,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info(`Received ${signal}, shutting down...`);
     try {
+      stopTorrentPoller();
       await app.close();
       await stopWorkers();
       await redisConnection.quit();

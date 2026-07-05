@@ -83,6 +83,7 @@ interface TrTorrent {
   name: string;
   hashString: string;
   percentDone: number;
+  leftUntilDone: number;
   rateDownload: number;
   rateUpload: number;
   peersConnected: number;
@@ -95,7 +96,11 @@ interface TrTorrent {
 }
 
 function mapStats(t: TrTorrent): TorrentLiveStats {
-  const done = t.percentDone >= 1;
+  // `leftUntilDone === 0` is Transmission's authoritative "download complete"
+  // signal (exact byte count for the wanted files). `percentDone` is a float
+  // that can settle a hair below 1.0 on a finished torrent, so never gate
+  // completion on `percentDone >= 1` alone.
+  const done = t.leftUntilDone <= 0 || t.percentDone >= 1;
   return {
     progress: t.percentDone,
     downloadSpeed: t.rateDownload,
@@ -156,7 +161,7 @@ export async function addTorrent(
 export async function getLiveStats(infoHash: string): Promise<TorrentLiveStats | null> {
   const result = (await rpc('torrent-get', {
     ids: [infoHash],
-    fields: ['id', 'name', 'hashString', 'percentDone', 'rateDownload', 'rateUpload',
+    fields: ['id', 'name', 'hashString', 'percentDone', 'leftUntilDone', 'rateDownload', 'rateUpload',
       'peersConnected', 'totalSize', 'uploadedEver', 'uploadRatio', 'status', 'error', 'errorString'],
   })) as { torrents: TrTorrent[] };
 
@@ -238,11 +243,12 @@ export async function getTorrentFiles(
 ): Promise<{ downloadDir: string; files: { name: string; path: string; length: number }[] } | null> {
   const result = (await rpc('torrent-get', {
     ids: [infoHash],
-    fields: ['id', 'name', 'hashString', 'downloadDir', 'files', 'percentDone'],
-  })) as { torrents: { downloadDir: string; percentDone: number; files: { name: string; length: number }[] }[] };
+    fields: ['id', 'name', 'hashString', 'downloadDir', 'files', 'percentDone', 'leftUntilDone'],
+  })) as { torrents: { downloadDir: string; percentDone: number; leftUntilDone: number; files: { name: string; length: number }[] }[] };
 
   const t = result.torrents?.[0];
-  if (!t || t.percentDone < 1) return null;
+  // Complete when no bytes remain (authoritative) or percentDone rounded to 1.
+  if (!t || (t.leftUntilDone > 0 && t.percentDone < 1)) return null;
 
   return {
     downloadDir: t.downloadDir,

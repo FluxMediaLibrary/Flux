@@ -26,7 +26,7 @@ function ProfilePicker() {
     setBusyId(profile.id);
     try {
       await activateProfile(profile.id);
-      router.replace('/home');
+      router.replace('/library');
     } catch (err) {
       setError(err instanceof FluxApiError ? err.message : 'Could not select profile.');
       setBusyId(null);
