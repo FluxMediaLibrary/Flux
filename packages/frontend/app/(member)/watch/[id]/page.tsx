@@ -45,11 +45,18 @@ export default function WatchPage() {
 
   const handleProgress = useCallback(
     (position: number, durationSeconds: number) => {
+      if (!Number.isFinite(position) || position <= 0) return;
+      // HLS reports Infinity/NaN for duration — omit it rather than send a
+      // value that serializes to null and 400s the whole save.
+      const duration =
+        Number.isFinite(durationSeconds) && durationSeconds > 0
+          ? durationSeconds
+          : undefined;
       api.saveProgress({
         mediaItemId: activeEpisodeId ? undefined : id,
         episodeId: activeEpisodeId,
         positionSeconds: position,
-        durationSeconds,
+        durationSeconds: duration,
       }).catch(() => { /* best-effort */ });
     },
     [id, activeEpisodeId],

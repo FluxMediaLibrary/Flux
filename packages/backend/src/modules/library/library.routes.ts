@@ -23,8 +23,11 @@ const saveProgressSchema = z
   .object({
     mediaItemId: z.string().optional(),
     episodeId: z.string().optional(),
-    positionSeconds: z.number().min(0),
-    durationSeconds: z.number().optional(),
+    positionSeconds: z.number().finite().min(0),
+    // Duration is unknown for some streams (HLS reports Infinity, which
+    // serializes to null over JSON). Accept null/undefined and treat both as
+    // "unknown" — never reject the whole save over a missing duration.
+    durationSeconds: z.number().finite().positive().nullish(),
   })
   .refine(
     (data) => !!(data.mediaItemId || data.episodeId),
@@ -63,6 +66,9 @@ export const libraryRoutes: FastifyPluginAsync = async (
 
   app.post('/progress', async (request) => {
     const body = saveProgressSchema.parse(request.body);
-    return saveProgress(request.activeProfileId!, body);
+    return saveProgress(request.activeProfileId!, {
+      ...body,
+      durationSeconds: body.durationSeconds ?? undefined,
+    });
   });
 };
