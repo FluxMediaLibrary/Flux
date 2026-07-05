@@ -2,14 +2,25 @@ import type {
   ActivateProfileResponse,
   ApiError,
   AuthResponse,
+  ConfirmTorrentRequest,
   CreateInviteRequest,
   CreateProfileRequest,
   CreateRequestRequest,
+  HomeRowsDTO,
   InviteDTO,
   LoginRequest,
+  MediaItemDetailDTO,
+  MediaType,
+  NotificationSettingsDTO,
   ProfileDTO,
   RequestDTO,
+  SaveProgressRequest,
   SignupRequest,
+  TmdbSearchResult,
+  TorrentDTO,
+  TorrentParseResult,
+  UpdateNotificationSettingsRequest,
+  WatchProgressDTO,
 } from '@flux/shared';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
@@ -105,6 +116,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     });
   }
 
+  return handleResponse<T>(res);
+}
+
+/** Shared success/error parsing for both JSON and multipart requests. */
+async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 204) return undefined as T;
 
   const text = await res.text();
@@ -122,6 +138,47 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   return data as T;
+}
+
+// ─── Multipart upload ─────────────────────────────────────────────────────────
+// FormData bodies must NOT carry an explicit Content-Type — the browser sets the
+// `multipart/form-data; boundary=…` header itself. We still attach the Bearer.
+
+async function uploadForm<T>(
+  path: string,
+  form: FormData,
+  options: { signal?: AbortSignal } = {},
+): Promise<T> {
+  if (!BASE_URL) {
+    throw new FluxApiError({
+      error: 'ConfigError',
+      message: 'NEXT_PUBLIC_API_BASE_URL is not configured.',
+      statusCode: 0,
+    });
+  }
+
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  const token = getToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method: 'POST',
+      headers, // intentionally no Content-Type — browser sets the boundary
+      body: form,
+      signal: options.signal,
+      cache: 'no-store',
+    });
+  } catch {
+    throw new FluxApiError({
+      error: 'NetworkError',
+      message: 'Could not reach the Flux API. Is the backend running?',
+      statusCode: 0,
+    });
+  }
+
+  return handleResponse<T>(res);
 }
 
 function safeJson(text: string): unknown {
@@ -176,9 +233,114 @@ export const api = {
     return request<InviteDTO>('/api/invites', { body });
   },
 
-  // Requests (member) — used by browse/request flow later phases.
+  // Requests (member)
   createRequest(body: CreateRequestRequest) {
     return request<RequestDTO>('/api/requests', { body });
+  },
+  listMyRequests(signal?: AbortSignal) {
+    return request<RequestDTO[]>('/api/requests', { signal });
+  },
+
+  // TMDb search (admin confirm step) — the wire query uses movie|tv, while the
+  // contract enum is MOVIE|SHOW, so map on the way out.
+  searchTmdb(query: string, type: MediaType, signal?: AbortSignal) {
+    const qs = new URLSearchParams({
+      q: query,
+      type: type === 'SHOW' ? 'tv' : 'movie',
+    });
+    return request<TmdbSearchResult[]>(`/api/tmdb/search?${qs.toString()}`, {
+      signal,
+    });
+  },
+
+  // Torrents (admin)
+  /** Upload a .torrent for parsing. Does NOT start a download. */
+  uploadTorrent(file: File, signal?: AbortSignal) {
+    const form = new FormData();
+    form.append('file', file);
+    return uploadForm<TorrentParseResult>('/api/torrents/upload', form, {
+      signal,
+    });
+  },
+  /** Confirm the parsed torrent + TMDb match → begins the download. */
+  confirmTorrent(body: ConfirmTorrentRequest) {
+    return request<TorrentDTO>('/api/torrents/confirm', { body });
+  },
+  listTorrents(signal?: AbortSignal) {
+    return request<TorrentDTO[]>('/api/torrents', { signal });
+  },
+  getTorrent(id: string) {
+    return request<TorrentDTO>(`/api/torrents/${encodeURIComponent(id)}`);
+  },
+  /** Stop seeding (SEEDING → STOPPED). */
+  stopTorrent(id: string) {
+    return request<TorrentDTO>(
+      `/api/torrents/${encodeURIComponent(id)}/stop`,
+      { method: 'POST' },
+    );
+  },
+  /** Remove a torrent entirely. */
+  removeTorrent(id: string) {
+    return request<void>(`/api/torrents/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Admin request management
+  listAllRequests(signal?: AbortSignal) {
+    return request<RequestDTO[]>('/api/requests/admin', { signal });
+  },
+  approveRequest(id: string) {
+    return request<RequestDTO>(
+      `/api/requests/${encodeURIComponent(id)}/approve`,
+      { method: 'POST' },
+    );
+  },
+  rejectRequest(id: string) {
+    return request<RequestDTO>(
+      `/api/requests/${encodeURIComponent(id)}/reject`,
+      { method: 'POST' },
+    );
+  },
+
+  // Library
+  homepage(signal?: AbortSignal) {
+    return request<HomeRowsDTO>('/api/library/home', { signal });
+  },
+  getMediaItem(id: string, signal?: AbortSignal) {
+    return request<MediaItemDetailDTO>(
+      `/api/library/items/${encodeURIComponent(id)}`,
+      { signal },
+    );
+  },
+
+  // Streaming
+  getStreamUrl(mediaItemId: string, episodeId?: string): string {
+    if (typeof window === 'undefined') return '';
+    const base = `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}`;
+    return episodeId
+      ? `${base}?episodeId=${encodeURIComponent(episodeId)}`
+      : base;
+  },
+  getHlsUrl(mediaItemId: string, episodeId?: string): string {
+    if (typeof window === 'undefined') return '';
+    const base = `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/hls/index.m3u8`;
+    return episodeId
+      ? `${base}?episodeId=${encodeURIComponent(episodeId)}`
+      : base;
+  },
+
+  // Watch progress
+  saveProgress(body: SaveProgressRequest) {
+    return request<WatchProgressDTO>('/api/library/progress', { body });
+  },
+
+  // Notification settings (admin)
+  getNotificationSettings() {
+    return request<NotificationSettingsDTO>('/api/notifications/settings');
+  },
+  updateNotificationSettings(body: UpdateNotificationSettingsRequest) {
+    return request<NotificationSettingsDTO>('/api/notifications/settings', { method: 'PUT', body });
   },
 };
 

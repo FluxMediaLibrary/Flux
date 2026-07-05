@@ -11,15 +11,14 @@ import {
   type TorrentPostprocessJob,
   type TranscodeJob,
 } from './queues.js';
+import { processTorrentPostprocess } from '../modules/torrents/postprocess.js';
 
 let workers: Worker[] = [];
 
-async function processTorrentPostprocess(
+async function processTorrentPostprocessJob(
   job: Job<TorrentPostprocessJob>,
 ): Promise<void> {
-  // TODO(phase 5): rename/move downloaded files into the library structure,
-  // split season packs, update Torrent + MediaItem, fulfil linked request.
-  job.log(`torrent-postprocess stub for torrent ${job.data.torrentId}`);
+  await processTorrentPostprocess(job);
 }
 
 async function processTranscode(job: Job<TranscodeJob>): Promise<void> {
@@ -31,7 +30,7 @@ async function processTranscode(job: Job<TranscodeJob>): Promise<void> {
 export function startWorkers(): Worker[] {
   const torrentWorker = new Worker<TorrentPostprocessJob>(
     QUEUE_NAMES.torrentPostprocess,
-    processTorrentPostprocess,
+    processTorrentPostprocessJob,
     { connection: bullConnection, concurrency: 1 },
   );
 

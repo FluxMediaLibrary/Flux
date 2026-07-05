@@ -1,15 +1,63 @@
 /**
- * Requests module — per-profile TMDb media requests.
- * TODO(phase 4): implement create request (CreateRequestRequest, logged against
- * the active profile), list own requests, and ADMIN list/approve/reject/fulfil
- * (RequestDTO). Fulfilment links to the torrent flow + notifications.
+ * Requests routes — per-profile TMDb media requests.
  *
- * Stub: reserves the /api/requests mount point.
+ * Routes:
+ *   POST   /api/requests             — create (requireProfile)
+ *   GET    /api/requests             — list own (requireProfile)
+ *   GET    /api/requests/admin       — list all (requireAdmin)
+ *   POST   /api/requests/:id/approve — approve (requireAdmin)
+ *   POST   /api/requests/:id/reject  — reject  (requireAdmin)
  */
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import { createRequestSchema } from './requests.schema.js';
+import {
+  createRequest,
+  listMyRequests,
+  listAllRequests,
+  approveRequest,
+  rejectRequest,
+} from './requests.service.js';
 
 export const requestRoutes: FastifyPluginAsync = async (
-  _app: FastifyInstance,
+  app: FastifyInstance,
 ) => {
-  // TODO(phase 4): POST /  (requireProfile), GET /  (own), admin sub-routes.
+  // ── Member routes (requireProfile) ──────────────────────────────────────
+
+  app.post(
+    '/',
+    { preHandler: [app.requireProfile] },
+    async (request, reply) => {
+      const input = createRequestSchema.parse(request.body);
+      const result = await createRequest(request.activeProfileId!, input);
+      return reply.status(201).send(result);
+    },
+  );
+
+  app.get('/', { preHandler: [app.requireProfile] }, async (request) => {
+    return listMyRequests(request.activeProfileId!);
+  });
+
+  // ── Admin routes (requireAdmin) — registered before parameterised routes ──
+
+  app.get('/admin', { preHandler: [app.requireAdmin] }, async () => {
+    return listAllRequests();
+  });
+
+  app.post(
+    '/:id/approve',
+    { preHandler: [app.requireAdmin] },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      return approveRequest(id);
+    },
+  );
+
+  app.post(
+    '/:id/reject',
+    { preHandler: [app.requireAdmin] },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      return rejectRequest(id);
+    },
+  );
 };

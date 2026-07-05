@@ -3,7 +3,7 @@
 # are repo-root-relative and include shared/ + packages/backend/.
 
 # ─── Base ─────────────────────────────────────────────────────────────────────
-FROM node:20-bookworm-slim AS base
+FROM node:22-bookworm-slim AS base
 WORKDIR /app
 ENV NODE_ENV=production
 
