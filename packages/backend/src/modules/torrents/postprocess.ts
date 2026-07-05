@@ -121,6 +121,7 @@ export async function processTorrentPostprocess(
           posterPath: tmdbDetail.posterPath,
           backdropPath: tmdbDetail.backdropPath,
           genres: tmdbDetail.genres,
+          filePath: placement.file, // ensure a re-processed movie points at its file
           metadata: tmdbDetail as any,
         },
       });
