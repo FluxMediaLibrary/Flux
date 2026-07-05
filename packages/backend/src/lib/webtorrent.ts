@@ -94,12 +94,6 @@ async function _addToClient(
         reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
-    torrent.on('warning', (msg: string) => {
-      console.warn(`[WebTorrent] ${torrent.infoHash}: ${msg}`);
-    });
-    torrent.on('wire', () => {
-      console.log(`[WebTorrent] ${torrent.infoHash}: wire established`);
-    });
   });
 }
 
