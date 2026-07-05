@@ -61,6 +61,10 @@ export function FluxPlayer({
   const hlsRef = useRef<any>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startedAt = useRef(startPositionSeconds);
+  // Last position we saw playing — used to resume in place after a transient
+  // direct-play error instead of tearing the session down.
+  const lastTimeRef = useRef(0);
+  const directRecoverRef = useRef(0);
 
   const [mode, setMode] = useState<Mode>('direct');
   const [decided, setDecided] = useState(false);
@@ -126,8 +130,10 @@ export function FluxPlayer({
           enableWorker: true,
           lowLatencyMode: false,
           startPosition: 0, // start at the beginning, not the live edge
-          maxBufferLength: 30,
-          maxMaxBufferLength: 60,
+          // Buffer generously so playback stays well behind the transcode edge;
+          // tight caps made it catch up and stall on longer titles.
+          maxBufferLength: 60,
+          maxMaxBufferLength: 600,
           manifestLoadingMaxRetry: 6,
           manifestLoadingRetryDelay: 1000,
           levelLoadingMaxRetry: 8,
@@ -198,7 +204,10 @@ export function FluxPlayer({
       video.playbackRate = rate;
       video.play().catch(() => { /* autoplay may be blocked; user can press play */ });
     };
-    const onTime = () => setCurrent(video.currentTime);
+    const onTime = () => {
+      setCurrent(video.currentTime);
+      if (video.currentTime > 0) lastTimeRef.current = video.currentTime;
+    };
     const onProg = () => {
       if (video.buffered.length) {
         setBuffered(video.buffered.end(video.buffered.length - 1));
@@ -207,13 +216,34 @@ export function FluxPlayer({
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
     const onWaiting = () => setWaiting(true);
-    const onPlaying = () => { setWaiting(false); setError(null); };
+    const onPlaying = () => {
+      setWaiting(false);
+      setError(null);
+      directRecoverRef.current = 0; // healthy playback resets the recovery budget
+    };
     const onVol = () => { setVolume(video.volume); setMuted(video.muted); };
     const onErr = () => {
-      // Fall back from direct play to HLS transcode on decode/source errors.
       const code = video.error?.code;
-      if (mode === 'direct' && (code === 3 || code === 4 || code === undefined)) {
-        setMode('hls');
+      if (mode === 'direct') {
+        const wasPlaying = lastTimeRef.current > 0;
+        // Genuinely undecodable codec that never started → go straight to the
+        // transcode. (DECODE=3 / SRC_NOT_SUPPORTED=4 before any playback.)
+        if (!wasPlaying && (code === 3 || code === 4)) {
+          setMode('hls');
+          return;
+        }
+        // Otherwise it's a transient blip (network hiccup, a dropped range
+        // request, a spurious error with no code). Recover direct play IN PLACE
+        // by reloading and seeking back — don't nuke a working session into a
+        // slow transcode. Bounded so a truly broken file eventually falls back.
+        if (directRecoverRef.current < 3) {
+          directRecoverRef.current += 1;
+          startedAt.current = lastTimeRef.current; // onLoaded seeks back here
+          video.src = api.getStreamUrl(mediaItemId, episodeId);
+          video.load();
+          return;
+        }
+        setMode('hls'); // repeated direct failures → last-resort transcode
       } else if (mode === 'hls') {
         setError('This file could not be played.');
       }
