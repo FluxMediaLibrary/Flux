@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import {
   searchQuerySchema,
   detailParamsSchema,
+  seasonParamsSchema,
   trendingQuerySchema,
   popularQuerySchema,
   genresQuerySchema,
@@ -16,6 +17,7 @@ import {
 import {
   search,
   getDetail,
+  getSeasonEpisodes,
   getTrending,
   getPopular,
   getGenres,
@@ -54,6 +56,13 @@ export const tmdbRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.get('/discover', async (request) => {
     const { type, genre, page } = discoverQuerySchema.parse(request.query);
     return discover(normalizeMediaType(type), { genreId: genre, page });
+  });
+
+  // Per-season episode metadata (still frames, synopses) for TV. Declared
+  // before the catch-all detail route so it is not swallowed by it.
+  app.get('/tv/:tmdbId/season/:season', async (request) => {
+    const { tmdbId, season } = seasonParamsSchema.parse(request.params);
+    return getSeasonEpisodes(tmdbId, season);
   });
 
   app.get('/:mediaType/:tmdbId', async (request) => {

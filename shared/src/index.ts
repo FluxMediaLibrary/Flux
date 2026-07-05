@@ -135,6 +135,24 @@ export interface TmdbDetail extends TmdbSearchResult {
   seasons?: { season: number; episodeCount: number; name: string }[];
 }
 
+/**
+ * A single TMDb episode within a season — the richer metadata (still image,
+ * synopsis, air date) the Netflix-style episode tiles render. Availability and
+ * the local playable id come from the library {@link EpisodeDTO}, merged by
+ * `episodeNumber`.
+ */
+export interface TmdbEpisode {
+  episodeNumber: number;
+  name: string | null;
+  overview: string | null;
+  /** TMDb still frame path (append to an image base), or null. */
+  stillPath: string | null;
+  runtime: number | null;
+  airDate: string | null;
+  /** TMDb average vote (0–10), or null when unrated. */
+  voteAverage: number | null;
+}
+
 // ─── Library ──────────────────────────────────────────────────────────────────
 
 export interface MediaItemDTO {

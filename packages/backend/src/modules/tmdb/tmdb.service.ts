@@ -22,6 +22,7 @@ import type {
   TmdbDetail,
   TmdbCastMember,
   TmdbGenreDTO,
+  TmdbEpisode,
   TrendingWindow,
 } from '@flux/shared';
 import { prisma } from '../../lib/db.js';
@@ -69,6 +70,18 @@ interface TmdbSeasonRaw {
   season_number: number;
   episode_count: number;
   name: string;
+}
+interface TmdbSeasonEpisodeRaw {
+  episode_number: number;
+  name?: string | null;
+  overview?: string | null;
+  still_path?: string | null;
+  runtime?: number | null;
+  air_date?: string | null;
+  vote_average?: number;
+}
+interface TmdbSeasonDetailRaw {
+  episodes?: TmdbSeasonEpisodeRaw[];
 }
 interface TmdbDetailRaw extends TmdbSearchItemRaw {
   genres?: TmdbGenre[];
@@ -349,4 +362,30 @@ export async function getDetail(
   }
 
   return detail;
+}
+
+/**
+ * Rich per-episode metadata for a single TV season (still frames, synopses,
+ * air dates). The frontend merges this with the library's local episodes (by
+ * episode number) to render Netflix-style episode tiles.
+ */
+export async function getSeasonEpisodes(
+  tmdbId: number,
+  season: number,
+): Promise<TmdbEpisode[]> {
+  const raw = await tmdbFetch<TmdbSeasonDetailRaw>(
+    `/tv/${tmdbId}/season/${season}`,
+  );
+  return (raw.episodes ?? []).map((e) => ({
+    episodeNumber: e.episode_number,
+    name: e.name ?? null,
+    overview: e.overview ?? null,
+    stillPath: e.still_path ?? null,
+    runtime: e.runtime ?? null,
+    airDate: e.air_date ?? null,
+    voteAverage:
+      typeof e.vote_average === 'number' && e.vote_average > 0
+        ? e.vote_average
+        : null,
+  }));
 }
