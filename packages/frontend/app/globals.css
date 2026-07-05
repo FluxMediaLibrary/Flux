@@ -421,6 +421,8 @@ label {
 /* ── Page container ────────────────────────────────────────────────────────── */
 
 .page {
+  position: relative;
+  z-index: 1;
   max-width: var(--maxw);
   margin: 0 auto;
   padding: 32px 24px 64px;
