@@ -15,8 +15,8 @@ import path from 'node:path';
 import type { MediaType } from '@flux/shared';
 import type { Job } from 'bullmq';
 
-// webtorrent engine — imported from the lib created in parallel
-import { getClient } from '../../lib/webtorrent.js';
+// Transmission engine
+import { getTorrentFiles } from '../../lib/webtorrent.js';
 
 interface FileMappingEntry {
   path: string;
@@ -51,16 +51,13 @@ export async function processTorrentPostprocess(
       data: { status: 'PROCESSING' },
     });
 
-    // 3. Look up in WebTorrent engine
-    const client = getClient();
-    // get() may return Torrent synchronously or Promise<Torrent> for magnets;
-    // await handles both cases.
-    const engineTorrent = await Promise.resolve(client.get(infoHash));
+    // 3. Look up files in Transmission
+    const torrentData = await getTorrentFiles(infoHash);
 
-    if (!engineTorrent) {
+    if (!torrentData) {
       await prisma.torrent.update({
         where: { id: torrentId },
-        data: { status: 'ERROR', errorMessage: 'Torrent not found in engine' },
+        data: { status: 'ERROR', errorMessage: 'Torrent not found or not yet complete in Transmission' },
       });
       return;
     }
@@ -75,7 +72,7 @@ export async function processTorrentPostprocess(
 
     if (torrent.category === 'MOVIE') {
       // ── MOVIE path ──
-      const files = engineTorrent.files as unknown as TorrentFile[];
+      const files = torrentData.files as unknown as TorrentFile[];
       const videoFiles = files.filter((f) => isVideoFile(f.name));
 
       if (videoFiles.length === 0) {
@@ -98,7 +95,7 @@ export async function processTorrentPostprocess(
       );
 
       await mkdir(placement.dir, { recursive: true });
-      const source = path.join(engineTorrent.path, largestVideo.path);
+      const source = path.join(torrentData.downloadDir, largestVideo.path);
       await copyFile(source, placement.file);
 
       // Upsert MediaItem
@@ -172,7 +169,7 @@ export async function processTorrentPostprocess(
 
       mediaItemId = mediaItem.id;
 
-      const files = engineTorrent.files as unknown as TorrentFile[];
+      const files = torrentData.files as unknown as TorrentFile[];
 
       // Process each file mapping entry
       for (const mapping of fileMapping) {
@@ -191,7 +188,7 @@ export async function processTorrentPostprocess(
         );
 
         await mkdir(placement.seasonDir, { recursive: true });
-        const source = path.join(engineTorrent.path, matchedFile.path);
+        const source = path.join(torrentData.downloadDir, matchedFile.path);
         await copyFile(source, placement.file);
 
         // Upsert Episode

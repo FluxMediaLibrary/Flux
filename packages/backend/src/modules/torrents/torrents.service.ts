@@ -50,12 +50,12 @@ export function mapTorrentToDTO(row: Torrent): TorrentDTO {
   };
 }
 
-/** Overlay live WebTorrent stats onto a DTO. Only meaningful while active. */
-function overlayLiveStats(dto: TorrentDTO): TorrentDTO {
+/** Overlay live Transmission stats onto a DTO. Only meaningful while active. */
+async function overlayLiveStats(dto: TorrentDTO): Promise<TorrentDTO> {
   if (dto.status !== 'DOWNLOADING' && dto.status !== 'SEEDING') {
     return dto;
   }
-  const live = getLiveStats(dto.infoHash);
+  const live = await getLiveStats(dto.infoHash);
   if (!live) return dto;
   return {
     ...dto,
@@ -145,7 +145,7 @@ export async function listTorrents(): Promise<TorrentDTO[]> {
   const rows = await prisma.torrent.findMany({
     orderBy: { createdAt: 'desc' },
   });
-  return rows.map((r) => overlayLiveStats(mapTorrentToDTO(r)));
+  return Promise.all(rows.map((r) => overlayLiveStats(mapTorrentToDTO(r))));
 }
 
 /** Get a single torrent by id. */

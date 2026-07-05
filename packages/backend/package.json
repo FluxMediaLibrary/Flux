@@ -29,7 +29,6 @@
     "jsonwebtoken": "^9.0.2",
     "parse-torrent": "^11.0.21",
     "parse-torrent-title": "^3.0.1",
-    "webtorrent": "^3.0.16",
     "zod": "^3.24.1"
   },
   "engines": {
