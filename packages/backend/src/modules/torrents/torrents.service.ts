@@ -25,6 +25,10 @@ import {
   removeTorrent,
 } from '../../lib/webtorrent.js';
 import type { ConfirmTorrentInput } from './torrents.schema.js';
+import { torrentPostprocessQueue } from '../../jobs/queues.js';
+
+// Track torrents already enqueued for postprocessing (prevents duplicates)
+const postprocessEnqueued = new Set<string>();
 
 // ─── DTO mapping ─────────────────────────────────────────────────────────────
 
@@ -140,12 +144,27 @@ export async function confirmTorrent(
   return mapTorrentToDTO(row);
 }
 
-/** List all torrents ordered by creation date (newest first). */
+/** List all torrents ordered by creation date. Also triggers post-process on completion. */
 export async function listTorrents(): Promise<TorrentDTO[]> {
   const rows = await prisma.torrent.findMany({
     orderBy: { createdAt: 'desc' },
   });
-  return Promise.all(rows.map((r) => overlayLiveStats(mapTorrentToDTO(r))));
+  const dtos = await Promise.all(rows.map((r) => overlayLiveStats(mapTorrentToDTO(r))));
+
+  // Check for completed torrents and trigger postprocessing
+  for (const dto of dtos) {
+    const row = rows.find((r) => r.id === dto.id);
+    if (row && row.status === 'DOWNLOADING' && dto.progress >= 1 && !postprocessEnqueued.has(row.id)) {
+      postprocessEnqueued.add(row.id);
+      console.log(`[Torrent] Done! Triggering postprocess for ${row.name} (${row.infoHash})`);
+      torrentPostprocessQueue.add('torrent-postprocess', {
+        torrentId: row.id,
+        infoHash: row.infoHash,
+      }).catch((err) => console.error('[Torrent] Failed to enqueue postprocess:', err));
+    }
+  }
+
+  return dtos;
 }
 
 /** Get a single torrent by id. */

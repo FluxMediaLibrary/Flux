@@ -6,6 +6,8 @@
     "peer-port": 51413,
     "peer-port-random-on-start": false,
     "port-forwarding-enabled": true,
+    "peer-limit-global": 0,
+    "peer-limit-per-torrent": 0,
     "rpc-authentication-required": true,
     "rpc-whitelist-enabled": false,
     "start-added-torrents": true,
