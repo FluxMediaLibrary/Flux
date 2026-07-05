@@ -426,7 +426,6 @@ label {
   max-width: var(--maxw);
   margin: 0 auto;
   padding: 32px 24px 64px;
-  overflow-x: hidden;
 }
 
 /* ── Placeholder pages ─────────────────────────────────────────────────────── */
@@ -1214,19 +1213,14 @@ table.data tr:last-child td {
   pointer-events: none;
 }
 
-/* ── Poster + info header ───────────────────────────────────────────────── */
+/* ── Poster (inside hero, overlapping bottom) ──────────────────────────── */
 
-.detail-header {
-  display: flex;
-  gap: 30px;
-  margin-top: -80px;
-  position: relative;
-  z-index: 2;
-  align-items: flex-end;
-}
 .detail-poster-wrap {
-  flex-shrink: 0;
+  position: absolute;
+  bottom: -50px;
+  left: max(24px, calc((100% - var(--maxw)) / 2 + 24px));
   width: 200px;
+  z-index: 2;
   border-radius: var(--radius);
   overflow: hidden;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
@@ -1248,10 +1242,11 @@ table.data tr:last-child td {
   color: var(--text-dim);
   background: var(--bg-elev-2);
 }
+
+/* ── Info section (in page, clears poster) ─────────────────────────────── */
+
 .detail-info {
-  flex: 1;
-  min-width: 0;
-  padding-bottom: 4px;
+  padding-left: 230px;
 }
 .detail-title {
   font-size: 2rem;
@@ -1483,18 +1478,16 @@ table.data tr:last-child td {
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
-  .detail-header {
-    flex-direction: column;
-    align-items: center;
-    gap: 20px;
-    margin-top: -60px;
-  }
   .detail-poster-wrap {
+    position: relative;
+    bottom: auto;
+    left: auto;
     width: 150px;
+    margin: -40px auto 0;
   }
   .detail-info {
+    padding-left: 0;
     text-align: center;
-    padding-bottom: 0;
   }
   .detail-badges {
     justify-content: center;
