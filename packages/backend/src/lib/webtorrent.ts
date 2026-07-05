@@ -5,8 +5,10 @@ import { torrentDownloadDir, torrentFilePath } from './media-paths.js';
 import { writeFile, mkdir, readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-/** WebRTC STUN servers for NAT traversal — no DHT, no external trackers. */
+/** WebRTC STUN servers for NAT traversal. DHT/PEX/LPD disabled for private trackers. */
 const CLIENT_OPTS = {
+  dht: false,
+  lsd: false,
   tracker: {
     rtcConfig: {
       iceServers: [
