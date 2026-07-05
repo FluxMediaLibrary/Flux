@@ -76,21 +76,39 @@ async function _addToClient(
   const infoHash = parsed.infoHash;
   const downloadPath = torrentDownloadDir(infoHash);
 
+  // Collect announce URLs from the .torrent file
+  const announceList: string[] = [];
+  if (parsed.announce) announceList.push(parsed.announce as unknown as string);
+  if (Array.isArray(parsed.announce as unknown)) {
+    for (const url of (parsed.announce as unknown as string[])) {
+      if (!announceList.includes(url)) announceList.push(url);
+    }
+  }
+
+  console.log(`[WebTorrent] Adding torrent: ${parsed.name ?? infoHash}`);
+  console.log(`[WebTorrent] Trackers: ${announceList.join(', ') || '(none in .torrent)'}`);
+  console.log(`[WebTorrent] Private flag: ${(parsed as any).private ?? 'not set'}`);
+
   return new Promise<{ infoHash: string; name: string }>((resolve, reject) => {
     let settled = false;
 
+    const opts: Record<string, unknown> = { path: downloadPath };
+    if (announceList.length > 0) opts.announce = announceList;
+
     const torrent = getClient().add(
       buffer,
-      { path: downloadPath },
+      opts,
       (t) => {
         if (!settled) {
           settled = true;
+          console.log(`[WebTorrent] Ready: ${t.name} (${t.infoHash})`);
           resolve({ infoHash: t.infoHash, name: t.name });
         }
       },
     );
 
     torrent.on('error', (err: Error | string) => {
+      console.error(`[WebTorrent] Error on ${infoHash}:`, err);
       if (!settled) {
         settled = true;
         reject(err instanceof Error ? err : new Error(String(err)));
