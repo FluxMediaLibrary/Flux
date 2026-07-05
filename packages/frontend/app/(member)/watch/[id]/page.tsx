@@ -1,42 +1,180 @@
 'use client';
 
-import { useParams } from 'next/navigation';
-import { PlaceholderPage } from '@/components/PlaceholderPage';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
+import { api } from '@/lib/api';
+import type { MediaItemDetailDTO } from '@flux/shared';
 
-/**
- * Video player.
- *
- * TODO(phase-6): hls.js player against a plain <video> element.
- *  - Try direct play (range-request stream) first; fall back to HLS transcode
- *    (GET /api/stream/:id/index.m3u8) when the browser can't play the source.
- *  - Report progress to POST /api/progress (SaveProgressRequest) on interval +
- *    on pause/unload; resume from WatchProgressDTO.positionSeconds.
- *  - `hls.js` is already a declared dependency for this phase.
- */
 export default function WatchPage() {
-  const params = useParams<{ id: string }>();
-  const id = params.id;
+  const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const episodeId = searchParams.get('episode') ?? undefined;
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<any>(null);
+  const [item, setItem] = useState<MediaItemDetailDTO | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [resumeMsg, setResumeMsg] = useState<string | null>(null);
+  const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Load metadata
+  useEffect(() => {
+    let cancelled = false;
+    api.getMediaItem(id).then(
+      (data) => { if (!cancelled) { setItem(data); setLoading(false); } },
+      (err) => { if (!cancelled) { setError(err.message ?? 'Failed to load'); setLoading(false); } },
+    );
+    return () => { cancelled = true; };
+  }, [id]);
+
+  // Set up HLS player
+  useEffect(() => {
+    if (!videoRef.current) return;
+
+    const hlsUrl = api.getHlsUrl(id, episodeId);
+    if (!hlsUrl) return;
+
+    let hls: any = null;
+    let destroyed = false;
+
+    async function setup() {
+      try {
+        const Hls = (await import('hls.js')).default;
+        if (destroyed) return;
+
+        if (Hls.isSupported()) {
+          hls = new Hls();
+          hlsRef.current = hls;
+          hls.loadSource(hlsUrl);
+          hls.attachMedia(videoRef.current!);
+
+          hls.on(Hls.Events.ERROR, (_event: string, data: any) => {
+            if (data.fatal) {
+              setError('Playback error. The stream may not be ready yet.');
+            }
+          });
+        } else if (videoRef.current!.canPlayType('application/vnd.apple.mpegurl')) {
+          videoRef.current!.src = hlsUrl;
+        } else {
+          setError('Your browser does not support HLS playback.');
+          setLoading(false);
+        }
+      } catch (err: any) {
+        if (!destroyed) setError(err.message ?? 'Failed to initialize player');
+      }
+    }
+
+    setup();
+
+    return () => {
+      destroyed = true;
+      if (hls) hls.destroy();
+      hlsRef.current = null;
+    };
+  }, [id, episodeId]);
+
+  // Resume from saved position
+  useEffect(() => {
+    if (!videoRef.current || !item) return;
+
+    // Check for progress on the media item or specific episode
+    const progress = item.progress;
+    if (progress && progress.positionSeconds > 0 && !progress.completed) {
+      if (videoRef.current.readyState >= 2) {
+        videoRef.current.currentTime = progress.positionSeconds;
+      } else {
+        const onLoaded = () => {
+          videoRef.current!.currentTime = progress.positionSeconds ?? 0;
+          videoRef.current!.removeEventListener('loadedmetadata', onLoaded);
+        };
+        videoRef.current.addEventListener('loadedmetadata', onLoaded);
+      }
+      setResumeMsg(`Resuming from ${formatTime(progress.positionSeconds)}`);
+      setTimeout(() => setResumeMsg(null), 3000);
+    }
+  }, [item]);
+
+  // Progress reporting
+  const reportProgress = useCallback(() => {
+    if (!videoRef.current || !id) return;
+    const v = videoRef.current;
+    if (v.duration && v.currentTime > 0) {
+      api.saveProgress({
+        mediaItemId: episodeId ? undefined : id,
+        episodeId,
+        positionSeconds: v.currentTime,
+        durationSeconds: v.duration,
+      }).catch(() => { /* best-effort */ });
+    }
+  }, [id, episodeId]);
+
+  useEffect(() => {
+    progressTimer.current = setInterval(reportProgress, 5000);
+    const v = videoRef.current;
+    const onPause = () => reportProgress();
+    const onUnload = () => reportProgress();
+
+    v?.addEventListener('pause', onPause);
+    window.addEventListener('beforeunload', onUnload);
+
+    return () => {
+      if (progressTimer.current) clearInterval(progressTimer.current);
+      v?.removeEventListener('pause', onPause);
+      window.removeEventListener('beforeunload', onUnload);
+    };
+  }, [reportProgress]);
+
+  if (loading) {
+    return (
+      <div className="centered-viewport">
+        <div className="spinner" />
+        <p className="muted">Loading video...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="centered-viewport">
+        <div className="form-error" style={{ marginBottom: 16 }}>{error}</div>
+        <button className="btn btn-primary" onClick={() => window.location.reload()}>
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <PlaceholderPage
-      title="Player"
-      todo={`phase-6 — hls.js player for item "${id}": direct play + HLS transcode fallback, per-profile resume.`}
-    >
-      <div
-        style={{
-          marginTop: 18,
-          aspectRatio: '16 / 9',
-          maxWidth: 900,
-          background: '#000',
-          border: '1px solid var(--surface-border)',
-          borderRadius: 'var(--radius)',
-          display: 'grid',
-          placeItems: 'center',
-          color: 'var(--text-dim)',
-        }}
-      >
-        &lt;video&gt; + hls.js goes here
+    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 24px 64px' }}>
+      {item && (
+        <h2 style={{ marginBottom: 16, fontSize: '1.3rem' }}>
+          {item.title}
+          {episodeId && item.episodes && (() => {
+            const ep = item.episodes.find((e) => e.id === episodeId);
+            return ep ? ` — S${ep.season} E${ep.episode}` : '';
+          })()}
+        </h2>
+      )}
+
+      <div className="player-wrap">
+        {resumeMsg && <div className="resume-toast">{resumeMsg}</div>}
+        <video
+          ref={videoRef}
+          controls
+          autoPlay
+          playsInline
+          className="player-video"
+          onLoadedData={() => setLoading(false)}
+          onError={() => setError('Video failed to load')}
+        />
       </div>
-    </PlaceholderPage>
+    </div>
   );
+}
+
+function formatTime(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${String(sec).padStart(2, '0')}`;
 }

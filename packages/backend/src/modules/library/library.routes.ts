@@ -1,15 +1,54 @@
 /**
- * Library module — member-facing browsing & playback metadata.
- * TODO(phase 4): implement homepage rows (continue watching, recently added,
- * by genre), media item detail, episodes, and watch-progress endpoints
- * (HomeRowsDTO / MediaItemDetailDTO / WatchProgressDTO from @flux/shared).
+ * Library routes — member-facing browsing & playback metadata.
  *
- * Stub: registers no routes yet, but reserves the /api/library mount point.
+ * Routes (all require an active profile):
+ *   GET  /home          — homepage rows (continue watching, recent, by genre)
+ *   GET  /items/:id     — media item detail with episodes + progress
+ *   POST /progress      — save (upsert) watch progress for current profile
  */
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
+import {
+  getHomepage,
+  getMediaItemDetail,
+  saveProgress,
+} from './library.service.js';
+
+const saveProgressSchema = z
+  .object({
+    mediaItemId: z.string().optional(),
+    episodeId: z.string().optional(),
+    positionSeconds: z.number().min(0),
+    durationSeconds: z.number().optional(),
+  })
+  .refine(
+    (data) => !!(data.mediaItemId || data.episodeId),
+    'mediaItemId or episodeId required',
+  );
 
 export const libraryRoutes: FastifyPluginAsync = async (
-  _app: FastifyInstance,
+  app: FastifyInstance,
 ) => {
-  // TODO(phase 4): GET /  (HomeRowsDTO), GET /items/:id, POST /progress, etc.
+  // All library routes need an active profile.
+  app.addHook('preHandler', app.requireProfile);
+
+  // ── Homepage rows ───────────────────────────────────────────────────────
+
+  app.get('/home', async (request) => {
+    return getHomepage(request.activeProfileId!);
+  });
+
+  // ── Media item detail ───────────────────────────────────────────────────
+
+  app.get('/items/:id', async (request) => {
+    const { id } = request.params as { id: string };
+    return getMediaItemDetail(id, request.activeProfileId!);
+  });
+
+  // ── Save watch progress ─────────────────────────────────────────────────
+
+  app.post('/progress', async (request) => {
+    const body = saveProgressSchema.parse(request.body);
+    return saveProgress(request.activeProfileId!, body);
+  });
 };
