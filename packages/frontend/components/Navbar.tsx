@@ -8,8 +8,6 @@ import { SearchOverlay } from '@/components/SearchOverlay';
 const TABS = [
   { label: 'Movies', href: '/library', query: 'movie' },
   { label: 'Shows', href: '/library', query: 'tv' },
-  { label: 'Suggestions', href: '/browse', query: null },
-  { label: 'Upcoming', href: '/browse', query: null },
   { label: 'Genres', href: '/browse', query: null },
   { label: 'TV Networks', href: '/browse', query: null },
   { label: 'Episodes', href: '/library', query: 'tv' },
@@ -66,13 +64,13 @@ export function Navbar() {
           >
             <IconMenu />
           </button>
-          <button className="nav-ic" aria-label="Home" onClick={() => router.push('/home')}>
-            <IconHome />
-          </button>
           <div className="navbar__brand">
             <span className="navbar__brand-dot" />
             Library
           </div>
+          <button className="navbar__request" onClick={() => router.push('/browse')}>
+            <IconPlus /> Request
+          </button>
         </div>
 
         <nav className="navbar__tabs">
@@ -108,7 +106,6 @@ export function Navbar() {
 
         {menu === 'nav' && (
           <div className="nav-menu" style={{ left: 18, right: 'auto' }} role="menu">
-            <button onClick={() => { setMenu(null); router.push('/home'); }}>Home</button>
             <button onClick={() => { setMenu(null); router.push('/library'); }}>Library</button>
             <button onClick={() => { setMenu(null); router.push('/browse'); }}>Browse &amp; Request</button>
             {isAdmin && (
@@ -137,7 +134,7 @@ export function Navbar() {
 /* ── Monochrome outline icons ─────────────────────────────────────────────── */
 const ico = { width: 21, height: 21, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
 const IconMenu = () => (<svg viewBox="0 0 24 24" {...ico}><path d="M4 6h16M4 12h16M4 18h16" /></svg>);
-const IconHome = () => (<svg viewBox="0 0 24 24" {...ico}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></svg>);
+const IconPlus = () => (<svg viewBox="0 0 24 24" {...ico}><path d="M12 5v14M5 12h14" /></svg>);
 const IconUsers = () => (<svg viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3.2" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M17 5.2a3.2 3.2 0 0 1 0 5.6" /><path d="M18.5 14.2A6.5 6.5 0 0 1 21.5 20" /></svg>);
 const IconCast = () => (<svg viewBox="0 0 24 24" {...ico}><path d="M2 16.1A5 5 0 0 1 5.9 20" /><path d="M2 12.05A9 9 0 0 1 9.95 20" /><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" /><path d="M2 20h.01" /></svg>);
 const IconSearch = () => (<svg viewBox="0 0 24 24" {...ico}><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>);

@@ -2353,6 +2353,23 @@ html { scroll-behavior: smooth; }
   background: var(--accent);
   box-shadow: 0 0 14px var(--accent-glow);
 }
+.navbar__request {
+  display: inline-flex; align-items: center; gap: 7px;
+  margin-left: 6px;
+  padding: 8px 15px;
+  border-radius: 10px;
+  font: inherit; font-weight: 600; font-size: 0.9rem;
+  color: #052026;
+  cursor: pointer;
+  border: none;
+  background: linear-gradient(135deg, var(--accent-2), var(--accent));
+  box-shadow: 0 6px 18px -6px var(--accent-glow);
+  white-space: nowrap;
+  transition: filter 0.2s var(--ease), transform 0.1s var(--ease);
+}
+.navbar__request:hover { filter: brightness(1.08); }
+.navbar__request:active { transform: translateY(1px); }
+.navbar__request svg { width: 17px; height: 17px; }
 .navbar__tabs {
   display: flex;
   align-items: center;
