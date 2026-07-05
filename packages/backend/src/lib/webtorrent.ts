@@ -5,6 +5,17 @@ import { torrentDownloadDir, torrentFilePath } from './media-paths.js';
 import { writeFile, mkdir, readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
+/** WebRTC STUN servers for NAT traversal — no DHT, no external trackers. */
+const CLIENT_OPTS = {
+  tracker: {
+    rtcConfig: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+      ],
+    },
+  },
+};
+
 /** Stats snapshot returned by {@link getLiveStats}. */
 export interface TorrentLiveStats {
   progress: number;
@@ -34,9 +45,13 @@ let _client: WebTorrent | null = null;
  */
 export function getClient(): WebTorrent {
   if (!_client) {
-    _client = new WebTorrent();
+    _client = new WebTorrent(CLIENT_OPTS);
     _client.on('error', (err: Error | string) => {
       console.error('[WebTorrent] client error:', err);
+    });
+    // Log peer connections for debugging
+    _client.on('torrent', (t) => {
+      console.log(`[WebTorrent] Torrent added: ${t.name} (${t.infoHash})`);
     });
   }
   return _client;
@@ -78,6 +93,12 @@ async function _addToClient(
         settled = true;
         reject(err instanceof Error ? err : new Error(String(err)));
       }
+    });
+    torrent.on('warning', (msg: string) => {
+      console.warn(`[WebTorrent] ${torrent.infoHash}: ${msg}`);
+    });
+    torrent.on('wire', () => {
+      console.log(`[WebTorrent] ${torrent.infoHash}: wire established`);
     });
   });
 }
