@@ -1208,7 +1208,7 @@ table.data tr:last-child td {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(0deg, var(--bg) 0%, rgba(11,13,18,0.92) 15%, rgba(11,13,18,0.5) 50%, rgba(11,13,18,0.18) 100%);
+    linear-gradient(to top, transparent 0%, rgba(11,13,18,0.4) 30%, rgba(11,13,18,0.7) 70%, rgba(11,13,18,0.85) 100%);
   pointer-events: none;
 }
 
