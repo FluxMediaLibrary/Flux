@@ -85,7 +85,7 @@ export default function WatchPage() {
   }
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '20px 20px 56px' }}>
+    <div className="watch-stage">
       <FluxPlayer
         key={activeEpisodeId ?? 'movie'}
         mediaItemId={id}
@@ -97,6 +97,7 @@ export default function WatchPage() {
             : undefined
         }
         startPositionSeconds={startPosition}
+        fill
         onProgress={handleProgress}
         onBack={() => router.push(`/library/${id}`)}
       />

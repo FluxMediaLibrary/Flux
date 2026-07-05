@@ -29,6 +29,8 @@ interface FluxPlayerProps {
   title: string;
   subtitle?: string;
   startPositionSeconds?: number;
+  /** Fill the parent (used for the full-window watch page). */
+  fill?: boolean;
   onProgress?: (positionSeconds: number, durationSeconds: number) => void;
   onBack?: () => void;
 }
@@ -50,6 +52,7 @@ export function FluxPlayer({
   title,
   subtitle,
   startPositionSeconds = 0,
+  fill = false,
   onProgress,
   onBack,
 }: FluxPlayerProps) {
@@ -60,6 +63,7 @@ export function FluxPlayer({
   const startedAt = useRef(startPositionSeconds);
 
   const [mode, setMode] = useState<Mode>('direct');
+  const [decided, setDecided] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [waiting, setWaiting] = useState(true);
   const [current, setCurrent] = useState(0);
@@ -73,8 +77,27 @@ export function FluxPlayer({
   const [scrubbing, setScrubbing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Source setup (direct → hls fallback) ────────────────────────────────
+  // ── Ask the server how to play this file (Plex-style decision) ──────────
   useEffect(() => {
+    let cancelled = false;
+    setDecided(false);
+    api.getPlaybackInfo(mediaItemId, episodeId).then(
+      (info) => {
+        if (cancelled) return;
+        setMode(info.directPlay ? 'direct' : 'hls');
+        setDecided(true);
+      },
+      () => {
+        // Probe failed — try direct play; the error handler will fall back.
+        if (!cancelled) { setMode('direct'); setDecided(true); }
+      },
+    );
+    return () => { cancelled = true; };
+  }, [mediaItemId, episodeId]);
+
+  // ── Source setup (uses the decided mode; direct → hls fallback on error) ─
+  useEffect(() => {
+    if (!decided) return;
     const video = videoRef.current;
     if (!video) return;
     let destroyed = false;
@@ -125,7 +148,7 @@ export function FluxPlayer({
         hlsRef.current = null;
       }
     };
-  }, [mode, mediaItemId, episodeId]);
+  }, [decided, mode, mediaItemId, episodeId]);
 
   // ── Video element event wiring ──────────────────────────────────────────
   useEffect(() => {
@@ -310,7 +333,7 @@ export function FluxPlayer({
   return (
     <div
       ref={containerRef}
-      className={`vp${controlsVisible || !playing ? ' show' : ''}${fullscreen ? ' fs' : ''}`}
+      className={`vp${fill ? ' vp--fill' : ''}${controlsVisible || !playing ? ' show' : ''}${fullscreen ? ' fs' : ''}`}
       onMouseMove={revealControls}
       onMouseLeave={() => playing && setControlsVisible(false)}
     >

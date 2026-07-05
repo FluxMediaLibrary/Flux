@@ -12,6 +12,7 @@ import {
   getHlsPath,
   probeMedia,
   buildHlsFfmpegArgs,
+  decidePlayback,
 } from './streaming.service.js';
 import { safeJoin } from '../../lib/media-paths.js';
 import { ApiError } from '../../lib/errors.js';
@@ -184,6 +185,19 @@ export const streamingRoutes: FastifyPluginAsync = async (
 
       const stream = fs.createReadStream(filePath);
       return reply.send(stream);
+    },
+  );
+
+  // ── GET /:mediaItemId/info — how should the client play this? ─────────────
+
+  app.get(
+    '/:mediaItemId/info',
+    { preHandler: [app.requireProfile] },
+    async (request) => {
+      const { mediaItemId } = request.params as { mediaItemId: string };
+      const { episodeId } = request.query as { episodeId?: string };
+      const { filePath } = await getMediaFilePath(mediaItemId, episodeId);
+      return decidePlayback(filePath);
     },
   );
 
