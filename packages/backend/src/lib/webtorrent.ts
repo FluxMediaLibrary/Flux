@@ -114,6 +114,18 @@ async function _addToClient(
         reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
+    torrent.on('ready', () => {
+      console.log(`[WebTorrent] ${infoHash}: metadata ready`);
+    });
+    torrent.on('download', (bytes: number) => {
+      console.log(`[WebTorrent] ${infoHash}: downloaded ${bytes} bytes (${(torrent.progress * 100).toFixed(1)}%)`);
+    });
+    torrent.on('upload', (bytes: number) => {
+      console.log(`[WebTorrent] ${infoHash}: uploaded ${bytes} bytes`);
+    });
+    torrent.on('noPeers', (announceType: string) => {
+      console.warn(`[WebTorrent] ${infoHash}: no peers from ${announceType} announce`);
+    });
   });
 }
 
