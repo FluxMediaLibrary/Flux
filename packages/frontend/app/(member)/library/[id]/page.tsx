@@ -12,7 +12,8 @@ import type {
 } from '@flux/shared';
 
 const BACKDROP_BASE = 'https://image.tmdb.org/t/p/w1280';
-const STILL_BASE = 'https://image.tmdb.org/t/p/w454';
+// TMDb serves stills only at w92 / w185 / w300 / original — w300 is the tile size.
+const STILL_BASE = 'https://image.tmdb.org/t/p/w300';
 const PROFILE_BASE = 'https://image.tmdb.org/t/p/w185';
 
 /** A library episode enriched with TMDb still/synopsis metadata by number. */
@@ -272,7 +273,21 @@ export default function LibraryDetailPage() {
                   <>
                     <div className="nfx-ep-thumb">
                       {still ? (
-                        <img src={still} alt="" loading="lazy" />
+                        <img
+                          src={still}
+                          alt=""
+                          loading="lazy"
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            // A missing still falls back to the show backdrop,
+                            // then hides itself so the placeholder shows through.
+                            if (fallbackStill && img.src !== fallbackStill) {
+                              img.src = fallbackStill;
+                            } else {
+                              img.style.display = 'none';
+                            }
+                          }}
+                        />
                       ) : (
                         <div className="nfx-ep-thumb--ph">{ep.episode}</div>
                       )}
