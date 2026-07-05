@@ -54,6 +54,7 @@ services:
     volumes:
       - downloads:/data/downloads
       - transmission-config:/config
+      - ./transmission-settings.json:/config/settings.json
 
   backend:
     build:

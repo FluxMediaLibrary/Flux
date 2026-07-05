@@ -1,0 +1,14 @@
+{
+    "dht-enabled": false,
+    "pex-enabled": false,
+    "lpd-enabled": false,
+    "encryption": 1,
+    "peer-port": 51413,
+    "peer-port-random-on-start": false,
+    "port-forwarding-enabled": true,
+    "rpc-authentication-required": true,
+    "rpc-whitelist-enabled": false,
+    "start-added-torrents": true,
+    "trash-original-torrent-files": true,
+    "umask": "002"
+}
