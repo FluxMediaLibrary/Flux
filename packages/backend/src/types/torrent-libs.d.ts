@@ -35,6 +35,10 @@ declare module 'webtorrent' {
     on(event: 'error', listener: (err: Error | string) => void): this;
     on(event: 'ready', listener: () => void): this;
     on(event: 'metadata', listener: () => void): this;
+    on(event: 'download', listener: (bytes: number) => void): this;
+    on(event: 'upload', listener: (bytes: number) => void): this;
+    on(event: 'noPeers', listener: (announceType: string) => void): this;
+    on(event: 'warning', listener: (err: Error | string) => void): this;
     once(event: 'done', listener: () => void): this;
     once(event: 'error', listener: (err: Error | string) => void): this;
 
