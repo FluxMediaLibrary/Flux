@@ -156,6 +156,41 @@ export default function LibraryDetailPage() {
   const voteAverage = detail?.voteAverage ?? null;
   const cast = detail?.cast ?? [];
 
+  // For shows: resume the most-recently-watched in-progress episode; otherwise
+  // start the first available one. Movies use the movie-level progress above.
+  const resumeEpisode = isShow
+    ? (item.episodes ?? [])
+        .filter(
+          (e) =>
+            e.available &&
+            e.progress &&
+            !e.progress.completed &&
+            e.progress.positionSeconds > 0,
+        )
+        .sort((a, b) =>
+          (b.progress!.updatedAt ?? '').localeCompare(a.progress!.updatedAt ?? ''),
+        )[0] ?? null
+    : null;
+  const firstAvailableEpisode = isShow
+    ? (item.episodes ?? []).find((e) => e.available) ?? null
+    : null;
+
+  // Unified hero play/resume target.
+  let playHref = `/watch/${item.id}`;
+  let playLabel = 'Play';
+  let resumeNote: string | null = null;
+  if (isShow) {
+    if (resumeEpisode) {
+      playHref = `/watch/${item.id}?episode=${resumeEpisode.id}`;
+      playLabel = `Resume S${resumeEpisode.season} · E${resumeEpisode.episode}`;
+    } else if (firstAvailableEpisode) {
+      playHref = `/watch/${item.id}?episode=${firstAvailableEpisode.id}`;
+    }
+  } else if (hasProgress) {
+    playLabel = `Resume${progressPct > 0 ? ` · ${progressPct}%` : ''}`;
+    resumeNote = `${formatSeconds(item.progress!.positionSeconds)} watched`;
+  }
+
   const localEpisodes =
     seasons.find(([s]) => s === selectedSeason)?.[1] ?? seasons[0]?.[1] ?? [];
   const activeSeason = seasons.find(([s]) => s === selectedSeason)?.[0] ?? seasons[0]?.[0];
@@ -211,21 +246,12 @@ export default function LibraryDetailPage() {
           </div>
 
           <div className="nfx-actions">
-            {hasProgress ? (
-              <Link href={`/watch/${item.id}`} className="nfx-btn nfx-btn--play">
-                <PlayIcon />
-                Resume{progressPct > 0 ? ` · ${progressPct}%` : ''}
-              </Link>
-            ) : (
-              <Link href={`/watch/${item.id}`} className="nfx-btn nfx-btn--play">
-                <PlayIcon />
-                Play
-              </Link>
-            )}
-            {hasProgress && (
-              <span className="nfx-resume-note">
-                {formatSeconds(item.progress!.positionSeconds)} watched
-              </span>
+            <Link href={playHref} className="nfx-btn nfx-btn--play">
+              <PlayIcon />
+              {playLabel}
+            </Link>
+            {resumeNote && (
+              <span className="nfx-resume-note">{resumeNote}</span>
             )}
           </div>
 
@@ -299,6 +325,24 @@ export default function LibraryDetailPage() {
                       {!ep.available && (
                         <div className="nfx-ep-thumb-lock">Unavailable</div>
                       )}
+                      {ep.progress &&
+                        !ep.progress.completed &&
+                        ep.progress.positionSeconds > 0 &&
+                        ep.progress.durationSeconds != null && (
+                          <div className="nfx-ep-bar">
+                            <div
+                              className="nfx-ep-bar-fill"
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  (ep.progress.positionSeconds /
+                                    ep.progress.durationSeconds) *
+                                    100,
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                        )}
                     </div>
 
                     <div className="nfx-ep-body">

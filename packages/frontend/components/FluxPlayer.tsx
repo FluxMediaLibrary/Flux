@@ -242,18 +242,30 @@ export function FluxPlayer({
   }, [mode, rate]);
 
   // ── Periodic progress reporting ─────────────────────────────────────────
+  // Save every 5s plus on the events browsers actually deliver reliably: pause,
+  // and the page being hidden (tab switch / navigation / mobile background).
+  // `beforeunload` alone is routinely dropped, which is why resume points were
+  // being lost.
   useEffect(() => {
     if (!onProgress) return;
     const report = () => {
       const v = videoRef.current;
       if (v && v.duration && v.currentTime > 0) onProgress(v.currentTime, v.duration);
     };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') report();
+    };
+    const v = videoRef.current;
     const t = setInterval(report, 5000);
-    window.addEventListener('beforeunload', report);
+    v?.addEventListener('pause', report);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', report);
     return () => {
       report();
       clearInterval(t);
-      window.removeEventListener('beforeunload', report);
+      v?.removeEventListener('pause', report);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', report);
     };
   }, [onProgress]);
 

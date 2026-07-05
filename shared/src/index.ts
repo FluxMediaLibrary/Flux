@@ -176,6 +176,8 @@ export interface EpisodeDTO {
   overview: string | null;
   runtime: number | null;
   available: boolean; // has a file
+  /** Per-profile watch progress for this episode (present on detail views). */
+  progress?: WatchProgressDTO | null;
 }
 
 export interface MediaItemDetailDTO extends MediaItemDTO {
