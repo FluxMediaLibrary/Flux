@@ -43,6 +43,89 @@ export interface HlsPaths {
   sessionDir: string;
 }
 
+export interface MediaProbe {
+  videoCodec: string | null;
+  audioCodec: string | null;
+}
+
+/** Video codecs a browser HLS player can play without re-encoding. */
+const COPYABLE_VIDEO = new Set(['h264']);
+/** Audio codecs playable as-is; anything else is re-encoded to AAC. */
+const COPYABLE_AUDIO = new Set(['aac']);
+
+/**
+ * Inspect a media file's first video/audio codecs via ffprobe. Best-effort:
+ * returns nulls if ffprobe fails, which makes the caller fall back to a full
+ * re-encode (safe default).
+ */
+export function probeMedia(filePath: string): Promise<MediaProbe> {
+  return new Promise((resolve) => {
+    const proc = spawn('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'stream=codec_type,codec_name',
+      '-of', 'json',
+      filePath,
+    ]);
+    let out = '';
+    proc.stdout.on('data', (c) => { out += c.toString(); });
+    proc.on('error', () => resolve({ videoCodec: null, audioCodec: null }));
+    proc.on('close', () => {
+      try {
+        const json = JSON.parse(out) as {
+          streams?: { codec_type?: string; codec_name?: string }[];
+        };
+        const streams = json.streams ?? [];
+        const video = streams.find((s) => s.codec_type === 'video');
+        const audio = streams.find((s) => s.codec_type === 'audio');
+        resolve({
+          videoCodec: video?.codec_name ?? null,
+          audioCodec: audio?.codec_name ?? null,
+        });
+      } catch {
+        resolve({ videoCodec: null, audioCodec: null });
+      }
+    });
+  });
+}
+
+/**
+ * Build codec-aware FFmpeg args for an HLS session (Plex-style):
+ *   - video already H.264  → stream-copy (remux, no re-encode → near-instant)
+ *   - otherwise            → transcode to H.264 (veryfast, CRF 23)
+ *   - audio already AAC     → stream-copy; otherwise → AAC stereo
+ * Subtitles/data streams are dropped so the HLS muxer can't choke on them.
+ */
+export function buildHlsFfmpegArgs(
+  probe: MediaProbe,
+  sourceFile: string,
+  sessionDir: string,
+): string[] {
+  const videoArgs = probe.videoCodec && COPYABLE_VIDEO.has(probe.videoCodec)
+    ? ['-c:v', 'copy']
+    : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
+
+  const audioArgs = probe.audioCodec && COPYABLE_AUDIO.has(probe.audioCodec)
+    ? ['-c:a', 'copy']
+    : ['-c:a', 'aac', '-b:a', '160k', '-ac', '2'];
+
+  return [
+    '-i', sourceFile,
+    '-map', '0:v:0',
+    '-map', '0:a:0?',
+    '-sn', '-dn',
+    ...videoArgs,
+    ...audioArgs,
+    '-f', 'hls',
+    '-hls_time', '4',
+    '-hls_list_size', '0',
+    '-hls_flags', 'independent_segments',
+    '-hls_segment_type', 'mpegts',
+    '-start_number', '0',
+    '-hls_segment_filename', path.join(sessionDir, 'segment_%05d.ts'),
+    path.join(sessionDir, 'index.m3u8'),
+  ];
+}
+
 /**
  * Resolve the absolute path, MIME type, and size of a media file.
  *
