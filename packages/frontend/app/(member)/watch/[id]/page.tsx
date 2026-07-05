@@ -6,14 +6,18 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import type { MediaItemDetailDTO } from '@flux/shared';
 
+/** What we've decided to play: a specific episode, or the movie itself. */
+type PlayTarget = { episodeId?: string };
+
 export default function WatchPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
-  const episodeId = searchParams.get('episode') ?? undefined;
+  const episodeParam = searchParams.get('episode') ?? undefined;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
   const [item, setItem] = useState<MediaItemDetailDTO | null>(null);
+  const [target, setTarget] = useState<PlayTarget | null>(null);
   const [buffering, setBuffering] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resumeMsg, setResumeMsg] = useState<string | null>(null);
@@ -29,15 +33,57 @@ export default function WatchPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  // Set up HLS player
+  // Resolve what to play. A show opened at its root (no ?episode=) has no
+  // movie-level file, so pick the first available episode instead of 404-ing.
   useEffect(() => {
-    if (!videoRef.current) return;
+    if (episodeParam) {
+      setTarget({ episodeId: episodeParam });
+      return;
+    }
+    if (!item) return; // wait for metadata
 
-    const hlsUrl = api.getHlsUrl(id, episodeId);
+    if (item.type === 'MOVIE') {
+      setTarget({});
+      return;
+    }
+
+    const firstPlayable = item.episodes?.find((e) => e.available);
+    if (firstPlayable) {
+      setTarget({ episodeId: firstPlayable.id });
+    } else {
+      setError('No episodes are available to play yet.');
+    }
+  }, [item, episodeParam]);
+
+  const activeEpisodeId = target?.episodeId;
+
+  // Set up HLS player once we know the target
+  useEffect(() => {
+    if (!target || !videoRef.current) return;
+
+    const hlsUrl = api.getHlsUrl(id, target.episodeId);
     if (!hlsUrl) return;
 
     let hls: any = null;
     let destroyed = false;
+
+    function fail(data: any) {
+      const code = data?.response?.code;
+      const details = String(data?.details ?? '');
+      if (code === 404) {
+        setError(
+          'This title has no playable file yet — it may still be downloading or processing.',
+        );
+      } else if (code === 401 || code === 403) {
+        setError('Session expired. Go back and re-open the title to refresh access.');
+      } else if (details.startsWith('manifestLoad')) {
+        setError(
+          'Could not start the stream. The server may still be transcoding — retry in a moment.',
+        );
+      } else {
+        setError('Playback error. Please retry.');
+      }
+    }
 
     async function setup() {
       try {
@@ -51,9 +97,7 @@ export default function WatchPage() {
           hls.attachMedia(videoRef.current!);
 
           hls.on(Hls.Events.ERROR, (_event: string, data: any) => {
-            if (data.fatal) {
-              setError('Playback error. The stream may not be ready yet.');
-            }
+            if (data.fatal) fail(data);
           });
         } else if (videoRef.current!.canPlayType('application/vnd.apple.mpegurl')) {
           videoRef.current!.src = hlsUrl;
@@ -72,13 +116,12 @@ export default function WatchPage() {
       if (hls) hls.destroy();
       hlsRef.current = null;
     };
-  }, [id, episodeId]);
+  }, [id, target]);
 
   // Resume from saved position
   useEffect(() => {
     if (!videoRef.current || !item) return;
 
-    // Check for progress on the media item or specific episode
     const progress = item.progress;
     if (progress && progress.positionSeconds > 0 && !progress.completed) {
       if (videoRef.current.readyState >= 2) {
@@ -101,13 +144,13 @@ export default function WatchPage() {
     const v = videoRef.current;
     if (v.duration && v.currentTime > 0) {
       api.saveProgress({
-        mediaItemId: episodeId ? undefined : id,
-        episodeId,
+        mediaItemId: activeEpisodeId ? undefined : id,
+        episodeId: activeEpisodeId,
         positionSeconds: v.currentTime,
         durationSeconds: v.duration,
       }).catch(() => { /* best-effort */ });
     }
-  }, [id, episodeId]);
+  }, [id, activeEpisodeId]);
 
   useEffect(() => {
     progressTimer.current = setInterval(reportProgress, 5000);
@@ -129,12 +172,21 @@ export default function WatchPage() {
     return (
       <div className="centered-viewport">
         <div className="form-error" style={{ marginBottom: 16 }}>{error}</div>
-        <button className="btn btn-primary" onClick={() => window.location.reload()}>
-          Retry
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>
+            Retry
+          </button>
+          <Link href={`/library/${id}`} className="btn btn-ghost">
+            Back to details
+          </Link>
+        </div>
       </div>
     );
   }
+
+  const activeEpisode = activeEpisodeId
+    ? item?.episodes?.find((e) => e.id === activeEpisodeId)
+    : undefined;
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 24px 64px' }}>
@@ -145,10 +197,9 @@ export default function WatchPage() {
         {item && (
           <h2 style={{ margin: 0, fontSize: '1.2rem' }}>
             {item.title}
-            {episodeId && item.episodes && (() => {
-              const ep = item.episodes.find((e) => e.id === episodeId);
-              return ep ? ` — S${ep.season} E${ep.episode}` : '';
-            })()}
+            {activeEpisode
+              ? ` — S${activeEpisode.season} E${activeEpisode.episode}`
+              : ''}
           </h2>
         )}
       </div>
