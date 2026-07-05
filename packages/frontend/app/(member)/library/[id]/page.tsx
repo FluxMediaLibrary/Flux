@@ -127,7 +127,7 @@ export default function LibraryDetailPage() {
 
   return (
     <div>
-      {/* Backdrop hero — full-width */}
+      {/* Backdrop hero with poster overlapping bottom */}
       <div className="detail-hero">
         {item.backdropPath ? (
           <img
@@ -139,70 +139,69 @@ export default function LibraryDetailPage() {
           <div className="detail-backdrop detail-backdrop--placeholder" />
         )}
         <div className="detail-hero-overlay" />
+
+        {/* Poster — sits inside the hero, overlapping the bottom edge */}
+        <div className="detail-poster-wrap">
+          {item.posterPath ? (
+            <img
+              src={`${POSTER_BASE}${item.posterPath}`}
+              alt={item.title}
+              className="detail-poster"
+            />
+          ) : (
+            <div className="detail-poster detail-poster--ph">
+              <span>{item.title.charAt(0)}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="page">
-        {/* Poster + info section */}
-        <div className="detail-header">
-          <div className="detail-poster-wrap">
-            {item.posterPath ? (
-              <img
-                src={`${POSTER_BASE}${item.posterPath}`}
-                alt={item.title}
-                className="detail-poster"
-              />
-            ) : (
-              <div className="detail-poster detail-poster--ph">
-                <span>{item.title.charAt(0)}</span>
-              </div>
+        {/* Info section — title, badges, overview, play */}
+        <div className="detail-info">
+          <h1 className="detail-title">{item.title}</h1>
+
+          <div className="detail-badges">
+            {item.year && <span className="detail-badge">{item.year}</span>}
+            {runtime && (
+              <span className="detail-badge">{formatRuntime(runtime)}</span>
             )}
+            {isShow && item.episodes && (
+              <span className="detail-badge">
+                {item.episodes.filter((e) => e.available).length} episodes
+              </span>
+            )}
+            {voteAverage !== null && (
+              <span className="detail-badge rating">
+                ★ {voteAverage.toFixed(1)}
+              </span>
+            )}
+            {item.genres.map((g) => (
+              <span className="detail-badge" key={g}>
+                {g}
+              </span>
+            ))}
           </div>
 
-          <div className="detail-info">
-            <h1 className="detail-title">{item.title}</h1>
+          {item.overview && (
+            <p className="detail-overview">{item.overview}</p>
+          )}
 
-            <div className="detail-badges">
-              {item.year && <span className="detail-badge">{item.year}</span>}
-              {runtime && (
-                <span className="detail-badge">{formatRuntime(runtime)}</span>
-              )}
-              {isShow && item.episodes && (
-                <span className="detail-badge">
-                  {item.episodes.filter((e) => e.available).length} episodes
-                </span>
-              )}
-              {voteAverage !== null && (
-                <span className="detail-badge rating">
-                  ★ {voteAverage.toFixed(1)}
-                </span>
-              )}
-              {item.genres.map((g) => (
-                <span className="detail-badge" key={g}>
-                  {g}
-                </span>
-              ))}
-            </div>
-
-            {item.overview && (
-              <p className="detail-overview">{item.overview}</p>
-            )}
-
-            <div className="detail-actions">
-              {hasProgress ? (
-                <>
-                  <Link href={`/watch/${item.id}`} className="btn btn-primary">
-                    ▶ Resume{progressPct > 0 ? ` (${progressPct}%)` : ''}
-                  </Link>
-                  <span className="muted" style={{ fontSize: '0.85rem' }}>
-                    {formatSeconds(item.progress!.positionSeconds)} watched
-                  </span>
-                </>
-              ) : (
+          <div className="detail-actions">
+            {hasProgress ? (
+              <>
                 <Link href={`/watch/${item.id}`} className="btn btn-primary">
-                  ▶ Play{isShow ? '' : ''}
+                  ▶ Resume{progressPct > 0 ? ` (${progressPct}%)` : ''}
                 </Link>
-              )}
-            </div>
+                <span className="muted" style={{ fontSize: '0.85rem' }}>
+                  {formatSeconds(item.progress!.positionSeconds)} watched
+                </span>
+              </>
+            ) : (
+              <Link href={`/watch/${item.id}`} className="btn btn-primary">
+                ▶ Play{isShow ? '' : ''}
+              </Link>
+            )}
           </div>
         </div>
 
@@ -240,7 +239,6 @@ export default function LibraryDetailPage() {
           <section className="episodes-section">
             <h2 className="section-label">Episodes</h2>
 
-            {/* Season tabs */}
             <div className="season-tabs">
               {seasons.map(([season]) => (
                 <button
@@ -253,7 +251,6 @@ export default function LibraryDetailPage() {
               ))}
             </div>
 
-            {/* Episode list */}
             <div className="episodes-list">
               {activeEpisodes.map((ep) => (
                 <div key={ep.id} className="episode-row">
