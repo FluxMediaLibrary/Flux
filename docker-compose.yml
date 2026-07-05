@@ -45,6 +45,8 @@ services:
       TRANSMISSION_DOWNLOAD_DIR: /data/downloads
       TRANSMISSION_INCOMPLETE_DIR: /data/downloads/incomplete
       TRANSMISSION_WATCH_DIR: /data/downloads/watch
+      TRANSMISSION_START_ON_ADD: "true"
+      TRANSMISSION_TRASH_ORIGINAL: "true"
     ports:
       - "51413:51413"
       - "51413:51413/udp"

@@ -140,6 +140,9 @@ export async function addTorrent(
   const added = result['torrent-added'];
   if (!added) throw new Error('Transmission: torrent-add returned no torrent');
 
+  // Explicitly start the torrent (paused: false doesn't always work)
+  await rpc('torrent-start', { ids: [added.hashString] });
+
   // Persist .torrent bytes for seed-resume on boot
   const filePath = torrentFilePath(added.hashString);
   await mkdir(dirname(filePath), { recursive: true });
@@ -212,11 +215,14 @@ export async function resumeTorrents(): Promise<number> {
     try {
       const buffer = await readFile(join(torrentsDir, file));
       const b64 = buffer.toString('base64');
-      await rpc('torrent-add', {
+      const result = (await rpc('torrent-add', {
         'download-dir': config.DOWNLOAD_ROOT,
         metainfo: b64,
         paused: false,
-      });
+      })) as { 'torrent-added'?: { hashString: string } };
+      if (result['torrent-added']) {
+        await rpc('torrent-start', { ids: [result['torrent-added'].hashString] });
+      }
       resumed++;
     } catch (err) {
       console.error(`[Transmission] Failed to resume torrent ${file}:`, err);
