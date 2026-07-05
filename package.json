@@ -1,0 +1,24 @@
+{
+  "name": "flux",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Flux — self-hosted media library platform with torrent acquisition, TMDb requests, and HLS streaming.",
+  "workspaces": [
+    "shared",
+    "packages/backend",
+    "packages/frontend"
+  ],
+  "scripts": {
+    "dev": "docker compose up --build",
+    "dev:backend": "npm run dev --workspace @flux/backend",
+    "dev:frontend": "npm run dev --workspace @flux/frontend",
+    "build": "npm run build --workspace @flux/shared && npm run build --workspace @flux/backend && npm run build --workspace @flux/frontend",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "prisma:generate": "npm run prisma:generate --workspace @flux/backend",
+    "prisma:migrate": "npm run prisma:migrate --workspace @flux/backend"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

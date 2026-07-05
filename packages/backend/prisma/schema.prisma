@@ -1,0 +1,250 @@
+// Flux — Prisma schema (central data contract)
+// Profile-aware: watch_progress and requests key off profile_id, not user_id.
+// Role (Admin/Member) is per-account (User), not per-profile.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Accounts & Profiles
+// ─────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+/// An account (the login / invite holder). Owns one or more profiles.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(MEMBER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  profiles       Profile[]
+  invitesCreated Invite[]  @relation("InviteCreatedBy")
+  invitedBy      Invite?   @relation("InviteUsedBy")
+
+  @@map("users")
+}
+
+/// A Netflix-style profile under an account. Unlimited per account in v1.
+/// No PINs / restrictions in v1 (deferred).
+model Profile {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  watchProgress  WatchProgress[]
+  requests       Request[]
+
+  @@index([userId])
+  @@map("profiles")
+}
+
+/// Single-use, expiring invite code. Signup requires a valid one.
+model Invite {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  expiresAt   DateTime
+  createdById String
+  usedById    String?   @unique
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  createdBy User  @relation("InviteCreatedBy", fields: [createdById], references: [id])
+  usedBy    User? @relation("InviteUsedBy", fields: [usedById], references: [id])
+
+  @@index([createdById])
+  @@map("invites")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Library
+// ─────────────────────────────────────────────────────────────
+
+enum MediaType {
+  MOVIE
+  SHOW
+}
+
+/// A library item matched to a TMDb ID at ingest. tmdbId+type is the join key
+/// between the library and requests.
+model MediaItem {
+  id           String    @id @default(cuid())
+  tmdbId       Int
+  type         MediaType
+  title        String
+  year         Int?
+  overview     String?
+  posterPath   String?
+  backdropPath String?
+  genres       String[]  @default([])
+  metadata     Json?     // cached TMDb payload
+  filePath     String?   // for MOVIE: path to the media file
+  addedAt      DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  episodes      Episode[]
+  watchProgress WatchProgress[]
+  torrents      Torrent[]
+
+  @@unique([tmdbId, type])
+  @@index([type])
+  @@map("media_items")
+}
+
+model Episode {
+  id          String   @id @default(cuid())
+  mediaItemId String
+  season      Int
+  episode     Int
+  title       String?
+  overview    String?
+  filePath    String?
+  runtime     Int?
+  addedAt     DateTime @default(now())
+
+  mediaItem     MediaItem       @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  watchProgress WatchProgress[]
+
+  @@unique([mediaItemId, season, episode])
+  @@index([mediaItemId])
+  @@map("episodes")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Torrents (admin-only acquisition)
+// ─────────────────────────────────────────────────────────────
+
+enum TorrentStatus {
+  PENDING_CONFIRM // parsed, awaiting admin confirm/correct
+  DOWNLOADING
+  PROCESSING      // renaming / moving / season-pack split
+  SEEDING
+  STOPPED
+  ERROR
+}
+
+model Torrent {
+  id            String        @id @default(cuid())
+  infoHash      String        @unique
+  name          String
+  category      MediaType
+  matchedTmdbId Int?
+  mediaItemId   String?
+  status        TorrentStatus @default(PENDING_CONFIRM)
+
+  // live progress
+  progress     Float   @default(0) // 0..1
+  downloadSpeed Int    @default(0) // bytes/s
+  uploadSpeed  Int     @default(0)
+  peers        Int     @default(0)
+  totalBytes   BigInt  @default(0)
+
+  // seeding stats
+  uploadedBytes BigInt   @default(0)
+  ratio         Float    @default(0)
+  seedingSince  DateTime?
+
+  // confirmed per-file episode mapping for season packs (Json array)
+  fileMapping Json?
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mediaItem MediaItem? @relation(fields: [mediaItemId], references: [id])
+  requests  Request[]
+
+  @@index([status])
+  @@index([matchedTmdbId])
+  @@map("torrents")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Requests (per-profile)
+// ─────────────────────────────────────────────────────────────
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  DOWNLOADING
+  FULFILLED
+  REJECTED
+}
+
+model Request {
+  id        String        @id @default(cuid())
+  profileId String
+  tmdbId    Int
+  mediaType MediaType
+  title     String
+  status    RequestStatus @default(PENDING)
+  torrentId String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  profile Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  torrent Torrent? @relation(fields: [torrentId], references: [id])
+
+  @@index([profileId])
+  @@index([tmdbId])
+  @@index([status])
+  @@map("requests")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Watch progress (per-profile, per-movie or per-episode)
+// ─────────────────────────────────────────────────────────────
+
+model WatchProgress {
+  id              String   @id @default(cuid())
+  profileId       String
+  mediaItemId     String?  // set for movies
+  episodeId       String?  // set for episodes
+  positionSeconds Float    @default(0)
+  durationSeconds Float?
+  completed       Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+
+  profile   Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  mediaItem MediaItem? @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  episode   Episode?   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, mediaItemId])
+  @@unique([profileId, episodeId])
+  @@index([profileId, updatedAt])
+  @@map("watch_progress")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Notification settings (singleton row)
+// ─────────────────────────────────────────────────────────────
+
+model NotificationSettings {
+  id                String  @id @default("singleton")
+  discordEnabled    Boolean @default(false)
+  discordWebhookUrl String?
+  smtpEnabled       Boolean @default(false)
+  smtpHost          String?
+  smtpPort          Int?
+  smtpUsername      String?
+  smtpPassword      String?
+  smtpFromAddress   String?
+  updatedAt         DateTime @updatedAt @default(now())
+
+  @@map("notification_settings")
+}
