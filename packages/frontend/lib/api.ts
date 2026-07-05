@@ -14,6 +14,7 @@ import type {
   MediaType,
   NotificationSettingsDTO,
   TmdbDetail,
+  TmdbEpisode,
   ProfileDTO,
   RequestDTO,
   SaveProgressRequest,
@@ -291,6 +292,13 @@ export const api = {
   tmdbDetail(type: MediaType, tmdbId: number, signal?: AbortSignal) {
     const segment = type === 'SHOW' ? 'tv' : 'movie';
     return request<TmdbDetail>(`/api/tmdb/${segment}/${tmdbId}`, { signal });
+  },
+  /** Per-episode TMDb metadata (stills, synopses) for one TV season. */
+  tmdbSeason(tmdbId: number, season: number, signal?: AbortSignal) {
+    return request<TmdbEpisode[]>(
+      `/api/tmdb/tv/${tmdbId}/season/${season}`,
+      { signal },
+    );
   },
 
   // Torrents (admin)

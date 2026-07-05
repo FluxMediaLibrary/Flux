@@ -16,6 +16,12 @@ export const detailParamsSchema = z.object({
   tmdbId: z.coerce.number().int().positive(),
 });
 
+/** Path params for a TV season's episode list. */
+export const seasonParamsSchema = z.object({
+  tmdbId: z.coerce.number().int().positive(),
+  season: z.coerce.number().int().min(0).max(1000),
+});
+
 /** A media type that maps 1:1 to a TMDb segment (no multi/all). */
 const discoverMediaType = z.enum(['movie', 'tv', 'show']).default('movie');
 
@@ -45,6 +51,7 @@ export const discoverQuerySchema = z.object({
 
 export type SearchQuery = z.infer<typeof searchQuerySchema>;
 export type DetailParams = z.infer<typeof detailParamsSchema>;
+export type SeasonParams = z.infer<typeof seasonParamsSchema>;
 export type TrendingQuery = z.infer<typeof trendingQuerySchema>;
 export type PopularQuery = z.infer<typeof popularQuerySchema>;
 export type GenresQuery = z.infer<typeof genresQuerySchema>;

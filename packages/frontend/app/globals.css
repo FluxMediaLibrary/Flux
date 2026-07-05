@@ -1187,120 +1187,328 @@ table.data tr:last-child td {
 
 /* ── Library detail ──────────────────────────────────────────────────────── */
 
-.detail-hero {
+.nfx-detail {
+  margin-top: -1px; /* butt the hero flush against the navbar */
+}
+
+/* ── Cinematic hero ─────────────────────────────────────────────────────── */
+
+.nfx-hero {
   position: relative;
   width: 100%;
+  min-height: 62vh;
+  max-height: 720px;
+  display: flex;
+  align-items: flex-end;
   overflow: hidden;
-  min-height: 280px;
-  max-height: 460px;
 }
-.detail-backdrop {
+.nfx-hero-bg {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  min-height: 280px;
-  max-height: 460px;
+  object-position: center 20%;
 }
-.detail-backdrop--placeholder {
+.nfx-hero-bg--ph {
   background: linear-gradient(160deg, var(--bg-elev), var(--bg-elev-2));
-  min-height: 280px;
 }
-.detail-hero-overlay {
+/* Bottom fade into the page background. */
+.nfx-hero-scrim {
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(to top, transparent 0%, rgba(11,13,18,0.4) 30%, rgba(11,13,18,0.7) 70%, rgba(11,13,18,0.85) 100%);
+  background: linear-gradient(
+    to top,
+    var(--bg) 0%,
+    rgba(11, 17, 22, 0.7) 26%,
+    rgba(11, 17, 22, 0.15) 60%,
+    rgba(11, 17, 22, 0.35) 100%
+  );
   pointer-events: none;
 }
-
-/* ── Poster (inside hero, overlapping bottom) ──────────────────────────── */
-
-.detail-poster-wrap {
+/* Left-side darkening so the copy stays legible over busy frames. */
+.nfx-hero-scrim-left {
   position: absolute;
-  bottom: -50px;
-  left: max(24px, calc((100% - var(--maxw)) / 2 + 24px));
-  width: 200px;
+  inset: 0;
+  background: linear-gradient(
+    to right,
+    rgba(11, 17, 22, 0.85) 0%,
+    rgba(11, 17, 22, 0.5) 38%,
+    transparent 72%
+  );
+  pointer-events: none;
+}
+.nfx-hero-content {
+  position: relative;
   z-index: 2;
-  border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-  border: 1px solid var(--surface-border);
-}
-.detail-poster {
-  display: block;
   width: 100%;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
-  background: var(--bg-elev-2);
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 24px 40px;
 }
-.detail-poster--ph {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2.4rem;
+.nfx-title {
+  font-size: clamp(2rem, 5.5vw, 3.6rem);
   font-weight: 800;
-  color: var(--text-dim);
-  background: var(--bg-elev-2);
-}
-
-/* ── Info section (in page, clears poster) ─────────────────────────────── */
-
-.detail-info {
-  padding-left: 230px;
-}
-.detail-title {
-  font-size: 2rem;
-  font-weight: 800;
-  margin: 0 0 12px;
   letter-spacing: -0.02em;
-  line-height: 1.1;
+  line-height: 1.05;
+  margin: 0 0 16px;
+  max-width: 16ch;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.6);
 }
-.detail-badges {
+.nfx-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-.detail-badge {
-  font-size: 0.76rem;
+  gap: 14px;
+  font-size: 0.9rem;
   font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.14);
   color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 20px;
 }
-.detail-badge.rating {
-  color: #ffd479;
-  border-color: rgba(255, 212, 121, 0.35);
-  background: rgba(255, 212, 121, 0.12);
+.nfx-match {
+  color: var(--ok);
+  font-weight: 700;
 }
-.detail-overview {
-  margin: 0 0 18px;
-  max-width: 680px;
-  font-size: 0.95rem;
-  color: rgba(255, 255, 255, 0.82);
-  line-height: 1.55;
+.nfx-hd {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.75);
 }
-.detail-actions {
+.nfx-actions {
   display: flex;
   align-items: center;
   gap: 16px;
+  margin-bottom: 20px;
+}
+.nfx-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.12s var(--ease), background 0.15s ease, box-shadow 0.15s ease;
+}
+.nfx-btn--play {
+  background: #fff;
+  color: #0b1116;
+}
+.nfx-btn--play:hover {
+  background: rgba(255, 255, 255, 0.82);
+  transform: translateY(-1px);
+}
+.nfx-resume-note {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.nfx-overview {
+  margin: 0 0 14px;
+  max-width: 620px;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.5);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.nfx-genres {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 620px;
+}
+.nfx-genres-label {
+  color: var(--text-dim);
+}
+
+/* ── Body sections ──────────────────────────────────────────────────────── */
+
+.nfx-body {
+  padding-top: 8px;
+}
+.nfx-section {
+  margin-bottom: 44px;
+}
+.nfx-section-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 0 0 18px;
+  color: var(--text);
+}
+
+/* ── Episodes header + season selector ──────────────────────────────────── */
+
+.nfx-eps-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.nfx-eps-head .nfx-section-title {
+  margin: 0;
+}
+.nfx-season-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  padding: 9px 38px 9px 16px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  transition: border-color 0.15s ease;
+}
+.nfx-season-select:hover {
+  border-color: var(--accent-2);
+}
+.nfx-season-static {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ── Episode tiles ──────────────────────────────────────────────────────── */
+
+.nfx-eps {
+  display: flex;
+  flex-direction: column;
+}
+.nfx-ep {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  padding: 16px 8px;
+  border-top: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.14s ease;
+}
+.nfx-eps .nfx-ep:last-child {
+  border-bottom: 1px solid var(--surface-border);
+}
+.nfx-ep--playable {
+  cursor: pointer;
+}
+.nfx-ep--playable:hover {
+  background: var(--bg-elev);
+}
+.nfx-ep--disabled {
+  opacity: 0.55;
+}
+.nfx-ep-thumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 200px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-elev-2);
+}
+.nfx-ep-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.nfx-ep-thumb--ph {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--text-dim);
+}
+.nfx-ep-thumb-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.nfx-ep-thumb-play svg {
+  width: 34px;
+  height: 34px;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.6));
+}
+.nfx-ep--playable:hover .nfx-ep-thumb-play {
+  opacity: 1;
+}
+.nfx-ep-thumb-lock {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: rgba(11, 17, 22, 0.55);
+}
+.nfx-ep-body {
+  flex: 1;
+  min-width: 0;
+}
+.nfx-ep-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.nfx-ep-num {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-dim);
+  min-width: 1.4ch;
+}
+.nfx-ep-title {
+  font-weight: 600;
+  font-size: 1rem;
+  flex: 1;
+  min-width: 0;
+}
+.nfx-ep-runtime {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.nfx-ep-overview {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* ── Cast — horizontal rail ─────────────────────────────────────────────── */
 
-.cast-section {
-  margin-top: 36px;
-  margin-bottom: 36px;
-}
-.section-label {
-  font-size: 1.15rem;
-  font-weight: 700;
-  margin: 0 0 14px;
-  color: var(--text);
-}
 .cast-rail {
   display: flex;
   gap: 14px;
@@ -1349,169 +1557,40 @@ table.data tr:last-child td {
   line-height: 1.3;
 }
 
-/* ── Episodes ────────────────────────────────────────────────────────────── */
+/* ── Responsive (detail page) ───────────────────────────────────────────── */
 
-.episodes-section {
-  margin-bottom: 40px;
-}
-.season-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-.season-tab {
-  padding: 10px 20px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--surface-border);
-  background: var(--bg-elev);
-  color: var(--text-muted);
-  font-weight: 600;
-  font-size: 0.88rem;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-}
-.season-tab:hover {
-  color: var(--text);
-  border-color: var(--text-dim);
-}
-.season-tab.active {
-  background: var(--accent);
-  color: #052026;
-  border-color: var(--accent);
-  font-weight: 700;
-}
-.episodes-list {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-.episode-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 18px 20px;
-  background: var(--bg-elev);
-  border-bottom: 1px solid var(--surface-border);
-  transition: background 0.12s ease;
-}
-.episode-row:hover {
-  background: var(--bg-elev-2);
-}
-.episode-row:last-child {
-  border-bottom: none;
-}
-.episode-num {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: var(--text-dim);
-  min-width: 44px;
-  text-align: center;
-  flex-shrink: 0;
-  line-height: 1;
-  padding-top: 2px;
-}
-.episode-info {
-  flex: 1;
-  min-width: 0;
-}
-.episode-head {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 4px;
-}
-.episode-title {
-  font-weight: 600;
-  font-size: 0.95rem;
-}
-.episode-duration {
-  font-size: 0.78rem;
-  color: var(--text-dim);
-  flex-shrink: 0;
-}
-.episode-overview {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--text-muted);
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.episode-play-btn {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid var(--surface-border);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.12s ease, border-color 0.12s ease;
-  margin-top: 2px;
-}
-.episode-play-btn:hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #052026;
-}
-.episode-unavailable {
-  flex-shrink: 0;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-dim);
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--surface-border);
-  opacity: 0.6;
-  margin-top: 2px;
+@media (max-width: 760px) {
+  .nfx-hero {
+    min-height: 56vh;
+  }
+  .nfx-ep-thumb {
+    width: 148px;
+  }
 }
 
-/* ── Responsive ──────────────────────────────────────────────────────────── */
-
-@media (max-width: 640px) {
-  .detail-poster-wrap {
-    position: relative;
-    bottom: auto;
-    left: auto;
-    width: 150px;
-    margin: -40px auto 0;
+@media (max-width: 560px) {
+  .nfx-hero {
+    min-height: 62vh;
   }
-  .detail-info {
-    padding-left: 0;
-    text-align: center;
+  .nfx-overview {
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
   }
-  .detail-badges {
-    justify-content: center;
-  }
-  .detail-overview {
-    max-width: 100%;
-  }
-  .detail-actions {
-    justify-content: center;
-  }
-  .detail-title {
-    font-size: 1.5rem;
-  }
-  .episode-row {
+  .nfx-eps-head {
     flex-wrap: wrap;
+  }
+  .nfx-ep {
+    flex-direction: column;
+    align-items: stretch;
     gap: 10px;
-    padding: 14px 16px;
+    padding: 14px 4px;
   }
-  .episode-num {
-    min-width: 32px;
-    font-size: 1.25rem;
+  .nfx-ep-thumb {
+    width: 100%;
   }
-  .episode-play-btn {
-    margin-left: auto;
+  .nfx-ep-thumb-play {
+    opacity: 1; /* no hover on touch — always show affordance */
+    background: rgba(0, 0, 0, 0.2);
   }
 }
 

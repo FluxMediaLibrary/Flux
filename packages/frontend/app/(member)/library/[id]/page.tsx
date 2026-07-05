@@ -4,11 +4,24 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import type { MediaItemDetailDTO, TmdbDetail } from '@flux/shared';
+import type {
+  EpisodeDTO,
+  MediaItemDetailDTO,
+  TmdbDetail,
+  TmdbEpisode,
+} from '@flux/shared';
 
 const BACKDROP_BASE = 'https://image.tmdb.org/t/p/w1280';
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w342';
+const STILL_BASE = 'https://image.tmdb.org/t/p/w454';
 const PROFILE_BASE = 'https://image.tmdb.org/t/p/w185';
+
+/** A library episode enriched with TMDb still/synopsis metadata by number. */
+interface DisplayEpisode extends EpisodeDTO {
+  stillPath: string | null;
+  displayTitle: string;
+  displayOverview: string | null;
+  displayRuntime: number | null;
+}
 
 function formatRuntime(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -31,6 +44,8 @@ export default function LibraryDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
+  // Per-season TMDb episode metadata (stills, synopses), fetched lazily and cached.
+  const [seasonMeta, setSeasonMeta] = useState<Record<number, TmdbEpisode[]>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -66,10 +81,13 @@ export default function LibraryDetailPage() {
 
   const seasons = useMemo(() => {
     if (!item?.episodes) return [];
-    const bySeason = new Map<number, NonNullable<typeof item.episodes>>();
+    const bySeason = new Map<number, EpisodeDTO[]>();
     for (const ep of item.episodes) {
       if (!bySeason.has(ep.season)) bySeason.set(ep.season, []);
       bySeason.get(ep.season)!.push(ep);
+    }
+    for (const list of bySeason.values()) {
+      list.sort((a, b) => a.episode - b.episode);
     }
     return Array.from(bySeason.entries()).sort((a, b) => a[0] - b[0]);
   }, [item]);
@@ -79,6 +97,22 @@ export default function LibraryDetailPage() {
       setSelectedSeason(seasons[0][0]);
     }
   }, [seasons, selectedSeason]);
+
+  // Fetch TMDb episode metadata for the active season once (cached in seasonMeta).
+  useEffect(() => {
+    if (!item || item.type !== 'SHOW' || selectedSeason === null) return;
+    if (seasonMeta[selectedSeason] !== undefined) return;
+    const controller = new AbortController();
+    api
+      .tmdbSeason(item.tmdbId, selectedSeason, controller.signal)
+      .then((eps) =>
+        setSeasonMeta((prev) => ({ ...prev, [selectedSeason]: eps })),
+      )
+      .catch(() => {
+        /* best-effort — tiles fall back to the show backdrop */
+      });
+    return () => controller.abort();
+  }, [item, selectedSeason, seasonMeta]);
 
   if (loading) {
     return (
@@ -120,95 +154,177 @@ export default function LibraryDetailPage() {
   const runtime = detail?.runtime ?? null;
   const voteAverage = detail?.voteAverage ?? null;
   const cast = detail?.cast ?? [];
-  const activeEpisodes =
-    seasons.find(([s]) => s === selectedSeason)?.[1] ??
-    seasons[0]?.[1] ??
-    [];
+
+  const localEpisodes =
+    seasons.find(([s]) => s === selectedSeason)?.[1] ?? seasons[0]?.[1] ?? [];
+  const activeSeason = seasons.find(([s]) => s === selectedSeason)?.[0] ?? seasons[0]?.[0];
+  const metaForSeason =
+    activeSeason !== undefined ? seasonMeta[activeSeason] : undefined;
+
+  const activeEpisodes: DisplayEpisode[] = localEpisodes.map((ep) => {
+    const meta = metaForSeason?.find((m) => m.episodeNumber === ep.episode);
+    return {
+      ...ep,
+      stillPath: meta?.stillPath ?? null,
+      displayTitle: meta?.name ?? ep.title ?? `Episode ${ep.episode}`,
+      displayOverview: ep.overview ?? meta?.overview ?? null,
+      displayRuntime: ep.runtime ?? meta?.runtime ?? null,
+    };
+  });
+
+  const fallbackStill = item.backdropPath
+    ? `${BACKDROP_BASE}${item.backdropPath}`
+    : null;
 
   return (
-    <div>
-      {/* Backdrop hero with poster overlapping bottom */}
-      <div className="detail-hero">
+    <div className="nfx-detail">
+      {/* ── Cinematic hero ─────────────────────────────────────────────── */}
+      <div className="nfx-hero">
         {item.backdropPath ? (
           <img
             src={`${BACKDROP_BASE}${item.backdropPath}`}
             alt=""
-            className="detail-backdrop"
+            className="nfx-hero-bg"
           />
         ) : (
-          <div className="detail-backdrop detail-backdrop--placeholder" />
+          <div className="nfx-hero-bg nfx-hero-bg--ph" />
         )}
-        <div className="detail-hero-overlay" />
+        <div className="nfx-hero-scrim" />
+        <div className="nfx-hero-scrim-left" />
 
-        {/* Poster — sits inside the hero, overlapping the bottom edge */}
-        <div className="detail-poster-wrap">
-          {item.posterPath ? (
-            <img
-              src={`${POSTER_BASE}${item.posterPath}`}
-              alt={item.title}
-              className="detail-poster"
-            />
-          ) : (
-            <div className="detail-poster detail-poster--ph">
-              <span>{item.title.charAt(0)}</span>
-            </div>
+        <div className="nfx-hero-content">
+          <h1 className="nfx-title">{item.title}</h1>
+
+          <div className="nfx-meta">
+            {item.year && <span>{item.year}</span>}
+            {voteAverage !== null && (
+              <span className="nfx-match">{Math.round(voteAverage * 10)}% Match</span>
+            )}
+            {runtime && <span>{formatRuntime(runtime)}</span>}
+            {isShow && (
+              <span>
+                {seasons.length} Season{seasons.length === 1 ? '' : 's'}
+              </span>
+            )}
+            <span className="nfx-hd">HD</span>
+          </div>
+
+          <div className="nfx-actions">
+            {hasProgress ? (
+              <Link href={`/watch/${item.id}`} className="nfx-btn nfx-btn--play">
+                <PlayIcon />
+                Resume{progressPct > 0 ? ` · ${progressPct}%` : ''}
+              </Link>
+            ) : (
+              <Link href={`/watch/${item.id}`} className="nfx-btn nfx-btn--play">
+                <PlayIcon />
+                Play
+              </Link>
+            )}
+            {hasProgress && (
+              <span className="nfx-resume-note">
+                {formatSeconds(item.progress!.positionSeconds)} watched
+              </span>
+            )}
+          </div>
+
+          {item.overview && <p className="nfx-overview">{item.overview}</p>}
+
+          {item.genres.length > 0 && (
+            <p className="nfx-genres">
+              <span className="nfx-genres-label">Genres:</span>{' '}
+              {item.genres.join(', ')}
+            </p>
           )}
         </div>
       </div>
 
-      <div className="page">
-        {/* Info section — title, badges, overview, play */}
-        <div className="detail-info">
-          <h1 className="detail-title">{item.title}</h1>
+      <div className="page nfx-body">
+        {/* ── Episodes ─────────────────────────────────────────────────── */}
+        {isShow && seasons.length > 0 && (
+          <section className="nfx-section">
+            <div className="nfx-eps-head">
+              <h2 className="nfx-section-title">Episodes</h2>
+              {seasons.length > 1 ? (
+                <select
+                  className="nfx-season-select"
+                  value={selectedSeason ?? seasons[0][0]}
+                  onChange={(e) => setSelectedSeason(Number(e.target.value))}
+                  aria-label="Select season"
+                >
+                  {seasons.map(([season, eps]) => (
+                    <option key={season} value={season}>
+                      Season {season} ({eps.length})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="nfx-season-static">Season {seasons[0][0]}</span>
+              )}
+            </div>
 
-          <div className="detail-badges">
-            {item.year && <span className="detail-badge">{item.year}</span>}
-            {runtime && (
-              <span className="detail-badge">{formatRuntime(runtime)}</span>
-            )}
-            {isShow && item.episodes && (
-              <span className="detail-badge">
-                {item.episodes.filter((e) => e.available).length} episodes
-              </span>
-            )}
-            {voteAverage !== null && (
-              <span className="detail-badge rating">
-                ★ {voteAverage.toFixed(1)}
-              </span>
-            )}
-            {item.genres.map((g) => (
-              <span className="detail-badge" key={g}>
-                {g}
-              </span>
-            ))}
-          </div>
+            <div className="nfx-eps">
+              {activeEpisodes.map((ep) => {
+                const still = ep.stillPath
+                  ? `${STILL_BASE}${ep.stillPath}`
+                  : fallbackStill;
+                const inner = (
+                  <>
+                    <div className="nfx-ep-thumb">
+                      {still ? (
+                        <img src={still} alt="" loading="lazy" />
+                      ) : (
+                        <div className="nfx-ep-thumb--ph">{ep.episode}</div>
+                      )}
+                      {ep.available && (
+                        <div className="nfx-ep-thumb-play">
+                          <PlayIcon />
+                        </div>
+                      )}
+                      {!ep.available && (
+                        <div className="nfx-ep-thumb-lock">Unavailable</div>
+                      )}
+                    </div>
 
-          {item.overview && (
-            <p className="detail-overview">{item.overview}</p>
-          )}
+                    <div className="nfx-ep-body">
+                      <div className="nfx-ep-head">
+                        <span className="nfx-ep-num">{ep.episode}</span>
+                        <span className="nfx-ep-title">{ep.displayTitle}</span>
+                        {ep.displayRuntime && (
+                          <span className="nfx-ep-runtime">
+                            {ep.displayRuntime}m
+                          </span>
+                        )}
+                      </div>
+                      {ep.displayOverview && (
+                        <p className="nfx-ep-overview">{ep.displayOverview}</p>
+                      )}
+                    </div>
+                  </>
+                );
 
-          <div className="detail-actions">
-            {hasProgress ? (
-              <>
-                <Link href={`/watch/${item.id}`} className="btn btn-primary">
-                  ▶ Resume{progressPct > 0 ? ` (${progressPct}%)` : ''}
-                </Link>
-                <span className="muted" style={{ fontSize: '0.85rem' }}>
-                  {formatSeconds(item.progress!.positionSeconds)} watched
-                </span>
-              </>
-            ) : (
-              <Link href={`/watch/${item.id}`} className="btn btn-primary">
-                ▶ Play{isShow ? '' : ''}
-              </Link>
-            )}
-          </div>
-        </div>
+                return ep.available ? (
+                  <Link
+                    key={ep.id}
+                    href={`/watch/${item.id}?episode=${ep.id}`}
+                    className="nfx-ep nfx-ep--playable"
+                  >
+                    {inner}
+                  </Link>
+                ) : (
+                  <div key={ep.id} className="nfx-ep nfx-ep--disabled">
+                    {inner}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
-        {/* Cast — horizontal rail */}
+        {/* ── Cast ─────────────────────────────────────────────────────── */}
         {cast.length > 0 && (
-          <section className="cast-section">
-            <h2 className="section-label">Cast</h2>
+          <section className="nfx-section">
+            <h2 className="nfx-section-title">Cast</h2>
             <div className="cast-rail">
               {cast.slice(0, 20).map((c, i) => (
                 <div className="cast-card" key={`${c.name}-${i}`}>
@@ -225,62 +341,7 @@ export default function LibraryDetailPage() {
                     </div>
                   )}
                   <div className="cast-name">{c.name}</div>
-                  {c.character && (
-                    <div className="cast-role">{c.character}</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Episodes — TV only */}
-        {isShow && seasons.length > 0 && (
-          <section className="episodes-section">
-            <h2 className="section-label">Episodes</h2>
-
-            <div className="season-tabs">
-              {seasons.map(([season]) => (
-                <button
-                  key={season}
-                  className={`season-tab${selectedSeason === season ? ' active' : ''}`}
-                  onClick={() => setSelectedSeason(season)}
-                >
-                  Season {season}
-                </button>
-              ))}
-            </div>
-
-            <div className="episodes-list">
-              {activeEpisodes.map((ep) => (
-                <div key={ep.id} className="episode-row">
-                  <span className="episode-num">{ep.episode}</span>
-                  <div className="episode-info">
-                    <div className="episode-head">
-                      <span className="episode-title">
-                        {ep.title ?? `Episode ${ep.episode}`}
-                      </span>
-                      {ep.runtime && (
-                        <span className="episode-duration">{ep.runtime}m</span>
-                      )}
-                    </div>
-                    {ep.overview && (
-                      <p className="episode-overview">{ep.overview}</p>
-                    )}
-                  </div>
-                  {ep.available ? (
-                    <Link
-                      href={`/watch/${item.id}?episode=${ep.id}`}
-                      className="episode-play-btn"
-                      aria-label={`Play episode ${ep.episode}`}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    </Link>
-                  ) : (
-                    <span className="episode-unavailable">Unavailable</span>
-                  )}
+                  {c.character && <div className="cast-role">{c.character}</div>}
                 </div>
               ))}
             </div>
@@ -288,5 +349,13 @@ export default function LibraryDetailPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M8 5v14l11-7z" />
+    </svg>
   );
 }
