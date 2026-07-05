@@ -55,10 +55,12 @@ export default function WatchPage() {
     [id, activeEpisodeId],
   );
 
-  // Movie-level resume (episode progress isn't in this DTO).
+  // Resume position: episode-level for shows, movie-level otherwise. Skip when
+  // the last session already completed the title (start fresh from 0).
+  const resumeProgress = activeEpisodeId ? activeEpisode?.progress : item?.progress;
   const startPosition =
-    !activeEpisodeId && item?.progress && !item.progress.completed
-      ? item.progress.positionSeconds
+    resumeProgress && !resumeProgress.completed
+      ? resumeProgress.positionSeconds
       : 0;
 
   if (error) {

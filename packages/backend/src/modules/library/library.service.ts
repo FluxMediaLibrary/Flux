@@ -234,12 +234,31 @@ export async function getMediaItemDetail(
   };
 
   if (profileId) {
-    const progress = await prisma.watchProgress.findUnique({
+    const episodeIds = item.episodes.map((e) => e.id);
+    // One query covers both the movie-level row and every episode row so shows
+    // can resume the exact episode/position the profile left off at.
+    const progressRows = await prisma.watchProgress.findMany({
       where: {
-        profileId_mediaItemId: { profileId, mediaItemId: id },
+        profileId,
+        OR: [
+          { mediaItemId: id },
+          ...(episodeIds.length ? [{ episodeId: { in: episodeIds } }] : []),
+        ],
       },
     });
-    dto.progress = progress ? mapProgressToDTO(progress) : null;
+
+    const movieProgress = progressRows.find((p) => p.mediaItemId === id) ?? null;
+    dto.progress = movieProgress ? mapProgressToDTO(movieProgress) : null;
+
+    const byEpisode = new Map(
+      progressRows
+        .filter((p) => p.episodeId != null)
+        .map((p) => [p.episodeId!, p] as const),
+    );
+    dto.episodes = dto.episodes!.map((e) => {
+      const p = byEpisode.get(e.id);
+      return { ...e, progress: p ? mapProgressToDTO(p) : null };
+    });
   }
 
   return dto;
