@@ -1,22 +1,20 @@
-import WebTorrent from 'webtorrent';
-import parseTorrent from 'parse-torrent';
+/**
+ * Transmission RPC client — replaces WebTorrent for private tracker support.
+ *
+ * Transmission is a battle-tested BitTorrent client that natively supports
+ * HTTP/UDP trackers, private flags, and DHT/PEX/LPD control. We communicate
+ * with it via its JSON-RPC API at http://localhost:9091/transmission/rpc.
+ */
 import { config } from '../config.js';
 import { torrentDownloadDir, torrentFilePath } from './media-paths.js';
 import { writeFile, mkdir, readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-/** WebRTC STUN servers for NAT traversal. DHT/PEX/LPD disabled for private trackers. */
-const CLIENT_OPTS = {
-  dht: false,
-  lsd: false,
-  tracker: {
-    rtcConfig: {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-      ],
-    },
-  },
-};
+const TRANSMISSION_URL = 'http://localhost:9091/transmission/rpc';
+const TRANSMISSION_USER = process.env.TRANSMISSION_USER ?? 'admin';
+const TRANSMISSION_PASS = process.env.TRANSMISSION_PASS ?? 'flux';
+
+let _sessionId: string | null = null;
 
 /** Stats snapshot returned by {@link getLiveStats}. */
 export interface TorrentLiveStats {
@@ -34,200 +32,169 @@ export interface TorrentLiveStats {
 }
 
 // ---------------------------------------------------------------------------
-// Lazy singleton
+// Transmission RPC helpers
 // ---------------------------------------------------------------------------
 
-let _client: WebTorrent | null = null;
+async function rpc(method: string, args: Record<string, unknown> = {}): Promise<unknown> {
+  const auth = Buffer.from(`${TRANSMISSION_USER}:${TRANSMISSION_PASS}`).toString('base64');
 
-/**
- * Return the shared WebTorrent client, creating it on first call.
- *
- * Any `'error'` events emitted by the client are logged so they never surface
- * as unhandled rejections.
- */
-export function getClient(): WebTorrent {
-  if (!_client) {
-    _client = new WebTorrent(CLIENT_OPTS);
-    _client.on('error', (err: Error | string) => {
-      console.error('[WebTorrent] client error:', err);
-    });
-    // Log peer connections for debugging
-    _client.on('torrent', (t) => {
-      console.log(`[WebTorrent] Torrent added: ${t.name} (${t.infoHash})`);
+  let res = await fetch(TRANSMISSION_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Basic ${auth}`,
+      ...(_sessionId ? { 'X-Transmission-Session-Id': _sessionId } : {}),
+    },
+    body: JSON.stringify({ method, arguments: args }),
+  });
+
+  if (res.status === 409) {
+    _sessionId = res.headers.get('X-Transmission-Session-Id');
+    if (!_sessionId) throw new Error('Transmission: no session ID in 409 response');
+
+    res = await fetch(TRANSMISSION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${auth}`,
+        'X-Transmission-Session-Id': _sessionId,
+      },
+      body: JSON.stringify({ method, arguments: args }),
     });
   }
-  return _client;
+
+  if (!res.ok) {
+    throw new Error(`Transmission RPC error: ${res.status} ${res.statusText}`);
+  }
+
+  const json = (await res.json()) as { result: string; arguments: unknown };
+  if (json.result !== 'success') {
+    throw new Error(`Transmission RPC failed: ${json.result}`);
+  }
+  return json.arguments;
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// Torrent add / status mapping
 // ---------------------------------------------------------------------------
 
-/**
- * Add a torrent to the client by its raw `.torrent` bytes.
- *
- * Does **not** persist the `.torrent` file to disk — callers that need
- * seed-resume persistence should use {@link addTorrent} instead.
- */
-async function _addToClient(
-  buffer: Buffer,
-): Promise<{ infoHash: string; name: string }> {
-  const parsed = await parseTorrent(buffer);
-  const infoHash = parsed.infoHash;
-  const downloadPath = torrentDownloadDir(infoHash);
+interface TrTorrent {
+  id: number;
+  name: string;
+  hashString: string;
+  percentDone: number;
+  rateDownload: number;
+  rateUpload: number;
+  peersConnected: number;
+  totalSize: number;
+  uploadedEver: number;
+  uploadRatio: number;
+  status: number;
+  error: number;
+  errorString: string;
+}
 
-  // Collect announce URLs from the .torrent file
-  const announceList: string[] = [];
-  if (parsed.announce) announceList.push(parsed.announce as unknown as string);
-  if (Array.isArray(parsed.announce as unknown)) {
-    for (const url of (parsed.announce as unknown as string[])) {
-      if (!announceList.includes(url)) announceList.push(url);
-    }
-  }
-
-  console.log(`[WebTorrent] Adding torrent: ${parsed.name ?? infoHash}`);
-  console.log(`[WebTorrent] Trackers: ${announceList.join(', ') || '(none in .torrent)'}`);
-  console.log(`[WebTorrent] Private flag: ${(parsed as any).private ?? 'not set'}`);
-
-  return new Promise<{ infoHash: string; name: string }>((resolve, reject) => {
-    let settled = false;
-
-    const opts: Record<string, unknown> = { path: downloadPath };
-    if (announceList.length > 0) opts.announce = announceList;
-
-    const torrent = getClient().add(
-      buffer,
-      opts,
-      (t) => {
-        if (!settled) {
-          settled = true;
-          console.log(`[WebTorrent] Ready: ${t.name} (${t.infoHash})`);
-          resolve({ infoHash: t.infoHash, name: t.name });
-        }
-      },
-    );
-
-    torrent.on('error', (err: Error | string) => {
-      console.error(`[WebTorrent] Error on ${infoHash}:`, err);
-      if (!settled) {
-        settled = true;
-        reject(err instanceof Error ? err : new Error(String(err)));
-      }
-    });
-    torrent.on('ready', () => {
-      console.log(`[WebTorrent] ${infoHash}: metadata ready`);
-    });
-    torrent.on('download', (bytes: number) => {
-      console.log(`[WebTorrent] ${infoHash}: downloaded ${bytes} bytes (${(torrent.progress * 100).toFixed(1)}%)`);
-    });
-    torrent.on('upload', (bytes: number) => {
-      console.log(`[WebTorrent] ${infoHash}: uploaded ${bytes} bytes`);
-    });
-    torrent.on('noPeers', (announceType: string) => {
-      console.warn(`[WebTorrent] ${infoHash}: no peers from ${announceType} announce`);
-    });
-  });
+function mapStats(t: TrTorrent): TorrentLiveStats {
+  const done = t.percentDone >= 1;
+  return {
+    progress: t.percentDone,
+    downloadSpeed: t.rateDownload,
+    uploadSpeed: t.rateUpload,
+    downloaded: Math.round(t.totalSize * t.percentDone),
+    uploaded: t.uploadedEver,
+    numPeers: t.peersConnected,
+    length: t.totalSize,
+    ratio: t.uploadRatio,
+    timeRemaining: t.rateDownload > 0 ? Math.round((t.totalSize * (1 - t.percentDone)) / t.rateDownload) * 1000 : 0,
+    done,
+    paused: t.status === 0, // TR_STATUS_STOPPED
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
+/** Placeholder — Transmission doesn't have a client singleton. */
+let _initialized = false;
+
+export function getClient(): { initialized: boolean } {
+  _initialized = true;
+  return { initialized: true };
+}
+
 /**
- * Add a torrent and persist its raw `.torrent` bytes so it can be resumed on
- * the next boot via {@link resumeTorrents}.
- *
- * @returns The torrent's `infoHash` and `name` once metadata is ready.
+ * Add a torrent to Transmission by its raw .torrent bytes.
+ * Persists the .torrent file for seed-resume on boot.
  */
 export async function addTorrent(
   buffer: Buffer,
 ): Promise<{ infoHash: string; name: string }> {
-  const parsed = await parseTorrent(buffer);
-  const infoHash = parsed.infoHash;
+  const b64 = buffer.toString('base64');
+  const result = (await rpc('torrent-add', {
+    'download-dir': config.DOWNLOAD_ROOT,
+    metainfo: b64,
+    paused: false,
+  })) as { 'torrent-added'?: { id: number; name: string; hashString: string } };
+
+  const added = result['torrent-added'];
+  if (!added) throw new Error('Transmission: torrent-add returned no torrent');
 
   // Persist .torrent bytes for seed-resume on boot
-  const filePath = torrentFilePath(infoHash);
+  const filePath = torrentFilePath(added.hashString);
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, buffer);
 
-  return _addToClient(buffer);
+  console.log(`[Transmission] Added torrent: ${added.name} (${added.hashString})`);
+  return { infoHash: added.hashString, name: added.name };
 }
 
-/**
- * Return a live snapshot of a torrent's stats, or `null` if no torrent with
- * the given `infoHash` is currently tracked by the client.
- */
-export function getLiveStats(infoHash: string): TorrentLiveStats | null {
-  const torrent = getClient().get(infoHash);
-  if (!torrent || torrent instanceof Promise) return null;
+/** Return live stats for a torrent by its infoHash. */
+export async function getLiveStats(infoHash: string): Promise<TorrentLiveStats | null> {
+  const result = (await rpc('torrent-get', {
+    ids: [infoHash],
+    fields: ['id', 'name', 'hashString', 'percentDone', 'rateDownload', 'rateUpload',
+      'peersConnected', 'totalSize', 'uploadedEver', 'uploadRatio', 'status', 'error', 'errorString'],
+  })) as { torrents: TrTorrent[] };
 
-  return {
-    progress: torrent.progress,
-    downloadSpeed: torrent.downloadSpeed,
-    uploadSpeed: torrent.uploadSpeed,
-    downloaded: torrent.downloaded,
-    uploaded: torrent.uploaded,
-    numPeers: torrent.numPeers,
-    length: torrent.length,
-    ratio: torrent.ratio,
-    timeRemaining: torrent.timeRemaining,
-    done: torrent.done,
-    paused: torrent.paused,
-  };
+  const t = result.torrents?.[0];
+  if (!t) return null;
+  return mapStats(t);
 }
 
-/**
- * Stop seeding a torrent (keep downloaded files on disk).
- *
- * @returns `true` if the torrent was found and destroyed, `false` if no
- *   matching torrent was tracked.
- */
-export function stopSeeding(infoHash: string): Promise<boolean> {
-  const torrent = getClient().get(infoHash);
-  if (!torrent || torrent instanceof Promise) return Promise.resolve(false);
+/** Stop a torrent (pause seeding). */
+export async function stopSeeding(infoHash: string): Promise<boolean> {
+  const result = (await rpc('torrent-get', {
+    ids: [infoHash],
+    fields: ['id'],
+  })) as { torrents: { id: number }[] };
 
-  return new Promise<boolean>((resolve) => {
-    torrent.destroy({ destroyStore: false }, () => {
-      resolve(true);
-    });
-  });
+  if (!result.torrents?.[0]) return false;
+
+  await rpc('torrent-stop', { ids: [infoHash] });
+  return true;
 }
 
-/**
- * Remove a torrent from the client.
- *
- * @param infoHash    The torrent to remove.
- * @param deleteFiles When `true`, downloaded files are deleted from disk.
- * @returns `true` if the torrent was found and removed, `false` if no
- *   matching torrent was tracked.
- */
-export function removeTorrent(
+/** Remove a torrent and optionally delete its files. */
+export async function removeTorrent(
   infoHash: string,
   deleteFiles: boolean,
 ): Promise<boolean> {
-  const torrent = getClient().get(infoHash);
-  if (!torrent || torrent instanceof Promise) return Promise.resolve(false);
+  const result = (await rpc('torrent-get', {
+    ids: [infoHash],
+    fields: ['id'],
+  })) as { torrents: { id: number }[] };
 
-  return new Promise<boolean>((resolve, reject) => {
-    getClient().remove(infoHash, { destroyStore: deleteFiles }, (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(true);
-      }
-    });
+  if (!result.torrents?.[0]) return false;
+
+  await rpc('torrent-remove', {
+    ids: [infoHash],
+    'delete-local-data': deleteFiles,
   });
+  return true;
 }
 
-/**
- * Resume all previously persisted torrents on boot.
- *
- * Reads every `.torrent` file from the `.torrents` directory under
- * `DOWNLOAD_ROOT` and re-adds them to the client. Errors from individual
- * torrents are caught and logged so one bad file does not crash the loop.
- *
- * @returns The number of torrents successfully resumed.
- */
+/** Resume all previously persisted torrents on boot. */
 export async function resumeTorrents(): Promise<number> {
   const torrentsDir = join(config.DOWNLOAD_ROOT, '.torrents');
 
@@ -235,7 +202,6 @@ export async function resumeTorrents(): Promise<number> {
   try {
     entries = await readdir(torrentsDir);
   } catch {
-    // Directory doesn't exist yet — nothing to resume
     return 0;
   }
 
@@ -245,12 +211,42 @@ export async function resumeTorrents(): Promise<number> {
   for (const file of torrentFiles) {
     try {
       const buffer = await readFile(join(torrentsDir, file));
-      await _addToClient(buffer);
+      const b64 = buffer.toString('base64');
+      await rpc('torrent-add', {
+        'download-dir': config.DOWNLOAD_ROOT,
+        metainfo: b64,
+        paused: false,
+      });
       resumed++;
     } catch (err) {
-      console.error(`[WebTorrent] Failed to resume torrent ${file}:`, err);
+      console.error(`[Transmission] Failed to resume torrent ${file}:`, err);
     }
   }
 
   return resumed;
 }
+
+/** Get torrent file list + download path from Transmission for post-processing. */
+export async function getTorrentFiles(
+  infoHash: string,
+): Promise<{ downloadDir: string; files: { name: string; path: string; length: number }[] } | null> {
+  const result = (await rpc('torrent-get', {
+    ids: [infoHash],
+    fields: ['id', 'name', 'hashString', 'downloadDir', 'files', 'percentDone'],
+  })) as { torrents: { downloadDir: string; percentDone: number; files: { name: string; length: number }[] }[] };
+
+  const t = result.torrents?.[0];
+  if (!t || t.percentDone < 1) return null;
+
+  return {
+    downloadDir: t.downloadDir,
+    files: t.files.map((f) => ({
+      name: f.name,
+      path: f.name,
+      length: f.length,
+    })),
+  };
+}
+
+// Mark as initialized so existing code paths that call getClient() don't break
+getClient();

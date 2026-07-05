@@ -31,6 +31,25 @@ services:
       timeout: 5s
       retries: 5
 
+  transmission:
+    image: lscr.io/linuxserver/transmission:latest
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "UTC"
+      TRANSMISSION_WEB_HOME: "/combustion-release/"
+      USER: ${TRANSMISSION_USER:-admin}
+      PASS: ${TRANSMISSION_PASS:-flux}
+      PEERPORT: 51413
+    ports:
+      - "51413:51413"
+      - "51413:51413/udp"
+      - "127.0.0.1:9091:9091"
+    volumes:
+      - downloads:/data/downloads
+      - transmission-config:/config
+
   backend:
     build:
       context: .
@@ -80,6 +99,7 @@ services:
 volumes:
   pgdata:
   redisdata:
+  transmission-config:
   media:
   downloads:
   transcode:
