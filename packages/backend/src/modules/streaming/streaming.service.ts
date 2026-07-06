@@ -136,17 +136,31 @@ export function buildHlsFfmpegArgs(
   sourceFile: string,
   sessionDir: string,
 ): string[] {
-  const videoArgs = probe.videoCodec && COPYABLE_VIDEO.has(probe.videoCodec)
-    ? ['-c:v', 'copy']
-    : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
+  const audioCopyable =
+    probe.audioCodec != null && COPYABLE_AUDIO.has(probe.audioCodec);
+  const videoCopyable =
+    probe.videoCodec != null && COPYABLE_VIDEO.has(probe.videoCodec);
 
-  // When re-encoding audio (AC3/E-AC3/DTS/etc. → AAC), pin it to PTS 0 and
-  // resample to stay locked to the copied video. Without this the copied H.264
-  // keeps its original (often offset) timestamps while the fresh AAC starts at
-  // 0 — they drift apart, MSE can't append, and playback dies a few seconds in.
-  const audioArgs = probe.audioCodec && COPYABLE_AUDIO.has(probe.audioCodec)
+  // CRITICAL: only stream-copy the video when the audio is ALSO copied (a pure
+  // remux). If we copy H.264 but re-encode the audio, the copied video keeps the
+  // source's original (often offset) timestamps while the fresh AAC is realigned
+  // — the two tracks drift apart, the browser's MSE can no longer splice them,
+  // and playback deterministically dies a couple of segments in (~10s). Whenever
+  // we have to touch the audio we re-encode the video too so FFmpeg produces ONE
+  // coherent timeline that MSE can append cleanly.
+  const reencodeVideo = !videoCopyable || !audioCopyable;
+  const videoArgs = reencodeVideo
+    ? [
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
+        // Force a keyframe on every segment boundary so each HLS segment decodes
+        // standalone (matches -hls_time below).
+        '-force_key_frames', 'expr:gte(t,n_forced*4)',
+      ]
+    : ['-c:v', 'copy'];
+
+  const audioArgs = audioCopyable
     ? ['-c:a', 'copy']
-    : ['-c:a', 'aac', '-b:a', '160k', '-ac', '2', '-af', 'aresample=async=1:first_pts=0'];
+    : ['-c:a', 'aac', '-b:a', '160k', '-ac', '2', '-af', 'aresample=async=1'];
 
   return [
     '-fflags', '+genpts', // synthesize sane PTS when the source lacks them
@@ -156,8 +170,8 @@ export function buildHlsFfmpegArgs(
     '-sn', '-dn',
     ...videoArgs,
     ...audioArgs,
-    // Normalize both tracks to start at t=0 so audio (re-encoded) and video
-    // (copied) share a timeline the browser's MSE can splice cleanly.
+    // Normalize both tracks to start at t=0 so audio and video share a timeline
+    // the browser's MSE can splice cleanly.
     '-avoid_negative_ts', 'make_zero',
     '-muxdelay', '0',
     '-muxpreload', '0',

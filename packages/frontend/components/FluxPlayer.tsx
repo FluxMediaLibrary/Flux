@@ -65,6 +65,7 @@ export function FluxPlayer({
   // direct-play error instead of tearing the session down.
   const lastTimeRef = useRef(0);
   const directRecoverRef = useRef(0);
+  const hlsRecoverRef = useRef(0);
 
   const [mode, setMode] = useState<Mode>('direct');
   const [decided, setDecided] = useState(false);
@@ -238,6 +239,7 @@ export function FluxPlayer({
       setWaiting(false);
       setError(null);
       directRecoverRef.current = 0; // healthy playback resets the recovery budget
+      hlsRecoverRef.current = 0;
     };
     const onVol = () => { setVolume(video.volume); setMuted(video.muted); };
     const onErr = () => {
@@ -266,6 +268,14 @@ export function FluxPlayer({
         }
         setMode('hls'); // repeated direct failures → last-resort transcode
       } else if (mode === 'hls') {
+        // A raw <video> error under HLS is usually a transient MSE append/decode
+        // hiccup, not a dead stream. Let hls.js rebuild its buffer and resume in
+        // place before surfacing a hard error — bounded so a truly broken stream
+        // still fails eventually.
+        if (hlsRef.current && hlsRecoverRef.current < 3) {
+          hlsRecoverRef.current += 1;
+          try { hlsRef.current.recoverMediaError(); return; } catch { /* fall through */ }
+        }
         setError('This file could not be played.');
       }
     };
