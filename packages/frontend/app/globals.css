@@ -586,7 +586,9 @@ label {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /* contain (not cover) shows the whole icon without cropping — these are
+     emote/sticker art, so cropping made them look cut-off and low quality. */
+  object-fit: contain;
 }
 /* Nav trigger keeps its tighter radius/size. */
 .avatar-tile.avatar-sm {
@@ -672,10 +674,13 @@ label {
 }
 .avatar-option-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
-  gap: 8px;
-  max-height: 236px;
+  /* min column must be >= the full option width (icon + padding + border) or
+     each option overflows its cell and forces a horizontal scrollbar. */
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 10px;
+  max-height: 300px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 4px;
 }
 .avatar-clear {

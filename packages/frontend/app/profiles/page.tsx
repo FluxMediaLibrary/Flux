@@ -66,7 +66,7 @@ function AvatarPicker({
             onClick={() => onChange(preset.id)}
             title={preset.label}
           >
-            <Avatar name={name || '?'} avatar={preset.id} size={52} />
+            <Avatar name={name || '?'} avatar={preset.id} size={68} />
           </button>
         ))}
       </div>
@@ -193,7 +193,7 @@ function EditProfileModal({
 }
 
 function ProfilePicker() {
-  const { account, profiles, activateProfile, addProfile } = useAuth();
+  const { profiles, activateProfile, addProfile } = useAuth();
   const router = useRouter();
 
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -241,7 +241,7 @@ function ProfilePicker() {
     <main className="profiles-shell">
       <div className="profiles-inner">
         <h1>{managing ? 'Manage profiles' : "Who's watching?"}</h1>
-        <p className="muted">{account?.email}</p>
+        
 
         {error && (
           <div className="form-error" style={{ maxWidth: 360, margin: '18px auto 0' }}>
