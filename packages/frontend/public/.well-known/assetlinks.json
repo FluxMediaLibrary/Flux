@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "xyz.deadstudios.flux",
+      "sha256_cert_fingerprints": [
+        "5F:6A:DD:F1:E7:EB:C0:0E:6B:9E:4A:44:1F:BF:5D:31:D7:46:38:BC:4C:46:65:E3:EF:FB:97:74:41:20:07:D0"
+      ]
+    }
+  }
+]

@@ -43,3 +43,13 @@ coverage/
 
 # Misc
 tes.js
+
+# Android TWA / app signing — NEVER commit these. The keystore + its password
+# sign the APK; losing them means you can't ship updates, and leaking them lets
+# anyone sign an app as you. Back them up somewhere private instead.
+flux-release.keystore
+.twa-keystore-password.txt
+*.keystore
+*.apk
+*.aab
+twa/
