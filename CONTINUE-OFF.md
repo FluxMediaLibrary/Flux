@@ -151,6 +151,25 @@ the BullMQ `torrent-postprocess` job. Uses a `Set<string>` to prevent duplicate 
 
 ---
 
+## Roku channel (`roku-channel/`)
+
+SceneGraph client for the backend, **rebuilt from scratch 2026-07-05** (first cut
+at commit 967d72a was scrapped: it blocked the render thread and mishandled auth).
+
+- **Core rule:** all HTTP on a background **Task node** (`components/api/ApiTask`).
+  Screens call `ApiRequest(req,"onResult")` (`source/api/Api.brs`) and observe
+  `result`. Never block the UI thread.
+- **Auth:** `/auth/login` → `{token,account,profiles}`; `/profiles/:id/activate`
+  → new token that **replaces** the stored one (carries `activeProfileId`). JWT in
+  registry "FluxAuth"; relaunch skips login when a profile is already active.
+- **Backend URL:** hardcoded in `source/api/Config.brs` → `FluxBaseUrl()`.
+- **Validate/build:** `npm run validate` (brighterscript, must be exit 0) →
+  `npm run package` → `flux-roku-channel.zip`. Gotchas: no `<scripts>` XML wrapper;
+  `to`/`pos` are reserved words.
+- **Status:** compiles clean, contract verified vs backend routes. ⚠️ NOT yet
+  sideloaded/tested on a real Roku. Next: sideload and debug on-device (login,
+  profile activation, HLS playback). See `roku-channel/README.md`.
+
 ## Deployment (VPS)
 
 **Domain:** flux.personal.deadstudios.xyz  
