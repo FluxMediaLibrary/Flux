@@ -140,17 +140,28 @@ export function buildHlsFfmpegArgs(
     ? ['-c:v', 'copy']
     : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
 
+  // When re-encoding audio (AC3/E-AC3/DTS/etc. → AAC), pin it to PTS 0 and
+  // resample to stay locked to the copied video. Without this the copied H.264
+  // keeps its original (often offset) timestamps while the fresh AAC starts at
+  // 0 — they drift apart, MSE can't append, and playback dies a few seconds in.
   const audioArgs = probe.audioCodec && COPYABLE_AUDIO.has(probe.audioCodec)
     ? ['-c:a', 'copy']
-    : ['-c:a', 'aac', '-b:a', '160k', '-ac', '2'];
+    : ['-c:a', 'aac', '-b:a', '160k', '-ac', '2', '-af', 'aresample=async=1:first_pts=0'];
 
   return [
+    '-fflags', '+genpts', // synthesize sane PTS when the source lacks them
     '-i', sourceFile,
     '-map', '0:v:0',
     '-map', '0:a:0?',
     '-sn', '-dn',
     ...videoArgs,
     ...audioArgs,
+    // Normalize both tracks to start at t=0 so audio (re-encoded) and video
+    // (copied) share a timeline the browser's MSE can splice cleanly.
+    '-avoid_negative_ts', 'make_zero',
+    '-muxdelay', '0',
+    '-muxpreload', '0',
+    '-max_muxing_queue_size', '1024',
     '-f', 'hls',
     '-hls_time', '4',
     '-hls_list_size', '0',
