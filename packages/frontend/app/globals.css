@@ -2839,8 +2839,26 @@ html { scroll-behavior: smooth; }
 .state-center { text-align: center; color: var(--text-muted); padding: 70px 20px; }
 
 @media (max-width: 900px) {
+  .navbar { gap: 14px; padding: 12px 18px; }
   .navbar__tabs { justify-content: flex-start; margin: 0; }
   .lib2 { padding: 20px 34px 80px 18px; }
+}
+@media (max-width: 700px) {
+  /* Phone navbar: tighten spacing and shed the redundant controls so the row
+     doesn't squish. Users lives in the avatar menu; Cast/Admin aren't needed
+     here (Admin is in the hamburger menu); Request collapses to its icon. */
+  .navbar { gap: 8px; padding: 10px 12px; }
+  .navbar__left { gap: 8px; }
+  .navbar__brand { font-size: 0.98rem; }
+  .navbar__request { margin-left: 0; padding: 8px; }
+  .navbar__request-label { display: none; }
+  .navbar__request svg { width: 19px; height: 19px; }
+  .navbar__tabs { flex: 1; min-width: 0; }
+  .navbar__tab { padding: 8px 11px; font-size: 0.9rem; }
+  .navbar__right { gap: 0; }
+  .nav-ic { width: 38px; height: 38px; }
+  .nav-ic--opt { display: none; }
+  .nav-menu { top: 56px; }
 }
 @media (max-width: 620px) {
   .alpha { display: none; }

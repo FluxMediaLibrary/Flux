@@ -65,7 +65,7 @@ export function Navbar() {
             Library
           </div>
           <button className="navbar__request" onClick={() => router.push('/browse')}>
-            <IconPlus /> Request
+            <IconPlus /> <span className="navbar__request-label">Request</span>
           </button>
         </div>
 
@@ -82,15 +82,15 @@ export function Navbar() {
         </nav>
 
         <div className="navbar__right">
-          <button className="nav-ic" aria-label="Users" onClick={() => router.push('/profiles')}>
+          <button className="nav-ic nav-ic--opt" aria-label="Users" onClick={() => router.push('/profiles')}>
             <IconUsers />
           </button>
-          <button className="nav-ic" aria-label="Cast">
+          <button className="nav-ic nav-ic--opt" aria-label="Cast">
             <IconCast />
           </button>
           {isAdmin && (
             <button
-              className="nav-ic"
+              className="nav-ic nav-ic--opt"
               aria-label="Admin"
               onClick={() => router.push('/admin/torrents')}
               title="Admin"
