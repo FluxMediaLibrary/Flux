@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="DetailScreen" extends="Group">
+    <interface>
+        <field id="api" type="assocarray" />
+        <field id="mediaItemId" type="string" />
+        <field id="close" type="boolean" alwaysNotify="true" />
+        <field id="navigate" type="assocarray" alwaysNotify="true" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/DetailScreen.brs" />
+    <children>
+        <Rectangle
+            id="bg"
+            color="#0a0a0a"
+            width="1920"
+            height="1080" />
+
+        <Poster
+            id="backdrop"
+            width="1920"
+            height="400"
+            translation="[0, 0]" />
+
+        <Rectangle
+            id="overlay"
+            color="#0a0a0aC0"
+            width="1920"
+            height="400"
+            translation="[0, 0]" />
+
+        <Label
+            id="title"
+            text=""
+            font="font:LargeBoldSystemFont"
+            color="#ffffff"
+            width="1800"
+            translation="[60, 280]" />
+
+        <Label
+            id="meta"
+            text=""
+            font="font:SmallSystemFont"
+            color="#aaaaaa"
+            width="1800"
+            translation="[60, 360]" />
+
+        <Label
+            id="overview"
+            text=""
+            font="font:SmallSystemFont"
+            color="#cccccc"
+            width="1200"
+            translation="[60, 440]"
+            maxLines="4"
+            wrap="true"
+            lineSpacing="6" />
+
+        <Button
+            id="playBtn"
+            text="Play"
+            translation="[60, 600]" />
+
+        <Label
+            id="info"
+            text=""
+            font="font:SmallestSystemFont"
+            color="#888888"
+            width="1200"
+            translation="[60, 680]"
+            maxLines="3"
+            wrap="true" />
+
+        <Label
+            id="episodesHeading"
+            text="Episodes"
+            font="font:MediumBoldSystemFont"
+            color="#cccccc"
+            translation="[1340, 100]"
+            visible="false" />
+
+        <LabelList
+            id="episodeList"
+            translation="[1340, 150]"
+            itemSize="[520, 60]"
+            visible="false" />
+
+        <BusySpinner
+            id="spinner"
+            translation="[940, 500]" />
+
+        <Label
+            id="errorText"
+            text=""
+            font="font:MediumSystemFont"
+            color="#cc4444"
+            width="1200"
+            horizAlign="center"
+            translation="[360, 500]"
+            visible="false" />
+    </children>
+</component>

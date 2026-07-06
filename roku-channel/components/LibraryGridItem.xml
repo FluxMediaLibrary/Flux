@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="LibraryGridItem" extends="Group">
+    <children>
+        <Poster
+            id="poster"
+            width="320" height="450"
+            translation="[10, 10]"
+            loadDisplayMode="scaleToFit" />
+        <Label
+            id="itemTitle"
+            font="font:SmallestSystemFont"
+            color="#cccccc"
+            width="320"
+            translation="[10, 470]"
+            horizAlign="center"
+            ellipsizeOnBoundary="true"
+            maxLines="1" />
+        <Label
+            id="itemBadge"
+            font="font:SmallestSystemFont"
+            color="#00cc66"
+            width="320"
+            translation="[10, 490]"
+            horizAlign="center"
+            ellipsizeOnBoundary="true"
+            maxLines="1" />
+    </children>
+</component>
