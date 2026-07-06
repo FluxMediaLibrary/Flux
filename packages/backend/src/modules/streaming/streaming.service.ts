@@ -158,7 +158,12 @@ export function buildHlsFfmpegArgs(
     // manifest reads as a live stream and players jump to the live edge
     // (→ "starts on a random part of the show").
     '-hls_playlist_type', 'event',
-    '-hls_flags', 'independent_segments',
+    // independent_segments: each segment decodes standalone.
+    // temp_file: FFmpeg writes the playlist AND each segment to a .tmp name and
+    // atomically renames on completion. Critical because we serve this session
+    // live — without it, a manifest/segment reload can read a half-written file
+    // and hls.js fatals with "This file could not be played".
+    '-hls_flags', 'independent_segments+temp_file',
     '-hls_segment_type', 'mpegts',
     '-start_number', '0',
     '-hls_segment_filename', path.join(sessionDir, 'segment_%05d.ts'),

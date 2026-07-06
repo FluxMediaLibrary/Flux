@@ -144,13 +144,24 @@ export function FluxPlayer({
         hls.loadSource(url);
         hls.attachMedia(video!);
 
-        // Self-heal: transient network errors (a segment the transcoder hasn't
-        // flushed yet) → resume loading; media/buffer errors → recover; only
-        // give up on a hard failure or a genuine 404.
+        // Self-heal. The transcode is produced live, so a fragment hls.js wants
+        // may be a beat behind the encoder — back off and resume rather than
+        // giving up. Budgets reset on every successfully buffered fragment, so
+        // we only surface an error after sustained failure with no progress.
+        let netRetry = 0;
         let recover = 0;
+        hls.on(Hls.Events.FRAG_BUFFERED, () => {
+          netRetry = 0;
+          recover = 0;
+        });
         hls.on(Hls.Events.ERROR, (_e: string, data: any) => {
+          // Diagnostic: if playback still drops, this pinpoints the cause.
+          console.warn(
+            `[HLS] ${data.fatal ? 'FATAL' : 'warn'} type=${data.type} details=${data.details} code=${data?.response?.code ?? ''}`,
+          );
           if (!data.fatal) return;
           const code = data?.response?.code;
+          // Only the manifest itself 404ing means there's genuinely no stream.
           if (code === 404 && String(data.details ?? '').startsWith('manifest')) {
             setError('This title has no playable file yet — it may still be downloading or processing.');
             hls.destroy();
@@ -158,10 +169,17 @@ export function FluxPlayer({
           }
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
+              // Segment not flushed yet or a blip — wait a beat and resume.
+              if (netRetry < 30) {
+                netRetry += 1;
+                setTimeout(() => { try { hls.startLoad(); } catch { /* destroyed */ } }, 1000);
+              } else {
+                setError('Playback keeps stalling. Retry in a moment.');
+                hls.destroy();
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              if (recover < 4) { recover += 1; hls.recoverMediaError(); }
+              if (recover < 6) { recover += 1; hls.recoverMediaError(); }
               else { setError('Playback keeps stalling. Retry in a moment.'); hls.destroy(); }
               break;
             default:
@@ -224,6 +242,9 @@ export function FluxPlayer({
     const onVol = () => { setVolume(video.volume); setMuted(video.muted); };
     const onErr = () => {
       const code = video.error?.code;
+      console.warn(
+        `[Player] video error mode=${mode} code=${code ?? ''} msg=${video.error?.message ?? ''}`,
+      );
       if (mode === 'direct') {
         const wasPlaying = lastTimeRef.current > 0;
         // Genuinely undecodable codec that never started → go straight to the
