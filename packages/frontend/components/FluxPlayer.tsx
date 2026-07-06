@@ -22,6 +22,15 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { api } from '@/lib/api';
+import {
+  useCast,
+  requestSession,
+  endSession,
+  loadMedia,
+  play as castPlay,
+  pause as castPause,
+  seek as castSeek,
+} from '@/lib/cast';
 
 interface FluxPlayerProps {
   mediaItemId: string;
@@ -81,6 +90,80 @@ export function FluxPlayer({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [scrubbing, setScrubbing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ── Casting (Chromecast) ────────────────────────────────────────────────
+  const cast = useCast();
+  const wasConnected = useRef(false);
+
+  /** Build the cast payload for the currently-selected source + position. */
+  const buildCastMedia = useCallback(() => {
+    const useHls = mode === 'hls';
+    return {
+      url: useHls
+        ? api.getHlsUrl(mediaItemId, episodeId)
+        : api.getStreamUrl(mediaItemId, episodeId),
+      contentType: useHls ? 'application/x-mpegURL' : 'video/mp4',
+      title,
+      subtitle,
+      currentTime: lastTimeRef.current || startedAt.current || 0,
+    };
+  }, [mode, mediaItemId, episodeId, title, subtitle]);
+
+  // On (re)connect, hand the current title off to the TV and pause locally so
+  // audio doesn't play from both. On disconnect, keep the local player paused.
+  useEffect(() => {
+    if (cast.connected && !wasConnected.current) {
+      wasConnected.current = true;
+      videoRef.current?.pause();
+      loadMedia(buildCastMedia()).catch(() => {});
+    } else if (!cast.connected && wasConnected.current) {
+      wasConnected.current = false;
+    }
+  }, [cast.connected, buildCastMedia]);
+
+  // ── Remote Playback API (the reliable path inside the Android TWA) ────────
+  // Chrome-on-Android proxies the <video> element to the chosen device, so the
+  // normal local controls just work once connected — we only add a trigger +
+  // availability/connection tracking. Only works for direct play (an MSE/HLS
+  // source can't be remoted), which is why it complements the Cast SDK.
+  const [remoteAvailable, setRemoteAvailable] = useState(false);
+  const [remoteConnected, setRemoteConnected] = useState(false);
+  useEffect(() => {
+    const v = videoRef.current as (HTMLVideoElement & { remote?: any }) | null;
+    const rp = v?.remote;
+    if (!v || !rp) return;
+    v.disableRemotePlayback = false;
+    let watchId: number | undefined;
+    rp.watchAvailability?.((available: boolean) => setRemoteAvailable(available))
+      .then((id: number) => { watchId = id; })
+      .catch(() => { /* unsupported for this source */ });
+    const onConnect = () => setRemoteConnected(true);
+    const onDisconnect = () => setRemoteConnected(false);
+    rp.addEventListener('connect', onConnect);
+    rp.addEventListener('disconnect', onDisconnect);
+    return () => {
+      if (watchId !== undefined) rp.cancelWatchAvailability?.(watchId).catch(() => {});
+      rp.removeEventListener('connect', onConnect);
+      rp.removeEventListener('disconnect', onDisconnect);
+    };
+  }, [decided, mode]);
+
+  const promptRemote = useCallback(() => {
+    const rp = (videoRef.current as (HTMLVideoElement & { remote?: any }) | null)?.remote;
+    rp?.prompt?.().catch(() => { /* dismissed */ });
+  }, []);
+
+  // Unified cast affordance: prefer the Cast SDK, fall back to Remote Playback.
+  const castButtonVisible = cast.available || remoteAvailable;
+  const castButtonActive = cast.connected || remoteConnected;
+  const onCastClick = useCallback(() => {
+    if (cast.available) {
+      if (cast.connected) endSession();
+      else requestSession();
+    } else {
+      promptRemote();
+    }
+  }, [cast.available, cast.connected, promptRemote]);
 
   // ── Ask the server how to play this file (Plex-style decision) ──────────
   useEffect(() => {
@@ -348,25 +431,42 @@ export function FluxPlayer({
 
   // ── Controls ────────────────────────────────────────────────────────────
   const togglePlay = useCallback(() => {
+    // When casting, the on-screen controls drive the TV instead of local video.
+    if (cast.connected) {
+      if (cast.isPlaying) castPause();
+      else castPlay();
+      revealControls();
+      return;
+    }
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) v.play().catch(() => {});
     else v.pause();
     revealControls();
-  }, [revealControls]);
+  }, [cast.connected, cast.isPlaying, revealControls]);
 
   const seekBy = useCallback((delta: number) => {
+    if (cast.connected) {
+      castSeek(Math.min(Math.max(0, cast.currentTime + delta), cast.duration || 0));
+      revealControls();
+      return;
+    }
     const v = videoRef.current;
     if (!v) return;
     v.currentTime = Math.min(Math.max(0, v.currentTime + delta), v.duration || 0);
     revealControls();
-  }, [revealControls]);
+  }, [cast.connected, cast.currentTime, cast.duration, revealControls]);
 
   const seekTo = useCallback((frac: number) => {
+    const clamped = Math.min(Math.max(0, frac), 1);
+    if (cast.connected) {
+      if (cast.duration) castSeek(clamped * cast.duration);
+      return;
+    }
     const v = videoRef.current;
     if (!v || !v.duration) return;
-    v.currentTime = Math.min(Math.max(0, frac), 1) * v.duration;
-  }, []);
+    v.currentTime = clamped * v.duration;
+  }, [cast.connected, cast.duration]);
 
   const toggleMute = useCallback(() => {
     const v = videoRef.current;
@@ -434,8 +534,16 @@ export function FluxPlayer({
     return () => window.removeEventListener('keydown', onKey);
   }, [togglePlay, seekBy, setVol, toggleFullscreen, toggleMute, revealControls]);
 
-  const playedPct = duration ? (current / duration) * 100 : 0;
-  const bufferedPct = duration ? (buffered / duration) * 100 : 0;
+  // When casting, mirror the receiver's clock + play state in the UI.
+  const dispCurrent = cast.connected ? cast.currentTime : current;
+  const dispDuration = cast.connected ? cast.duration : duration;
+  const dispPlaying = cast.connected ? cast.isPlaying : playing;
+  const playedPct = dispDuration ? (dispCurrent / dispDuration) * 100 : 0;
+  const bufferedPct = cast.connected
+    ? playedPct
+    : duration
+      ? (buffered / duration) * 100
+      : 0;
 
   return (
     <div
@@ -466,13 +574,25 @@ export function FluxPlayer({
         </div>
       </div>
 
-      {/* Buffering spinner */}
-      {waiting && !error && <div className="vp-spinner" />}
+      {/* Buffering spinner (local playback only) */}
+      {waiting && !error && !cast.connected && <div className="vp-spinner" />}
 
-      {/* Center play/pause */}
-      {!error && (
-        <button className="vp-center" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
-          {playing ? <PauseIcon big /> : <PlayIcon big />}
+      {/* Casting overlay — the video plays on the TV, not in the browser */}
+      {cast.connected && !error && (
+        <div className="vp-casting">
+          <CastGlyph />
+          <p className="vp-casting-title">Playing on {cast.deviceName ?? 'your TV'}</p>
+          <p className="vp-casting-sub">{title}</p>
+          <button className="btn btn-ghost" onClick={() => endSession()}>
+            Stop casting
+          </button>
+        </div>
+      )}
+
+      {/* Center play/pause (hidden while casting; overlay owns the screen) */}
+      {!error && !cast.connected && (
+        <button className="vp-center" onClick={togglePlay} aria-label={dispPlaying ? 'Pause' : 'Play'}>
+          {dispPlaying ? <PauseIcon big /> : <PlayIcon big />}
         </button>
       )}
 
@@ -508,8 +628,8 @@ export function FluxPlayer({
         </div>
 
         <div className="vp-row">
-          <button className="vp-icon" onClick={togglePlay} aria-label={playing ? 'Pause' : 'Play'}>
-            {playing ? <PauseIcon /> : <PlayIcon />}
+          <button className="vp-icon" onClick={togglePlay} aria-label={dispPlaying ? 'Pause' : 'Play'}>
+            {dispPlaying ? <PauseIcon /> : <PlayIcon />}
           </button>
           <button className="vp-icon" onClick={() => seekBy(-10)} aria-label="Back 10 seconds">
             <Back10 />
@@ -533,11 +653,21 @@ export function FluxPlayer({
           </div>
 
           <div className="vp-time">
-            {fmt(current)} <span className="vp-time-sep">/</span> {fmt(duration)}
+            {fmt(dispCurrent)} <span className="vp-time-sep">/</span> {fmt(dispDuration)}
           </div>
 
           <div className="vp-spacer" />
 
+          {castButtonVisible && (
+            <button
+              className={`vp-icon${castButtonActive ? ' active' : ''}`}
+              onClick={onCastClick}
+              aria-label={castButtonActive ? 'Stop casting' : 'Cast to TV'}
+              title={castButtonActive ? `Casting to ${cast.deviceName ?? 'TV'}` : 'Cast to TV'}
+            >
+              <CastIcon connected={castButtonActive} />
+            </button>
+          )}
           <button className="vp-rate" onClick={cycleRate} aria-label="Playback speed">
             {rate}×
           </button>
@@ -552,6 +682,23 @@ export function FluxPlayer({
 
 /* ── Icons ─────────────────────────────────────────────────────────────── */
 const s = (big?: boolean) => ({ width: big ? 34 : 20, height: big ? 34 : 20 });
+const CastIcon = ({ connected }: { connected: boolean }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={s()}>
+    <path d="M2 16.1A5 5 0 0 1 5.9 20" />
+    <path d="M2 12.05A9 9 0 0 1 9.95 20" />
+    <path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" />
+    <path d="M2 20h.01" />
+    {connected && <rect x="4" y="6" width="16" height="9" rx="1" fill="currentColor" stroke="none" opacity="0.55" />}
+  </svg>
+);
+const CastGlyph = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ width: 46, height: 46 }}>
+    <path d="M2 16.1A5 5 0 0 1 5.9 20" />
+    <path d="M2 12.05A9 9 0 0 1 9.95 20" />
+    <path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" />
+    <path d="M2 20h.01" />
+  </svg>
+);
 const PlayIcon = ({ big }: { big?: boolean }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" style={s(big)}><path d="M8 5v14l11-7z" /></svg>
 );

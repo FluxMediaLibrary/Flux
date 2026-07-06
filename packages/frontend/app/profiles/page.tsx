@@ -2,13 +2,22 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
-import { AVATAR_PRESETS, type ProfileDTO } from '@flux/shared';
+import {
+  AVATAR_PRESETS,
+  AVATAR_CATEGORY_ORDER,
+  type AvatarCategory,
+  type ProfileDTO,
+} from '@flux/shared';
 import { useAuth } from '@/lib/auth-context';
 import { FluxApiError } from '@/lib/api';
 import { RequireAuth } from '@/components/Guards';
 import { Avatar } from '@/components/Avatar';
 
-/** Grid of selectable premade avatars. `value` is a preset id or null (initials). */
+/**
+ * Selectable premade avatars, organised into category tabs. `value` is a preset
+ * id or null (initials fallback). One tab is shown at a time so the 80+ icons
+ * stay browsable instead of an endless scroll.
+ */
 function AvatarPicker({
   name,
   value,
@@ -18,31 +27,57 @@ function AvatarPicker({
   value: string | null;
   onChange: (id: string | null) => void;
 }) {
+  // Open on the tab that holds the current selection (else the first tab).
+  const initialTab: AvatarCategory =
+    AVATAR_PRESETS.find((p) => p.id === value)?.category ?? AVATAR_CATEGORY_ORDER[0];
+  const [tab, setTab] = useState<AvatarCategory>(initialTab);
+
+  const presets = AVATAR_PRESETS.filter((p) => p.category === tab);
+
   return (
-    <div className="avatar-picker" role="radiogroup" aria-label="Choose an avatar">
+    <div className="avatar-picker">
+      <div className="avatar-tabs" role="tablist" aria-label="Avatar categories">
+        {AVATAR_CATEGORY_ORDER.map((cat: AvatarCategory) => (
+          <button
+            key={cat}
+            type="button"
+            role="tab"
+            aria-selected={tab === cat}
+            className={`avatar-tab${tab === cat ? ' active' : ''}`}
+            onClick={() => setTab(cat)}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      <div
+        className="avatar-option-grid"
+        role="radiogroup"
+        aria-label={`${tab} avatars`}
+      >
+        {presets.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            role="radio"
+            aria-checked={value === preset.id}
+            className={`avatar-option${value === preset.id ? ' selected' : ''}`}
+            onClick={() => onChange(preset.id)}
+            title={preset.label}
+          >
+            <Avatar name={name || '?'} avatar={preset.id} size={52} />
+          </button>
+        ))}
+      </div>
+
       <button
         type="button"
-        role="radio"
-        aria-checked={value === null}
-        className={`avatar-option${value === null ? ' selected' : ''}`}
+        className={`avatar-clear${value === null ? ' active' : ''}`}
         onClick={() => onChange(null)}
-        title="Use initials"
       >
-        <Avatar name={name || '?'} avatar={null} size={56} />
+        Use my initial instead
       </button>
-      {AVATAR_PRESETS.map((preset) => (
-        <button
-          key={preset.id}
-          type="button"
-          role="radio"
-          aria-checked={value === preset.id}
-          className={`avatar-option${value === preset.id ? ' selected' : ''}`}
-          onClick={() => onChange(preset.id)}
-          title={preset.label}
-        >
-          <Avatar name={name || '?'} avatar={preset.id} size={56} />
-        </button>
-      ))}
     </div>
   );
 }

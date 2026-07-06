@@ -578,14 +578,15 @@ label {
   flex-shrink: 0;
   overflow: hidden;
 }
-/* When showing an SVG icon it fills the tile — drop the accent fill. */
+/* When showing an image it fills the tile — drop the accent fill. */
 .avatar-tile.has-icon {
-  background: none;
+  background: #0d1117;
 }
-.avatar-tile svg {
+.avatar-tile img {
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: cover;
 }
 /* Nav trigger keeps its tighter radius/size. */
 .avatar-tile.avatar-sm {
@@ -638,8 +639,58 @@ label {
 
 .avatar-picker {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  padding: 12px;
+}
+.avatar-tabs {
+  display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 6px;
+}
+.avatar-tab {
+  border: 1px solid transparent;
+  background: var(--bg-elev-2, rgba(255, 255, 255, 0.04));
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.avatar-tab:hover {
+  color: var(--text);
+}
+.avatar-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+.avatar-option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 8px;
+  max-height: 236px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.avatar-clear {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 2px 0;
+  text-decoration: underline;
+}
+.avatar-clear:hover,
+.avatar-clear.active {
+  color: var(--text);
 }
 .avatar-option {
   padding: 3px;
@@ -648,10 +699,14 @@ label {
   background: transparent;
   cursor: pointer;
   line-height: 0;
-  transition: border-color 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    transform 0.1s ease;
+  justify-self: center;
 }
 .avatar-option:hover {
   border-color: var(--surface-border);
+  transform: translateY(-2px);
 }
 .avatar-option.selected {
   border-color: var(--accent);
@@ -2578,6 +2633,34 @@ table.data tr:last-child td {
 }
 .vp-icon:hover { background: rgba(255, 255, 255, 0.14); }
 .vp-icon:active { transform: scale(0.92); }
+.vp-icon.active { color: var(--accent); }
+
+/* Casting overlay — shown while the video plays on a TV instead of the browser */
+.vp-casting {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 40%, rgba(30, 40, 60, 0.6), rgba(0, 0, 0, 0.9));
+  color: #fff;
+  z-index: 3;
+}
+.vp-casting > svg { color: var(--accent); }
+.vp-casting-title {
+  margin: 4px 0 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.vp-casting-sub {
+  margin: 0 0 8px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.95rem;
+}
 .vp-vol { display: flex; align-items: center; }
 .vp-vol-slider {
   width: 0;

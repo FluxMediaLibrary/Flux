@@ -82,32 +82,122 @@ export interface UpdateProfileRequest {
 }
 
 // ─── Premade avatars ──────────────────────────────────────────────────────────
-// A curated catalogue of selectable avatars. `avatar` on a Profile stores the
-// preset `id`; the backend validates it against this list (or accepts null for
-// an initials fallback). The actual artwork is a set of hand-drawn SVG icons
-// that live in the frontend (components/avatar-icons.tsx) keyed by these ids —
-// this module is the single source of truth for which ids are valid, so the
-// backend and frontend can never drift.
+// A curated catalogue of selectable avatar images. `avatar` on a Profile stores
+// the preset `id`; the backend validates it against AVATAR_PRESET_IDS (or accepts
+// null for an initials fallback). The image files live in the frontend under
+// public/avatars/ and are rendered as `/avatars/${file}`. The catalogue itself is
+// AUTO-GENERATED into ./avatars.ts (see scripts) so the source images, the
+// backend allow-list, and the picker can never drift apart.
+
+export type AvatarCategory = 'Emotes' | 'Characters' | 'Zodiac' | 'Fallout' | 'Icons';
 
 export interface AvatarPreset {
   id: string;
-  /** Human label for accessibility / tooltips. */
+  /** Basename of the image file under public/avatars/. */
+  file: string;
+  /** Human label for tooltips / accessibility. */
   label: string;
+  /** Section the avatar is grouped under in the picker. */
+  category: AvatarCategory;
 }
 
+export const AVATAR_CATEGORY_ORDER: readonly AvatarCategory[] = [
+  'Emotes',
+  'Characters',
+  'Zodiac',
+  'Fallout',
+  'Icons',
+];
+
+// AUTO-GENERATED from the source images in packages/frontend/public/avatars/.
 export const AVATAR_PRESETS: readonly AvatarPreset[] = [
-  { id: 'robot', label: 'Robot' },
-  { id: 'astronaut', label: 'Astronaut' },
-  { id: 'cat', label: 'Cat' },
-  { id: 'fox', label: 'Fox' },
-  { id: 'ghost', label: 'Ghost' },
-  { id: 'alien', label: 'Alien' },
-  { id: 'ninja', label: 'Ninja' },
-  { id: 'panda', label: 'Panda' },
-  { id: 'bear', label: 'Bear' },
-  { id: 'owl', label: 'Owl' },
-  { id: 'frog', label: 'Frog' },
-  { id: 'penguin', label: 'Penguin' },
+  { id: '60413-argue', file: '60413-argue.png', label: 'Argue', category: 'Emotes' },
+  { id: '8871-chapa', file: '8871-chapa.png', label: 'Badge', category: 'Emotes' },
+  { id: '96763-beg', file: '96763-beg.png', label: 'Beg', category: 'Emotes' },
+  { id: '91810-blank', file: '91810-blank.png', label: 'Blank', category: 'Emotes' },
+  { id: '7285-fachero', file: '7285-fachero.png', label: 'Cool Guy', category: 'Emotes' },
+  { id: '5703-cuchillo', file: '5703-cuchillo.png', label: 'Cuchillo', category: 'Emotes' },
+  { id: '9368-enojo', file: '9368-enojo.png', label: 'Enojo', category: 'Emotes' },
+  { id: '9137-gasp', file: '9137-gasp.png', label: 'Gasp', category: 'Emotes' },
+  { id: '46615-goofy', file: '46615-goofy.png', label: 'Goofy', category: 'Emotes' },
+  { id: '2408_gross_boy', file: '2408_gross_boy.png', label: 'Gross Boy', category: 'Emotes' },
+  { id: '72568-hesitant', file: '72568-hesitant.png', label: 'Hesitant', category: 'Emotes' },
+  { id: '2902-hola', file: '2902-hola.png', label: 'Hola', category: 'Emotes' },
+  { id: '79627-innocent', file: '79627-innocent.png', label: 'Innocent', category: 'Emotes' },
+  { id: '87893-laugh', file: '87893-laugh.png', label: 'Laugh', category: 'Emotes' },
+  { id: '1612-mareo', file: '1612-mareo.png', label: 'Mareo', category: 'Emotes' },
+  { id: '3718-muerto', file: '3718-muerto.png', label: 'Muerto', category: 'Emotes' },
+  { id: '5558-misterio', file: '5558-misterio.png', label: 'Mystery', category: 'Emotes' },
+  { id: '80808-nervous', file: '80808-nervous.png', label: 'Nervous', category: 'Emotes' },
+  { id: '36063-okay', file: '36063-okay.png', label: 'Okay', category: 'Emotes' },
+  { id: '7868-owo', file: '7868-owo.png', label: 'OwO', category: 'Emotes' },
+  { id: '6844-fiesta', file: '6844-fiesta.png', label: 'Party', category: 'Emotes' },
+  { id: '84145-plead', file: '84145-plead.png', label: 'Plead', category: 'Emotes' },
+  { id: '5623-postolero', file: '5623-postolero.png', label: 'Postolero', category: 'Emotes' },
+  { id: '79732-quantum-queers-logo', file: '79732-quantum-queers-logo.png', label: 'Pride Logo', category: 'Emotes' },
+  { id: '58272-regret', file: '58272-regret.png', label: 'Regret', category: 'Emotes' },
+  { id: '4299-sabiondo', file: '4299-sabiondo.png', label: 'Sabiondo', category: 'Emotes' },
+  { id: '9644-sad', file: '9644-sad.png', label: 'Sad', category: 'Emotes' },
+  { id: '4299-santoperonotanto', file: '4299-santoperonotanto.png', label: 'Saint-ish', category: 'Emotes' },
+  { id: '73697-scared', file: '73697-scared.png', label: 'Scared', category: 'Emotes' },
+  { id: '38741-shades', file: '38741-shades.png', label: 'Shades', category: 'Emotes' },
+  { id: '40335-shrug', file: '40335-shrug.png', label: 'Shrug', category: 'Emotes' },
+  { id: '7938-shy', file: '7938-shy.png', label: 'Shy', category: 'Emotes' },
+  { id: '1545-1000031285', file: '1545-1000031285.png', label: 'Sticker', category: 'Emotes' },
+  { id: '34928-suspicious', file: '34928-suspicious.png', label: 'Suspicious', category: 'Emotes' },
+  { id: '72467-tears', file: '72467-tears.png', label: 'Tears', category: 'Emotes' },
+  { id: '1826-tecreo', file: '1826-tecreo.png', label: 'Tecreo', category: 'Emotes' },
+  { id: '69470-think', file: '69470-think.png', label: 'Think', category: 'Emotes' },
+  { id: '92984-thumbsup', file: '92984-thumbsup.png', label: 'Thumbs Up', category: 'Emotes' },
+  { id: 'tribal', file: 'tribal.png', label: 'Tribal', category: 'Emotes' },
+  { id: '4912-triste', file: '4912-triste.png', label: 'Triste', category: 'Emotes' },
+  { id: '27221-arielfacepalm', file: '27221-arielfacepalm.gif', label: 'Ariel Facepalm', category: 'Characters' },
+  { id: '78677-arielhi', file: '78677-arielhi.gif', label: 'Ariel Hi', category: 'Characters' },
+  { id: '71980-ariellove', file: '71980-ariellove.gif', label: 'Ariel Love', category: 'Characters' },
+  { id: '90370-arielsad', file: '90370-arielsad.gif', label: 'Ariel Sad', category: 'Characters' },
+  { id: '36305-arielsteam', file: '36305-arielsteam.gif', label: 'Ariel Steam', category: 'Characters' },
+  { id: '54371-arielwhat', file: '54371-arielwhat.gif', label: 'Ariel What', category: 'Characters' },
+  { id: '74336-aristocathappy', file: '74336-aristocathappy.gif', label: 'Aristocat Happy', category: 'Characters' },
+  { id: '79985-aristocathi', file: '79985-aristocathi.gif', label: 'Aristocat Hi', category: 'Characters' },
+  { id: '13350-aristocatlove', file: '13350-aristocatlove.gif', label: 'Aristocat Love', category: 'Characters' },
+  { id: '74926-aristocatmad', file: '74926-aristocatmad.gif', label: 'Aristocat Mad', category: 'Characters' },
+  { id: '97162-aristocatno', file: '97162-aristocatno.gif', label: 'Aristocat No', category: 'Characters' },
+  { id: '53848-aristocattongue', file: '53848-aristocattongue.gif', label: 'Aristocat Tongue', category: 'Characters' },
+  { id: '77535-aristocatwhat', file: '77535-aristocatwhat.gif', label: 'Aristocat What', category: 'Characters' },
+  { id: '50074-bambigrimace', file: '50074-bambigrimace.gif', label: 'Bambi Grimace', category: 'Characters' },
+  { id: '39738-funkymothman', file: '39738-funkymothman.gif', label: 'Funky Mothman', category: 'Characters' },
+  { id: '3031-princess', file: '3031-princess.png', label: 'Princess', category: 'Characters' },
+  { id: '62157-sebhuh', file: '62157-sebhuh.gif', label: 'Seb Huh', category: 'Characters' },
+  { id: '75618-sebshock', file: '75618-sebshock.gif', label: 'Seb Shock', category: 'Characters' },
+  { id: '9692_zodiac_aquarius', file: '9692_zodiac_aquarius.png', label: 'Aquarius', category: 'Zodiac' },
+  { id: '7374_zodiac_ares', file: '7374_zodiac_ares.png', label: 'Aries', category: 'Zodiac' },
+  { id: '6684_zodiac_cancer', file: '6684_zodiac_cancer.png', label: 'Cancer', category: 'Zodiac' },
+  { id: '3112_zodiac_capricorn', file: '3112_zodiac_capricorn.png', label: 'Capricorn', category: 'Zodiac' },
+  { id: '6663_zodiac_gemini', file: '6663_zodiac_gemini.png', label: 'Gemini', category: 'Zodiac' },
+  { id: '7134_zodiac_leo', file: '7134_zodiac_leo.png', label: 'Leo', category: 'Zodiac' },
+  { id: '1217_zodiac_libra', file: '1217_zodiac_libra.png', label: 'Libra', category: 'Zodiac' },
+  { id: '3696_zodiac_pisces', file: '3696_zodiac_pisces.png', label: 'Pisces', category: 'Zodiac' },
+  { id: '1186_zodiac_sagittarius', file: '1186_zodiac_sagittarius.png', label: 'Sagittarius', category: 'Zodiac' },
+  { id: '5375_zodiac_scorpio', file: '5375_zodiac_scorpio.png', label: 'Scorpio', category: 'Zodiac' },
+  { id: '3649_zodiac_taurus', file: '3649_zodiac_taurus.png', label: 'Taurus', category: 'Zodiac' },
+  { id: '2303_zodiac_virgo', file: '2303_zodiac_virgo.png', label: 'Virgo', category: 'Zodiac' },
+  { id: '8364_fallout_ok', file: '8364_fallout_ok.png', label: 'Fallout OK', category: 'Fallout' },
+  { id: '3718-nukacola', file: '3718-nukacola.png', label: 'Nuka-Cola', category: 'Fallout' },
+  { id: '1826-pipboy', file: '1826-pipboy.png', label: 'Pip-Boy', category: 'Fallout' },
+  { id: '7968_fallout_pip_boy', file: '7968_fallout_pip_boy.png', label: 'Pip-Boy', category: 'Fallout' },
+  { id: '5002-fallout', file: '5002-fallout.png', label: 'Vault Boy', category: 'Fallout' },
+  { id: '1734-vaultboy', file: '1734-vaultboy.png', label: 'Vault Boy', category: 'Fallout' },
+  { id: '3139-vaultboyholdup', file: '3139-vaultboyholdup.png', label: 'Vault Boy Hold Up', category: 'Fallout' },
+  { id: '422848-bunny', file: '422848-bunny.png', label: 'Bunny', category: 'Icons' },
+  { id: '532883-cash', file: '532883-cash.png', label: 'Cash', category: 'Icons' },
+  { id: '421918-cat', file: '421918-cat.png', label: 'Cat', category: 'Icons' },
+  { id: '809351-crown', file: '809351-crown.png', label: 'Crown', category: 'Icons' },
+  { id: '618492-diamond', file: '618492-diamond.png', label: 'Diamond', category: 'Icons' },
+  { id: '96311-dog', file: '96311-dog.png', label: 'Dog', category: 'Icons' },
+  { id: '391926-frog', file: '391926-frog.png', label: 'Frog', category: 'Icons' },
+  { id: '605187-goat', file: '605187-goat.png', label: 'Goat', category: 'Icons' },
+  { id: '647772-pouch', file: '647772-pouch.png', label: 'Pouch', category: 'Icons' },
+  { id: '55902-trophy', file: '55902-trophy.png', label: 'Trophy', category: 'Icons' },
 ];
 
 export const AVATAR_PRESET_IDS: readonly string[] = AVATAR_PRESETS.map((a) => a.id);
