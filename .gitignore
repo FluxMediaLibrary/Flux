@@ -50,6 +50,8 @@ tes.js
 flux-release.keystore
 .twa-keystore-password.txt
 *.keystore
-*.apk
 *.aab
 twa/
+
+# Exception — public Android APK for self-hosted installs
+!packages/frontend/public/flux.apk
