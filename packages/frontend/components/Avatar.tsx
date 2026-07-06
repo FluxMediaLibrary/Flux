@@ -2,11 +2,11 @@
 
 /**
  * Renders a profile avatar. When the profile's `avatar` matches a premade
- * preset, we show that preset's emoji on its gradient; otherwise we fall back
- * to the first initial of the name on the accent colour. Used by the profile
+ * preset, we show that preset's hand-drawn SVG icon; otherwise we fall back to
+ * the first initial of the name on the accent colour. Used by the profile
  * picker and the member nav so avatars look identical everywhere.
  */
-import { getAvatarPreset } from '@flux/shared';
+import { AVATAR_ICONS } from '@/components/avatar-icons';
 
 function initial(name: string): string {
   return name.trim().slice(0, 1).toUpperCase() || '?';
@@ -21,20 +21,19 @@ interface AvatarProps {
 }
 
 export function Avatar({ name, avatar, size = 118, className }: AvatarProps) {
-  const preset = getAvatarPreset(avatar);
+  const icon = avatar ? AVATAR_ICONS[avatar] : undefined;
   const style: React.CSSProperties = {
     width: size,
     height: size,
-    fontSize: preset ? size * 0.5 : size * 0.42,
-    ...(preset ? { background: preset.gradient } : {}),
+    fontSize: size * 0.42,
   };
   return (
     <span
-      className={`avatar-tile${className ? ` ${className}` : ''}`}
+      className={`avatar-tile${icon ? ' has-icon' : ''}${className ? ` ${className}` : ''}`}
       style={style}
       aria-hidden="true"
     >
-      {preset ? preset.emoji : initial(name)}
+      {icon ?? initial(name)}
     </span>
   );
 }
