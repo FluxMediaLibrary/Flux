@@ -2,11 +2,11 @@
 
 /**
  * Renders a profile avatar. When the profile's `avatar` matches a premade
- * preset, we show that preset's hand-drawn SVG icon; otherwise we fall back to
- * the first initial of the name on the accent colour. Used by the profile
- * picker and the member nav so avatars look identical everywhere.
+ * preset, we show that preset's image (from /public/avatars); otherwise we fall
+ * back to the first initial of the name on the accent colour. Used by the
+ * profile picker and the navbar so avatars look identical everywhere.
  */
-import { AVATAR_ICONS } from '@/components/avatar-icons';
+import { getAvatarPreset } from '@flux/shared';
 
 function initial(name: string): string {
   return name.trim().slice(0, 1).toUpperCase() || '?';
@@ -21,7 +21,7 @@ interface AvatarProps {
 }
 
 export function Avatar({ name, avatar, size = 118, className }: AvatarProps) {
-  const icon = avatar ? AVATAR_ICONS[avatar] : undefined;
+  const preset = getAvatarPreset(avatar);
   const style: React.CSSProperties = {
     width: size,
     height: size,
@@ -29,11 +29,16 @@ export function Avatar({ name, avatar, size = 118, className }: AvatarProps) {
   };
   return (
     <span
-      className={`avatar-tile${icon ? ' has-icon' : ''}${className ? ` ${className}` : ''}`}
+      className={`avatar-tile${preset ? ' has-icon' : ''}${className ? ` ${className}` : ''}`}
       style={style}
       aria-hidden="true"
     >
-      {icon ?? initial(name)}
+      {preset ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={`/avatars/${preset.file}`} alt="" draggable={false} />
+      ) : (
+        initial(name)
+      )}
     </span>
   );
 }
