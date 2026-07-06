@@ -564,6 +564,116 @@ label {
   font-size: 0.98rem;
 }
 
+/* ── Avatar tile (shared by picker grid + nav) ─────────────────────────────── */
+
+.avatar-tile {
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: #fff;
+  background: var(--accent);
+  line-height: 1;
+  user-select: none;
+  flex-shrink: 0;
+}
+/* Nav trigger keeps its tighter radius/size. */
+.avatar-tile.avatar-sm {
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.profile-avatar-wrap {
+  position: relative;
+  border: 3px solid transparent;
+  border-radius: 18px;
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease;
+}
+.profile-card:hover .profile-avatar-wrap {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+.profile-card.managing:hover .profile-avatar-wrap {
+  border-color: var(--accent);
+}
+.profile-edit-badge {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 1.8rem;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.profile-card.managing:hover .profile-edit-badge {
+  opacity: 1;
+}
+.profile-avatar-busy {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 2rem;
+}
+
+/* ── Avatar picker (create / edit) ─────────────────────────────────────────── */
+
+.avatar-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.avatar-option {
+  padding: 3px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
+  transition: border-color 0.12s ease;
+}
+.avatar-option:hover {
+  border-color: var(--surface-border);
+}
+.avatar-option.selected {
+  border-color: var(--accent);
+}
+
+/* ── Modal (edit profile) ──────────────────────────────────────────────────── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 100;
+}
+.modal-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius);
+  padding: 26px;
+  width: 100%;
+  max-width: 440px;
+  text-align: left;
+}
+.modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
 /* ── Inline add-profile form / modal ───────────────────────────────────────── */
 
 .inline-form {

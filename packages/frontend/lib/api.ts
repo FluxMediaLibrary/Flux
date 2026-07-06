@@ -20,6 +20,7 @@ import type {
   RequestDTO,
   SaveProgressRequest,
   SignupRequest,
+  UpdateProfileRequest,
   TmdbGenreDTO,
   TmdbSearchResult,
   TrendingWindow,
@@ -227,6 +228,22 @@ export const api = {
   createProfile(body: CreateProfileRequest, baseToken?: string | null) {
     return request<ProfileDTO>('/api/profiles', {
       body,
+      token: baseToken ?? getBaseToken(),
+    });
+  },
+  updateProfile(
+    profileId: string,
+    body: UpdateProfileRequest,
+    baseToken?: string | null,
+  ) {
+    return request<ProfileDTO>(
+      `/api/profiles/${encodeURIComponent(profileId)}`,
+      { method: 'PATCH', body, token: baseToken ?? getBaseToken() },
+    );
+  },
+  deleteProfile(profileId: string, baseToken?: string | null) {
+    return request<void>(`/api/profiles/${encodeURIComponent(profileId)}`, {
+      method: 'DELETE',
       token: baseToken ?? getBaseToken(),
     });
   },

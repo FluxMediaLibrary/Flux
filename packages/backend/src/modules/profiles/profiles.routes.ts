@@ -2,15 +2,17 @@
  * Profile routes (all require a valid account token):
  *   GET    /api/profiles
  *   POST   /api/profiles
+ *   PATCH  /api/profiles/:id
  *   DELETE /api/profiles/:id
  *   POST   /api/profiles/:id/activate
  */
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { ApiError } from '../../lib/errors.js';
-import { createProfileSchema } from './profiles.schema.js';
+import { createProfileSchema, updateProfileSchema } from './profiles.schema.js';
 import {
   listProfiles,
   createProfile,
+  updateProfile,
   deleteProfile,
   activateProfile,
 } from './profiles.service.js';
@@ -31,6 +33,15 @@ export const profileRoutes: FastifyPluginAsync = async (
     const input = createProfileSchema.parse(request.body);
     const profile = await createProfile(account.id, input);
     return reply.status(201).send(profile);
+  });
+
+  app.patch<{ Params: { id: string } }>('/:id', async (request, reply) => {
+    const account = request.account!;
+    const { id } = request.params;
+    if (!id) throw ApiError.badRequest('Profile id is required');
+    const input = updateProfileSchema.parse(request.body);
+    const profile = await updateProfile(account.id, id, input);
+    return reply.send(profile);
   });
 
   app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {

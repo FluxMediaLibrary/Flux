@@ -4,16 +4,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { Avatar } from '@/components/Avatar';
 
 const LINKS = [
   { href: '/home', label: 'Home' },
   { href: '/library', label: 'Library' },
   { href: '/browse', label: 'Browse' },
 ];
-
-function initials(name: string): string {
-  return name.trim().slice(0, 1).toUpperCase() || '?';
-}
 
 export function MemberNav() {
   const pathname = usePathname();
@@ -84,9 +81,12 @@ export function MemberNav() {
             aria-haspopup="menu"
             aria-expanded={menuOpen}
           >
-            <span className="avatar-sm">
-              {activeProfile ? initials(activeProfile.name) : '?'}
-            </span>
+            <Avatar
+              name={activeProfile?.name ?? '?'}
+              avatar={activeProfile?.avatar}
+              size={30}
+              className="avatar-sm"
+            />
             <span className="profile-name">{activeProfile?.name ?? 'Profile'}</span>
             <span className="chevron" aria-hidden>
               ▾

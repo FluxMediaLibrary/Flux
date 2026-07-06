@@ -76,6 +76,58 @@ export interface CreateProfileRequest {
   avatar?: string;
 }
 
+export interface UpdateProfileRequest {
+  name?: string;
+  avatar?: string | null;
+}
+
+// ─── Premade avatars ──────────────────────────────────────────────────────────
+// A curated catalogue of selectable avatars. `avatar` on a Profile stores the
+// preset `id`; the backend validates it against this list (or accepts null for
+// an initials fallback). Both frontend and backend import from here so the set
+// of valid avatars can never drift between the two.
+
+export interface AvatarPreset {
+  id: string;
+  /** Emoji glyph rendered on the tile. */
+  emoji: string;
+  /** CSS gradient used as the tile background. */
+  gradient: string;
+  /** Human label for accessibility. */
+  label: string;
+}
+
+export const AVATAR_PRESETS: readonly AvatarPreset[] = [
+  { id: 'popcorn', emoji: '🍿', gradient: 'linear-gradient(135deg, #f97316, #ea580c)', label: 'Popcorn' },
+  { id: 'clapper', emoji: '🎬', gradient: 'linear-gradient(135deg, #6366f1, #4338ca)', label: 'Clapperboard' },
+  { id: 'ghost', emoji: '👻', gradient: 'linear-gradient(135deg, #64748b, #334155)', label: 'Ghost' },
+  { id: 'alien', emoji: '👽', gradient: 'linear-gradient(135deg, #10b981, #047857)', label: 'Alien' },
+  { id: 'robot', emoji: '🤖', gradient: 'linear-gradient(135deg, #0ea5e9, #0369a1)', label: 'Robot' },
+  { id: 'cat', emoji: '🐱', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)', label: 'Cat' },
+  { id: 'dog', emoji: '🐶', gradient: 'linear-gradient(135deg, #a16207, #713f12)', label: 'Dog' },
+  { id: 'fox', emoji: '🦊', gradient: 'linear-gradient(135deg, #f97316, #c2410c)', label: 'Fox' },
+  { id: 'panda', emoji: '🐼', gradient: 'linear-gradient(135deg, #475569, #1e293b)', label: 'Panda' },
+  { id: 'unicorn', emoji: '🦄', gradient: 'linear-gradient(135deg, #ec4899, #a21caf)', label: 'Unicorn' },
+  { id: 'dragon', emoji: '🐲', gradient: 'linear-gradient(135deg, #16a34a, #15803d)', label: 'Dragon' },
+  { id: 'rocket', emoji: '🚀', gradient: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', label: 'Rocket' },
+  { id: 'star', emoji: '⭐', gradient: 'linear-gradient(135deg, #eab308, #ca8a04)', label: 'Star' },
+  { id: 'fire', emoji: '🔥', gradient: 'linear-gradient(135deg, #ef4444, #b91c1c)', label: 'Fire' },
+  { id: 'wave', emoji: '🌊', gradient: 'linear-gradient(135deg, #06b6d4, #0e7490)', label: 'Wave' },
+  { id: 'gamer', emoji: '🎮', gradient: 'linear-gradient(135deg, #7c3aed, #5b21b6)', label: 'Gamepad' },
+  { id: 'skull', emoji: '💀', gradient: 'linear-gradient(135deg, #52525b, #27272a)', label: 'Skull' },
+  { id: 'ninja', emoji: '🥷', gradient: 'linear-gradient(135deg, #334155, #0f172a)', label: 'Ninja' },
+  { id: 'crown', emoji: '👑', gradient: 'linear-gradient(135deg, #d97706, #b45309)', label: 'Crown' },
+  { id: 'heart', emoji: '❤️', gradient: 'linear-gradient(135deg, #f43f5e, #be123c)', label: 'Heart' },
+];
+
+export const AVATAR_PRESET_IDS: readonly string[] = AVATAR_PRESETS.map((a) => a.id);
+
+/** Look up a preset by id (undefined when the id is unknown or null). */
+export function getAvatarPreset(id: string | null | undefined): AvatarPreset | undefined {
+  if (!id) return undefined;
+  return AVATAR_PRESETS.find((a) => a.id === id);
+}
+
 export interface InviteDTO {
   id: string;
   code: string;

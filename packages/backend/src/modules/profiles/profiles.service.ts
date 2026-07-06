@@ -13,7 +13,7 @@ import { prisma } from '../../lib/db.js';
 import { signToken } from '../../lib/jwt.js';
 import { ApiError } from '../../lib/errors.js';
 import { toProfileDTO } from '../auth/auth.service.js';
-import type { CreateProfileInput } from './profiles.schema.js';
+import type { CreateProfileInput, UpdateProfileInput } from './profiles.schema.js';
 
 export async function listProfiles(accountId: string): Promise<ProfileDTO[]> {
   const profiles = await prisma.profile.findMany({
@@ -32,6 +32,22 @@ export async function createProfile(
       userId: accountId,
       name: input.name,
       avatar: input.avatar ?? null,
+    },
+  });
+  return toProfileDTO(profile);
+}
+
+export async function updateProfile(
+  accountId: string,
+  profileId: string,
+  input: UpdateProfileInput,
+): Promise<ProfileDTO> {
+  await getOwnedProfile(accountId, profileId);
+  const profile = await prisma.profile.update({
+    where: { id: profileId },
+    data: {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.avatar !== undefined ? { avatar: input.avatar } : {}),
     },
   });
   return toProfileDTO(profile);
