@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { SearchOverlay } from '@/components/SearchOverlay';
 
 const TABS = [
-  { label: 'Library', href: '/library'},
+  { label: 'Library', href: '/library', query: ''},
   { label: 'Movies', href: '/library', query: 'movie' },
   { label: 'Shows', href: '/library', query: 'tv' },
 ] as const;
