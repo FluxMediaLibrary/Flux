@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="HomeScreen" extends="Group">
+    <interface>
+        <field id="api" type="assocarray" />
+        <field id="close" type="boolean" alwaysNotify="true" />
+        <field id="navigate" type="assocarray" alwaysNotify="true" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/HomeScreen.brs" />
+    <children>
+        <Rectangle color="#0a0a0a" width="1920" height="1080" />
+
+        <Label
+            id="titleLabel"
+            text="Flux"
+            font="font:LargeBoldSystemFont"
+            color="#ffffff"
+            translation="[60, 40]" />
+
+        <!-- Top navigation bar -->
+        <Label
+            id="navLibrary"
+            text="Library"
+            font="font:MediumBoldSystemFont"
+            color="#888888"
+            translation="[300, 50]" />
+        <Label
+            id="navMovies"
+            text="Movies"
+            font="font:MediumSystemFont"
+            color="#666666"
+            translation="[460, 51]" />
+        <Label
+            id="navShows"
+            text="TV Shows"
+            font="font:MediumSystemFont"
+            color="#666666"
+            translation="[600, 51]" />
+        <Label
+            id="navSearch"
+            text="Search"
+            font="font:MediumSystemFont"
+            color="#666666"
+            translation="[760, 51]" />
+
+        <RowList
+            id="homeRows"
+            translation="[0, 110]"
+            itemComponentName="HomeRowItem"
+            numRows="10"
+            rowItemSize="[[320, 190]]"
+            rowItemSpacing="[[15, 0]]"
+            itemSize="[1800, 280]"
+            rowLabelColor="#cccccc"
+            drawFocusFeedback="true"
+            visible="false" />
+
+        <BusySpinner
+            id="spinner"
+            translation="[940, 500]"
+            clockwise="true" />
+
+        <Label
+            id="errorLabel"
+            text=""
+            font="font:MediumSystemFont"
+            color="#cc4444"
+            width="1200"
+            horizAlign="center"
+            translation="[360, 500]"
+            visible="false" />
+    </children>
+</component>

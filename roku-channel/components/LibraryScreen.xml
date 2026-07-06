@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="LibraryScreen" extends="Group">
+    <interface>
+        <field id="api" type="assocarray" />
+        <field id="filterType" type="string" />
+        <field id="close" type="boolean" alwaysNotify="true" />
+        <field id="navigate" type="assocarray" alwaysNotify="true" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/LibraryScreen.brs" />
+    <children>
+        <Rectangle color="#0a0a0a" width="1920" height="1080" />
+
+        <Label
+            id="titleLabel"
+            text="Library"
+            font="font:LargeBoldSystemFont"
+            color="#ffffff"
+            translation="[60, 40]" />
+
+        <!-- Filter tabs: All, Movies, TV Shows -->
+        <Label
+            id="tabAll"
+            text="All"
+            font="font:MediumBoldSystemFont"
+            color="#00cc66"
+            translation="[300, 50]" />
+        <Label
+            id="tabMovies"
+            text="Movies"
+            font="font:MediumSystemFont"
+            color="#666666"
+            translation="[400, 51]" />
+        <Label
+            id="tabShows"
+            text="TV Shows"
+            font="font:MediumSystemFont"
+            color="#666666"
+            translation="[540, 51]" />
+
+        <PosterGrid
+            id="posterGrid"
+            translation="[60, 110]"
+            itemComponentName="LibraryGridItem"
+            numColumns="5"
+            numRows="3"
+            itemSize="[340, 520]"
+            itemSpacing="[20, 20]"
+            drawFocusFeedback="true"
+            visible="false" />
+
+        <BusySpinner
+            id="spinner"
+            translation="[940, 500]"
+            clockwise="true" />
+
+        <Label
+            id="emptyLabel"
+            text="No items in library."
+            font="font:MediumSystemFont"
+            color="#888888"
+            horizAlign="center"
+            width="1920"
+            translation="[0, 500]"
+            visible="false" />
+
+        <Label
+            id="errorLabel"
+            text=""
+            font="font:MediumSystemFont"
+            color="#cc4444"
+            width="1200"
+            horizAlign="center"
+            translation="[360, 500]"
+            visible="false" />
+    </children>
+</component>

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="TmdbDetailScreen" extends="Group">
+    <interface>
+        <field id="api" type="assocarray" />
+        <field id="mediaType" type="string" />
+        <field id="tmdbId" type="integer" />
+        <field id="contentTitle" type="string" />
+        <field id="close" type="boolean" alwaysNotify="true" />
+        <field id="navigate" type="assocarray" alwaysNotify="true" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/TmdbDetailScreen.brs" />
+    <children>
+        <Rectangle color="#0a0a0a" width="1920" height="1080" />
+
+        <Poster
+            id="backdrop"
+            width="1920" height="400"
+            loadDisplayMode="scaleToZoom"
+            translation="[0, 0]" />
+        <Rectangle
+            id="backdropOverlay"
+            color="#0a0a0aC0"
+            width="1920" height="400"
+            translation="[0, 0]" />
+
+        <Label
+            id="titleLabel"
+            text=""
+            font="font:LargeBoldSystemFont"
+            color="#ffffff"
+            width="1800"
+            translation="[60, 280]"
+            ellipsizeOnBoundary="true"
+            maxLines="2" />
+
+        <Label
+            id="metaLabel"
+            text=""
+            font="font:SmallSystemFont"
+            color="#aaaaaa"
+            width="1800"
+            translation="[60, 360]" />
+
+        <Label
+            id="overviewLabel"
+            text=""
+            font="font:SmallSystemFont"
+            color="#cccccc"
+            width="1200"
+            translation="[60, 440]"
+            maxLines="6"
+            wrap="true"
+            lineSpacing="6" />
+
+        <!-- Request button for items not in library -->
+        <Button
+            id="requestButton"
+            text="Request this title"
+            translation="[60, 640]"
+            minWidth="300" />
+
+        <Label
+            id="statusLabel"
+            text=""
+            font="font:SmallSystemFont"
+            color="#00cc66"
+            width="500"
+            translation="[60, 700]"
+            visible="false" />
+
+        <BusySpinner
+            id="spinner"
+            translation="[940, 500]"
+            clockwise="true" />
+
+        <Label
+            id="errorLabel"
+            text=""
+            font="font:MediumSystemFont"
+            color="#cc4444"
+            width="1200"
+            horizAlign="center"
+            translation="[360, 500]"
+            visible="false" />
+    </children>
+</component>
