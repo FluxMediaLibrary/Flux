@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const LINKS = [
+  { href: '/admin/info', label: 'Info' },
   { href: '/admin/torrents', label: 'Torrents' },
   { href: '/admin/requests', label: 'Requests' },
   { href: '/admin/invites', label: 'Invites' },
