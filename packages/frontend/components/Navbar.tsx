@@ -60,13 +60,6 @@ export function Navbar() {
             aria-label="Menu"
             onClick={() => setMenu((m) => (m === 'nav' ? null : 'nav'))}
           >
-            <IconMenu />
-          </button>
-          <div className="navbar__brand">
-            Library
-          </div>
-          <button className="navbar__request" onClick={() => router.push('/browse')}>
-            <IconPlus /> <span className="navbar__request-label">Request</span>
           </button>
         </div>
 
