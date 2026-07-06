@@ -43,6 +43,7 @@ import type {
   ProfileDTO,
   Role,
   SignupRequest,
+  UpdateProfileRequest,
 } from '@flux/shared';
 import {
   api,
@@ -68,6 +69,11 @@ export interface AuthState {
   signup: (body: SignupRequest) => Promise<void>;
   activateProfile: (profileId: string) => Promise<void>;
   addProfile: (body: CreateProfileRequest) => Promise<ProfileDTO>;
+  editProfile: (
+    profileId: string,
+    body: UpdateProfileRequest,
+  ) => Promise<ProfileDTO>;
+  removeProfile: (profileId: string) => Promise<void>;
   switchProfile: () => void;
   logout: () => void;
 }
@@ -171,6 +177,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return profile;
   }, []);
 
+  const editProfile = useCallback(
+    async (profileId: string, body: UpdateProfileRequest) => {
+      const updated = await api.updateProfile(profileId, body, getBaseToken());
+      setProfiles((prev) => {
+        const next = prev.map((p) => (p.id === updated.id ? updated : p));
+        writeCache(PROFILES_KEY, next);
+        return next;
+      });
+      return updated;
+    },
+    [],
+  );
+
+  const removeProfile = useCallback(async (profileId: string) => {
+    await api.deleteProfile(profileId, getBaseToken());
+    setProfiles((prev) => {
+      const next = prev.filter((p) => p.id !== profileId);
+      writeCache(PROFILES_KEY, next);
+      return next;
+    });
+  }, []);
+
   const switchProfile = useCallback(() => {
     // Revert the effective token to the account token (drops activeProfileId),
     // so the picker can activate a different profile.
@@ -208,6 +236,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signup,
       activateProfile,
       addProfile,
+      editProfile,
+      removeProfile,
       switchProfile,
       logout,
     }),
@@ -222,6 +252,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signup,
       activateProfile,
       addProfile,
+      editProfile,
+      removeProfile,
       switchProfile,
       logout,
     ],
