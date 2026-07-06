@@ -101,6 +101,15 @@ export function Navbar() {
           <button className="nav-ic" aria-label="Search" onClick={() => setSearchOpen(true)}>
             <IconSearch />
           </button>
+          <a
+            className="nav-ic"
+            href="/flux.apk"
+            download
+            aria-label="Download Android app"
+            title="Download Android app"
+          >
+            <IconAndroid />
+          </a>
           <button
             className="nav-ic"
             aria-label="Profile"
@@ -145,3 +154,9 @@ const IconUsers = () => (<svg viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8"
 const IconCast = () => (<svg viewBox="0 0 24 24" {...ico}><path d="M2 16.1A5 5 0 0 1 5.9 20" /><path d="M2 12.05A9 9 0 0 1 9.95 20" /><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6" /><path d="M2 20h.01" /></svg>);
 const IconSearch = () => (<svg viewBox="0 0 24 24" {...ico}><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>);
 const IconShield = () => (<svg viewBox="0 0 24 24" {...ico}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>);
+const IconAndroid = () => (
+  <svg viewBox="0 0 24 24" {...ico}>
+    <path d="M12 3v12m0 0-4-4m4 4 4-4" />
+    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+  </svg>
+);
