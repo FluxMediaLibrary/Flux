@@ -110,14 +110,23 @@ async function spawnTranscode(
     `[Transcode] video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} → ${args.includes('copy') ? 'remux/partial-copy' : 'transcode'}`,
   );
 
-  const proc = spawn('ffmpeg', args, { stdio: 'ignore' });
+  // Capture stderr so a mid-file FFmpeg failure (bad codec, corrupt source,
+  // incomplete download) is visible in the logs instead of the stream just
+  // silently stopping a few segments in.
+  const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  let stderrTail = '';
+  proc.stderr?.on('data', (c) => {
+    stderrTail = (stderrTail + c.toString()).slice(-4000);
+  });
   proc.on('error', (err) => {
     console.error('[Transcode] FFmpeg spawn error:', err);
   });
-  proc.on('exit', (code) => {
-    if (code !== 0 && code !== 255) {
-      // 255 = killed/interrupted (e.g., client stopped watching) — not an error.
-      console.error(`[Transcode] FFmpeg exited with code ${code}`);
+  proc.on('exit', (code, signal) => {
+    // 255 / SIGKILL / SIGTERM = we/the client stopped it — not a failure.
+    if (code !== 0 && code !== 255 && signal !== 'SIGKILL' && signal !== 'SIGTERM') {
+      console.error(
+        `[Transcode] FFmpeg exited code=${code} signal=${signal ?? ''}\n${stderrTail}`,
+      );
     }
   });
 }
@@ -247,6 +256,11 @@ export const streamingRoutes: FastifyPluginAsync = async (
         );
       }
 
+      // Head start: wait (best-effort) for a few segments so playback opens with
+      // runway and doesn't immediately catch the encoder's live edge — the main
+      // cause of a hard stop ~one segment in. Harmless for short clips.
+      await pollForFile(path.join(sessionDir, 'segment_00002.ts'), 16, 500);
+
       return sendManifest(fs.readFileSync(manifestPath, 'utf-8'));
     },
   );
@@ -269,6 +283,11 @@ export const streamingRoutes: FastifyPluginAsync = async (
       }
 
       const segmentPath = safeJoin(sessionDir, segment);
+      // The segment may be a beat behind the encoder — wait for it (up to ~15s)
+      // rather than 404-ing, which hls.js treats as a fatal load error.
+      if (!fs.existsSync(segmentPath)) {
+        await pollForFile(segmentPath, 30, 500);
+      }
       if (!fs.existsSync(segmentPath)) {
         throw ApiError.notFound('HLS segment not found');
       }
