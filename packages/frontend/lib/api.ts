@@ -1,5 +1,6 @@
 import type {
   ActivateProfileResponse,
+  AdminInfoDTO,
   ApiError,
   AuthResponse,
   ConfirmTorrentRequest,
@@ -412,6 +413,11 @@ export const api = {
   },
   updateNotificationSettings(body: UpdateNotificationSettingsRequest) {
     return request<NotificationSettingsDTO>('/api/notifications/settings', { method: 'PUT', body });
+  },
+
+  // Admin dashboard
+  getAdminInfo() {
+    return request<AdminInfoDTO>('/api/admin/info');
   },
 };
 

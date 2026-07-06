@@ -331,3 +331,44 @@ export interface ApiError {
   message: string;
   statusCode: number;
 }
+
+// ─── Admin dashboard ───────────────────────────────────────────────────────
+
+export interface AdminInfoDTO {
+  system: {
+    uptime: number;
+    nodeVersion: string;
+    platform: string;
+    memory: { total: number; free: number; used: number };
+    cpuLoad: number[];
+  };
+  storage: {
+    mediaRoot: string;
+    downloadRoot: string;
+    transcodeRoot: string;
+  };
+  database: {
+    users: number;
+    profiles: number;
+    mediaItems: number;
+    episodes: number;
+    torrents: number;
+    requests: number;
+    invites: number;
+  };
+  torrents: {
+    downloading: number;
+    seeding: number;
+    stopped: number;
+    error: number;
+    processing: number;
+  };
+  requests: {
+    pending: number;
+    approved: number;
+    fulfilled: number;
+    rejected: number;
+    downloading: number;
+  };
+  errors: { name: string; message: string; since: string }[];
+}

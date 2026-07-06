@@ -20,6 +20,7 @@ import { torrentRoutes } from './modules/torrents/torrents.routes.js';
 import { requestRoutes } from './modules/requests/requests.routes.js';
 import { streamingRoutes } from './modules/streaming/streaming.routes.js';
 import { notificationRoutes } from './modules/notifications/notifications.routes.js';
+import { adminRoutes } from './modules/admin/admin.routes.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -60,6 +61,7 @@ export async function buildServer(): Promise<FastifyInstance> {
       await api.register(requestRoutes, { prefix: '/requests' });
       await api.register(streamingRoutes, { prefix: '/stream' });
       await api.register(notificationRoutes, { prefix: '/notifications' });
+      await api.register(adminRoutes, { prefix: '/admin' });
     },
     { prefix: '/api' },
   );
