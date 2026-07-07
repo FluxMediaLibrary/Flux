@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { useMediaState } from '@vidstack/react';
 import { ThumbnailPreview } from './ThumbnailPreview';
 
@@ -86,23 +86,6 @@ export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: Ti
     [canSeek, getPosition, onSeek, range.length],
   );
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if ((!canSeek && range.length <= 0) || range.length <= 0) return;
-
-      let target: number | null = null;
-      if (event.key === 'ArrowLeft') target = Math.max(range.start, currentTime - 10);
-      if (event.key === 'ArrowRight') target = Math.min(range.end, currentTime + 10);
-      if (event.key === 'Home') target = range.start;
-      if (event.key === 'End') target = range.end;
-      if (target == null) return;
-
-      event.preventDefault();
-      onSeek(target, event.nativeEvent);
-    },
-    [canSeek, currentTime, onSeek, range.end, range.length, range.start],
-  );
-
   const playedPercent = range.length > 0
     ? Math.max(0, Math.min(100, ((currentTime - range.start) / range.length) * 100))
     : 0;
@@ -142,14 +125,7 @@ export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: Ti
         if (!dragging) setPreview((state) => ({ ...state, visible: false }));
       }}
       onBlur={() => setPreview((state) => ({ ...state, visible: false }))}
-      onKeyDown={handleKeyDown}
-      role="slider"
-      tabIndex={disabled ? -1 : 0}
-      aria-label="Seek"
-      aria-valuemin={Math.round(range.start)}
-      aria-valuemax={Math.round(range.end)}
-      aria-valuenow={Math.round(currentTime)}
-      aria-valuetext={`${formatTime(currentTime)} of ${formatTime(range.end)}`}
+      role="presentation"
       aria-disabled={disabled}
     >
       <ThumbnailPreview
