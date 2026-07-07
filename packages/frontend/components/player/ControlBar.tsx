@@ -19,6 +19,7 @@ import {
 import { SettingsPanel } from './SettingsPanel';
 
 interface ControlBarProps {
+  durationSeconds?: number | null;
   onSeek: (time: number, trigger?: Event) => void;
 }
 
@@ -31,7 +32,7 @@ function formatTime(value: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function ControlBar({ onSeek }: ControlBarProps) {
+export function ControlBar({ durationSeconds, onSeek }: ControlBarProps) {
   const remote = useMediaRemote();
   const paused = useMediaState('paused');
   const muted = useMediaState('muted');
@@ -43,6 +44,11 @@ export function ControlBar({ onSeek }: ControlBarProps) {
   const pictureInPicture = useMediaState('pictureInPicture');
   const textTracks = useMediaState('textTracks');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const displayDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
+    ? durationSeconds
+    : typeof duration === 'number' && Number.isFinite(duration) && duration > 0
+      ? duration
+      : 0;
 
   const subtitleActive = useMemo(() => {
     const tracks = textTracks ? Array.from({ length: textTracks.length }, (_, index) => textTracks[index]) : [];
@@ -62,12 +68,12 @@ export function ControlBar({ onSeek }: ControlBarProps) {
   const seekBy = useCallback(
     (delta: number, trigger: Event) => {
       const rawTarget = (Number.isFinite(currentTime) ? currentTime : 0) + delta;
-      const target = Number.isFinite(duration) && duration > 0
-        ? Math.max(0, Math.min(duration, rawTarget))
+      const target = Number.isFinite(displayDuration) && displayDuration > 0
+        ? Math.max(0, Math.min(displayDuration, rawTarget))
         : Math.max(0, rawTarget);
       onSeek(target, trigger);
     },
-    [currentTime, duration, onSeek],
+    [currentTime, displayDuration, onSeek],
   );
 
   const changeVolume = useCallback(
@@ -119,7 +125,7 @@ export function ControlBar({ onSeek }: ControlBarProps) {
         <div className="fx-time" aria-label="Playback time">
           <span>{formatTime(currentTime)}</span>
           <span className="fx-time-sep">/</span>
-          <span>{formatTime(duration)}</span>
+          <span>{formatTime(displayDuration)}</span>
         </div>
 
         <div className="fx-spacer" />

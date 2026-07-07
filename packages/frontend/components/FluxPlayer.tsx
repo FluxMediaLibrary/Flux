@@ -227,18 +227,28 @@ function FluxPlayerChrome({
 }) {
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
+  const seekableEnd = useMediaState('seekableEnd');
   const paused = useMediaState('paused');
   const waiting = useMediaState('waiting');
   const playing = useMediaState('playing');
   const remote = useMediaRemote();
   const resumeTargetRef = useRef(startPositionSeconds ?? 0);
   const nearEndFiredRef = useRef(false);
+  const stableDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
+    ? durationSeconds
+    : typeof duration === 'number' && Number.isFinite(duration) && duration > 0
+      ? duration
+      : 0;
 
   const seekTo = useCallback(
     (time: number, trigger?: Event) => {
       if (!Number.isFinite(time)) return;
 
-      const max = Number.isFinite(duration) && duration > 0 ? duration : Number.POSITIVE_INFINITY;
+      const hardMax = stableDuration > 0 ? stableDuration : Number.POSITIVE_INFINITY;
+      const generatedMax = typeof seekableEnd === 'number' && Number.isFinite(seekableEnd) && seekableEnd > 0
+        ? Math.max(0, seekableEnd - 0.25)
+        : hardMax;
+      const max = Math.min(hardMax, generatedMax);
       const target = Math.max(0, Math.min(time, max));
       remote.seek(target, trigger);
 
@@ -246,7 +256,7 @@ function FluxPlayerChrome({
       const media = playerElement?.querySelector?.('video,audio') as HTMLMediaElement | null;
       if (media && Number.isFinite(target)) media.currentTime = target;
     },
-    [duration, playerRef, remote],
+    [playerRef, remote, seekableEnd, stableDuration],
   );
 
   const reportProgress = useCallback(() => {
@@ -254,8 +264,11 @@ function FluxPlayerChrome({
     if (!player) return;
 
     const position = player.currentTime;
-    const totalDuration = Number.isFinite(player.duration) ? player.duration : 0;
+    const totalDuration = stableDuration > 0
+      ? stableDuration
+      : Number.isFinite(player.duration) ? player.duration : 0;
     if (!Number.isFinite(position) || position <= 0) return;
+    if (totalDuration > 0 && position > totalDuration + 5) return;
 
     api.saveProgress({
       mediaItemId: episodeId ? undefined : mediaItemId,
@@ -264,7 +277,7 @@ function FluxPlayerChrome({
       durationSeconds: totalDuration > 0 ? totalDuration : undefined,
     }).catch(() => {});
     onProgress?.(position, totalDuration);
-  }, [episodeId, mediaItemId, onProgress, playerRef]);
+  }, [episodeId, mediaItemId, onProgress, playerRef, stableDuration]);
 
   useEffect(() => {
     const interval = window.setInterval(reportProgress, 5000);
@@ -286,19 +299,19 @@ function FluxPlayerChrome({
 
   useEffect(() => {
     if (!onNearEnd || nearEndFiredRef.current) return;
-    if (duration > 0 && currentTime / duration >= 0.85) {
+    if (stableDuration > 0 && currentTime / stableDuration >= 0.85) {
       nearEndFiredRef.current = true;
       onNearEnd();
     }
-  }, [currentTime, duration, onNearEnd]);
+  }, [currentTime, onNearEnd, stableDuration]);
 
   useEffect(() => {
     const target = resumeTargetRef.current;
-    if (target > 0 && Number.isFinite(target) && duration > 0) {
-      seekTo(Math.min(target, duration - 1));
+    if (target > 0 && Number.isFinite(target) && stableDuration > 0) {
+      seekTo(Math.min(target, stableDuration - 1));
       resumeTargetRef.current = 0;
     }
-  }, [duration, seekTo]);
+  }, [seekTo, stableDuration]);
 
   return (
     <>
@@ -307,8 +320,13 @@ function FluxPlayerChrome({
       <div className={waiting && !playing ? 'fx-spinner-wrap is-visible' : 'fx-spinner-wrap'}>
         <Spinner />
       </div>
-      <Timeline mediaItemId={mediaItemId} episodeId={episodeId} onSeek={seekTo} />
-      <ControlBar onSeek={seekTo} />
+      <Timeline
+        mediaItemId={mediaItemId}
+        episodeId={episodeId}
+        durationSeconds={stableDuration || null}
+        onSeek={seekTo}
+      />
+      <ControlBar durationSeconds={stableDuration || null} onSeek={seekTo} />
       <DebugOverlay
         open={debugOpen}
         playbackMethod={methodLabel}

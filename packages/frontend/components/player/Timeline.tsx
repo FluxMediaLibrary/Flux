@@ -7,6 +7,7 @@ import { ThumbnailPreview } from './ThumbnailPreview';
 interface TimelineProps {
   mediaItemId: string;
   episodeId?: string;
+  durationSeconds?: number | null;
   onSeek: (time: number, trigger?: Event) => void;
 }
 
@@ -24,7 +25,7 @@ function formatTime(value: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function Timeline({ mediaItemId, episodeId, onSeek }: TimelineProps) {
+export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: TimelineProps) {
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
   const bufferedEnd = useMediaState('bufferedEnd');
@@ -37,11 +38,16 @@ export function Timeline({ mediaItemId, episodeId, onSeek }: TimelineProps) {
 
   const range = useMemo(() => {
     const start = Number.isFinite(seekableStart) && seekableStart > 0 ? seekableStart : 0;
-    const finiteDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
-    const finiteSeekEnd = Number.isFinite(seekableEnd) && seekableEnd > start ? seekableEnd : 0;
-    const end = finiteDuration || finiteSeekEnd;
+    const sourceDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
+      ? durationSeconds
+      : 0;
+    const finiteDuration = typeof duration === 'number' && Number.isFinite(duration) && duration > 0 ? duration : 0;
+    const finiteSeekEnd = typeof seekableEnd === 'number' && Number.isFinite(seekableEnd) && seekableEnd > start
+      ? seekableEnd
+      : 0;
+    const end = sourceDuration || finiteDuration || finiteSeekEnd;
     return { start, end, length: Math.max(0, end - start) };
-  }, [duration, seekableEnd, seekableStart]);
+  }, [duration, durationSeconds, seekableEnd, seekableStart]);
 
   const getPosition = useCallback(
     (clientX: number) => {
@@ -71,18 +77,18 @@ export function Timeline({ mediaItemId, episodeId, onSeek }: TimelineProps) {
 
   const seekFromPointer = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
-      if (!canSeek) return;
+      if (!canSeek && range.length <= 0) return;
       const position = getPosition(event.clientX);
       if (!position) return;
       setPreview({ visible: true, time: position.time, left: position.left });
       onSeek(position.time, event.nativeEvent);
     },
-    [canSeek, getPosition, onSeek],
+    [canSeek, getPosition, onSeek, range.length],
   );
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (!canSeek || range.length <= 0) return;
+      if ((!canSeek && range.length <= 0) || range.length <= 0) return;
 
       let target: number | null = null;
       if (event.key === 'ArrowLeft') target = Math.max(range.start, currentTime - 10);
@@ -100,10 +106,10 @@ export function Timeline({ mediaItemId, episodeId, onSeek }: TimelineProps) {
   const playedPercent = range.length > 0
     ? Math.max(0, Math.min(100, ((currentTime - range.start) / range.length) * 100))
     : 0;
-  const bufferedPercent = range.length > 0
+  const bufferedPercent = range.length > 0 && typeof bufferedEnd === 'number' && Number.isFinite(bufferedEnd)
     ? Math.max(playedPercent, Math.min(100, ((bufferedEnd - range.start) / range.length) * 100))
     : 0;
-  const disabled = !canSeek || range.length <= 0;
+  const disabled = range.length <= 0;
 
   return (
     <div
