@@ -105,6 +105,7 @@ export default function WatchPage() {
             ? `S${activeEpisode.season} · E${activeEpisode.episode}${activeEpisode.title ? ` · ${activeEpisode.title}` : ''}`
             : undefined
         }
+        season={activeEpisode?.season}
         startPositionSeconds={startPosition}
         fill
         onProgress={handleProgress}

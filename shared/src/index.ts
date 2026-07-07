@@ -515,3 +515,22 @@ export interface AdminInfoDTO {
   };
   errors: { name: string; message: string; since: string }[];
 }
+
+// ─── Playback markers (intro, recap, credits) ───────────────────────────────
+
+export type PlaybackMarkerType = 'INTRO' | 'RECAP' | 'CREDITS';
+
+export interface PlaybackMarkerDTO {
+  hasMarker: boolean;
+  type?: PlaybackMarkerType;
+  start?: number;
+  end?: number;
+  confidence?: number;
+}
+
+/** Trigger a re-analysis of a season for intro/recap detection. */
+export interface AnalyzeSeasonRequest {
+  mediaItemId: string;
+  season: number;
+  markerType?: PlaybackMarkerType;
+}

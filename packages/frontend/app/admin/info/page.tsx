@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { AdminInfoDTO } from '@flux/shared';
+import type { LibraryItemDTO } from '@flux/shared';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -43,6 +44,11 @@ export default function AdminInfoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Intro scan state
+  const [shows, setShows] = useState<LibraryItemDTO[]>([]);
+  const [scanMsg, setScanMsg] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+
   useEffect(() => {
     api.getAdminInfo().then(
       (data) => {
@@ -60,6 +66,44 @@ export default function AdminInfoPage() {
     }, 30_000);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch shows for intro scan dropdown
+  useEffect(() => {
+    api.listLibrary('SHOW').then(setShows).catch(() => {});
+  }, []);
+
+  async function handleScanAll() {
+    setScanning(true);
+    setScanMsg(null);
+    try {
+      const res = await api.scanAllIntros();
+      setScanMsg(`Queued intro detection for ${res.queued} seasons across ${res.shows} shows.`);
+    } catch (err: any) {
+      setScanMsg(err?.message ?? 'Scan failed.');
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function handleScanShow(mediaItemId: string, title: string) {
+    setScanning(true);
+    setScanMsg(null);
+    try {
+      const detail = await api.getMediaItem(mediaItemId);
+      const seasons = detail.episodes
+        ? [...new Set(detail.episodes.filter(e => e.available).map(e => e.season))]
+        : [];
+
+      for (const s of seasons) {
+        await api.analyzeIntro(mediaItemId, s);
+      }
+      setScanMsg(`Queued intro detection for "${title}" (${seasons.length} seasons).`);
+    } catch (err: any) {
+      setScanMsg(err?.message ?? 'Scan failed.');
+    } finally {
+      setScanning(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -642,6 +686,77 @@ export default function AdminInfoPage() {
           </div>
         </div>
       )}
+
+      {/* ── Media Tools ──────────────────────────────────────────────────── */}
+      <div className="card" style={{ padding: '22px 24px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            marginBottom: scanMsg ? 12 : 20,
+          }}
+        >
+          <IconFilm />
+          <h3
+            style={{
+              fontSize: '0.95rem',
+              fontWeight: 600,
+              margin: 0,
+              letterSpacing: '-0.01em',
+            }}
+          >
+            Intro Detection
+          </h3>
+        </div>
+
+        {scanMsg && (
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 14 }}>
+            {scanMsg}
+          </p>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <button
+            className="btn btn-primary"
+            onClick={handleScanAll}
+            disabled={scanning}
+            style={{ margin: 0 }}
+          >
+            {scanning ? 'Scanning…' : 'Scan All Shows'}
+          </button>
+
+          <select
+            className="input"
+            style={{ width: 220, margin: 0 }}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (!val) return;
+              const parts = val.split('|');
+              if (parts[0] && parts[1]) {
+                void handleScanShow(parts[0], parts[1]);
+              }
+              e.target.value = '';
+            }}
+            disabled={scanning}
+            defaultValue=""
+          >
+            <option value="" disabled>
+              {shows.length === 0 ? 'No shows in library' : 'Scan a specific show…'}
+            </option>
+            {shows.map((s) => (
+              <option key={s.id} value={`${s.id}|${s.title}`}>
+                {s.title}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: 12 }}>
+          Analyzes episode audio to detect recurring intro sequences. Runs in the background.
+          Results appear as a "Skip Intro" button during playback.
+        </p>
+      </div>
     </div>
   );
 }
