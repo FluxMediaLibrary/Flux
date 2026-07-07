@@ -2641,7 +2641,7 @@ media-player.fx-player .fx-timeline {
   z-index: 11;
 }
 
-/* the TimeSlider root */
+/* the seek slider root */
 media-player.fx-player .fx-seek {
   display: flex;
   align-items: center;
@@ -3063,7 +3063,12 @@ media-player.fx-player .fx-scrub-time {
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 0;
   pointer-events: none;
+  transition: opacity .18s var(--ease);
+}
+.fx-player .fx-spinner-wrap.is-visible {
+  opacity: 1;
 }
 .fx-player .fx-timeline {
   position: absolute;
@@ -3071,6 +3076,12 @@ media-player.fx-player .fx-scrub-time {
   right: 20px;
   bottom: 66px;
   z-index: 12;
+  cursor: pointer;
+  outline: none;
+}
+.fx-player .fx-timeline.is-disabled {
+  cursor: default;
+  opacity: .45;
 }
 .fx-player .fx-seek {
   display: flex;
@@ -3116,9 +3127,14 @@ media-player.fx-player .fx-scrub-time {
   transition: opacity .15s, box-shadow .15s;
 }
 .fx-player .fx-seek:hover .fx-seek-thumb,
+.fx-player .fx-timeline:focus-visible .fx-seek-thumb,
 .fx-player[data-seeking] .fx-seek .fx-seek-thumb {
   opacity: 1;
   box-shadow: 0 0 0 7px rgba(255,255,255,.16);
+}
+.fx-player .fx-timeline:focus-visible .fx-seek-track {
+  height: 7px;
+  box-shadow: 0 0 0 2px rgba(96,165,250,.42);
 }
 .fx-player .fx-seek-preview {
   position: absolute;

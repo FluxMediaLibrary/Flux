@@ -18,6 +18,10 @@ import {
 } from './icons';
 import { SettingsPanel } from './SettingsPanel';
 
+interface ControlBarProps {
+  onSeek: (time: number, trigger?: Event) => void;
+}
+
 function formatTime(value: number): string {
   if (!Number.isFinite(value) || value < 0) return '0:00';
   const hours = Math.floor(value / 3600);
@@ -27,7 +31,7 @@ function formatTime(value: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function ControlBar() {
+export function ControlBar({ onSeek }: ControlBarProps) {
   const remote = useMediaRemote();
   const paused = useMediaState('paused');
   const muted = useMediaState('muted');
@@ -56,11 +60,14 @@ export function ControlBar() {
   }, [remote, textTracks]);
 
   const seekBy = useCallback(
-    (delta: number) => {
-      const target = Math.max(0, Math.min(duration || 0, (currentTime || 0) + delta));
-      remote.seek(target);
+    (delta: number, trigger: Event) => {
+      const rawTarget = (Number.isFinite(currentTime) ? currentTime : 0) + delta;
+      const target = Number.isFinite(duration) && duration > 0
+        ? Math.max(0, Math.min(duration, rawTarget))
+        : Math.max(0, rawTarget);
+      onSeek(target, trigger);
     },
-    [currentTime, duration, remote],
+    [currentTime, duration, onSeek],
   );
 
   const changeVolume = useCallback(
@@ -86,10 +93,10 @@ export function ControlBar() {
           {paused ? <PlayIcon /> : <PauseIcon />}
         </button>
 
-        <button className="fx-btn" type="button" onClick={() => seekBy(-10)} aria-label="Back 10 seconds">
+        <button className="fx-btn" type="button" onClick={(event) => seekBy(-10, event.nativeEvent)} aria-label="Back 10 seconds">
           <SkipBackIcon />
         </button>
-        <button className="fx-btn" type="button" onClick={() => seekBy(10)} aria-label="Forward 10 seconds">
+        <button className="fx-btn" type="button" onClick={(event) => seekBy(10, event.nativeEvent)} aria-label="Forward 10 seconds">
           <SkipForwardIcon />
         </button>
 
