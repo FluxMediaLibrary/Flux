@@ -42,6 +42,8 @@ interface FluxPlayerProps {
   fill?: boolean;
   onProgress?: (positionSeconds: number, durationSeconds: number) => void;
   onBack?: () => void;
+  /** Fired when playback reaches ~85% — the watch page can preload next ep. */
+  onNearEnd?: () => void;
 }
 
 type Mode = 'direct' | 'hls';
@@ -64,6 +66,7 @@ export function FluxPlayer({
   fill = false,
   onProgress,
   onBack,
+  onNearEnd,
 }: FluxPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -78,6 +81,8 @@ export function FluxPlayer({
   // Server-probed source duration — used as the authoritative duration for
   // the seek bar when hls.js event playlists report video.duration = Infinity.
   const serverDurationRef = useRef<number | null>(null);
+  // Near-end preload gate — fires at most once per playback session.
+  const nearEndFiredRef = useRef(false);
 
   const [mode, setMode] = useState<Mode>('direct');
   const [decided, setDecided] = useState(false);
@@ -98,6 +103,55 @@ export function FluxPlayer({
   const [scrubLeft, setScrubLeft] = useState(0);
   const seekTrackRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // ── Debug overlay (Ctrl+Shift+D) ────────────────────────────────────────
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugDropped, setDebugDropped] = useState(0);
+  const debugTimer = useRef(0);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        setDebugOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Poll dropped frames every 2 s for the debug overlay.
+  useEffect(() => {
+    if (!debugOpen) return;
+    debugTimer.current = window.setInterval(() => {
+      const v = videoRef.current;
+      if (v?.getVideoPlaybackQuality) {
+        const q = v.getVideoPlaybackQuality();
+        setDebugDropped(q.droppedVideoFrames ?? 0);
+      }
+    }, 2000);
+    return () => clearInterval(debugTimer.current);
+  }, [debugOpen]);
+
+  const debugResolution = hlsRef.current?.levels
+    ? (() => {
+        const lvl = hlsRef.current.currentLevel === -1
+          ? hlsRef.current.autoLevelEnabled ? hlsRef.current.levels[hlsRef.current.loadLevel] : null
+          : hlsRef.current.levels[hlsRef.current.currentLevel];
+        return lvl ? `${lvl.width}x${lvl.height}` : 'Auto';
+      })()
+    : null;
+  const debugBitrate = hlsRef.current?.levels
+    ? (() => {
+        const idx = hlsRef.current.currentLevel === -1 ? hlsRef.current.loadLevel : hlsRef.current.currentLevel;
+        const lvl = hlsRef.current.levels[idx];
+        return lvl?.bitrate ? `${Math.round(lvl.bitrate / 1000)} kbps` : null;
+      })()
+    : null;
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [qualityLevel, setQualityLevel] = useState(-1); // -1 = Auto
+  const [audioTrackIdx, setAudioTrackIdx] = useState(-1);
+  const [subtitleTrackIdx, setSubtitleTrackIdx] = useState(-1);
 
   // ── Casting (Chromecast) ────────────────────────────────────────────────
   const cast = useCast();
@@ -227,10 +281,11 @@ export function FluxPlayer({
           enableWorker: true,
           lowLatencyMode: false,
           startPosition: 0, // start at the beginning, not the live edge
-          // Buffer generously so playback stays well behind the transcode edge;
-          // tight caps made it catch up and stall on longer titles.
-          maxBufferLength: 60,
-          maxMaxBufferLength: 600,
+          // Bitrate-aware buffering (Jellyfin pattern):
+          // High-bitrate streams (>25 Mbps) use a tighter buffer to avoid
+          // overwhelming the decoder. Lower bitrates get more runway.
+          maxBufferLength: 30,
+          maxMaxBufferLength: 30,
           manifestLoadingMaxRetry: 6,
           manifestLoadingRetryDelay: 1000,
           levelLoadingMaxRetry: 8,
@@ -324,8 +379,19 @@ export function FluxPlayer({
     };
     const onDuration = () => setDuration(video.duration || 0);
     const onTime = () => {
-      setCurrent(video.currentTime);
-      if (video.currentTime > 0) lastTimeRef.current = video.currentTime;
+      // Throttle React state updates to ~4 Hz (every 250ms) instead of every
+      // timeupdate event (~4-60 Hz depending on browser). The video element
+      // itself is rendered by the browser's compositor — only the UI overlay
+      // (seek bar, time display) needs the React re-render.
+      lastTimeRef.current = video.currentTime;
+      // Near-end detection: fire once at 85% for next-episode preloading.
+      const dur = Number.isFinite(video.duration) && video.duration > 0
+        ? video.duration
+        : serverDurationRef.current;
+      if (dur && video.currentTime / dur >= 0.85 && !nearEndFiredRef.current) {
+        nearEndFiredRef.current = true;
+        onNearEnd?.();
+      }
     };
     const onProg = () => {
       if (video.buffered.length) {
@@ -403,6 +469,17 @@ export function FluxPlayer({
       video.removeEventListener('error', onErr);
     };
   }, [mode, rate]);
+
+  // ── Throttled time display (250ms = ~4 Hz) ──────────────────────────────
+  // Reads lastTimeRef (updated on every timeupdate) and pushes to React state
+  // at a sustainable rate. The video compositor renders frames independently
+  // — only the overlay needs React re-renders.
+  useEffect(() => {
+    const t = setInterval(() => {
+      setCurrent(lastTimeRef.current);
+    }, 250);
+    return () => clearInterval(t);
+  }, []);
 
   // ── Periodic progress reporting ─────────────────────────────────────────
   // Save every 5s plus on the events browsers actually deliver reliably: pause,
@@ -754,8 +831,134 @@ export function FluxPlayer({
           <button className="vp-icon" onClick={toggleFullscreen} aria-label="Fullscreen">
             {fullscreen ? <FsExitIcon /> : <FsIcon />}
           </button>
+
+          {/* Settings gear + dropdown */}
+          <div className="vp-settings-wrap">
+            <button
+              className={`vp-icon${settingsOpen ? ' active' : ''}`}
+              onClick={() => setSettingsOpen((v) => !v)}
+              aria-label="Settings"
+            >
+              <GearIcon />
+            </button>
+            {settingsOpen && (
+              <div className="vp-settings-panel">
+                {/* Quality */}
+                <div className="vp-settings-section">
+                  <div className="vp-settings-label">Quality</div>
+                  <button
+                    className={`vp-settings-item${qualityLevel === -1 ? ' sel' : ''}`}
+                    onClick={() => {
+                      setQualityLevel(-1);
+                      if (hlsRef.current) hlsRef.current.currentLevel = -1;
+                    }}
+                  >
+                    Auto
+                    {qualityLevel === -1 && <span className="vp-settings-check">&#10003;</span>}
+                  </button>
+                  {hlsRef.current?.levels && hlsRef.current.levels.length > 0 &&
+                    hlsRef.current.levels.map((lvl: any, i: number) => (
+                      <button
+                        key={i}
+                        className={`vp-settings-item${qualityLevel === i ? ' sel' : ''}`}
+                        onClick={() => {
+                          setQualityLevel(i);
+                          if (hlsRef.current) hlsRef.current.currentLevel = i;
+                        }}
+                      >
+                        {lvl.height}p
+                        <span className="vp-settings-sub">
+                          {lvl.bitrate ? `${Math.round(lvl.bitrate / 1000)} kbps` : ''}
+                        </span>
+                        {qualityLevel === i && <span className="vp-settings-check">&#10003;</span>}
+                      </button>
+                    ))}
+                </div>
+
+                {/* Audio tracks (HLS only) */}
+                {hlsRef.current?.audioTracks && hlsRef.current.audioTracks.length > 1 && (
+                  <div className="vp-settings-section">
+                    <div className="vp-settings-label">Audio</div>
+                    {hlsRef.current.audioTracks.map((t: any, i: number) => (
+                      <button
+                        key={i}
+                        className={`vp-settings-item${audioTrackIdx === i ? ' sel' : ''}`}
+                        onClick={() => {
+                          setAudioTrackIdx(i);
+                          if (hlsRef.current) hlsRef.current.audioTrack = i;
+                        }}
+                      >
+                        {t.name || t.lang || `Track ${i + 1}`}
+                        {audioTrackIdx === i && <span className="vp-settings-check">&#10003;</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Subtitles (HLS only) */}
+                {hlsRef.current?.subtitleTracks && hlsRef.current.subtitleTracks.length > 0 && (
+                  <div className="vp-settings-section">
+                    <div className="vp-settings-label">Subtitles</div>
+                    <button
+                      className={`vp-settings-item${subtitleTrackIdx === -1 ? ' sel' : ''}`}
+                      onClick={() => {
+                        setSubtitleTrackIdx(-1);
+                        if (hlsRef.current) hlsRef.current.subtitleTrack = -1;
+                      }}
+                    >
+                      Off
+                      {subtitleTrackIdx === -1 && <span className="vp-settings-check">&#10003;</span>}
+                    </button>
+                    {hlsRef.current.subtitleTracks.map((t: any, i: number) => (
+                      <button
+                        key={i}
+                        className={`vp-settings-item${subtitleTrackIdx === i ? ' sel' : ''}`}
+                        onClick={() => {
+                          setSubtitleTrackIdx(i);
+                          if (hlsRef.current) hlsRef.current.subtitleTrack = i;
+                        }}
+                      >
+                        {t.name || t.lang || `Track ${i + 1}`}
+                        {subtitleTrackIdx === i && <span className="vp-settings-check">&#10003;</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Playback speed */}
+                <div className="vp-settings-section">
+                  <div className="vp-settings-label">Speed</div>
+                  {[0.5, 1, 1.25, 1.5, 2].map((s) => (
+                    <button
+                      key={s}
+                      className={`vp-settings-item${rate === s ? ' sel' : ''}`}
+                      onClick={() => {
+                        setRate(s);
+                        if (videoRef.current) videoRef.current.playbackRate = s;
+                      }}
+                    >
+                      {s === 1 ? 'Normal' : `${s}×`}
+                      {rate === s && <span className="vp-settings-check">&#10003;</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Debug overlay */}
+      {debugOpen && (
+        <div className="vp-debug">
+          <div className="vp-debug-row"><span>Method</span><span>{mode}{mode === 'hls' && hlsRef.current ? ' (ABR)' : ''}</span></div>
+          <div className="vp-debug-row"><span>Video</span><span>{videoRef.current?.videoWidth || '—'}×{videoRef.current?.videoHeight || '—'}</span></div>
+          {debugResolution && <div className="vp-debug-row"><span>Quality</span><span>{debugResolution}</span></div>}
+          {debugBitrate && <div className="vp-debug-row"><span>Bitrate</span><span>{debugBitrate}</span></div>}
+          <div className="vp-debug-row"><span>Buffer</span><span>{buffered.toFixed(1)}s</span></div>
+          <div className="vp-debug-row"><span>Dropped</span><span>{debugDropped}</span></div>
+        </div>
+      )}
     </div>
   );
 }
@@ -805,4 +1008,7 @@ const FsExitIcon = () => (
 );
 const BackIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={s()}><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+);
+const GearIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={s()}><circle cx="12" cy="12" r="3" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>
 );

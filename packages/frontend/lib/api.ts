@@ -14,6 +14,7 @@ import type {
   MediaItemDetailDTO,
   MediaType,
   NotificationSettingsDTO,
+  PlaybackInfoDTO,
   TmdbDetail,
   TmdbEpisode,
   ProfileDTO,
@@ -403,12 +404,7 @@ export const api = {
   /** Ask the server whether this file can be direct-played or needs HLS. */
   getPlaybackInfo(mediaItemId: string, episodeId?: string, signal?: AbortSignal) {
     const qs = episodeId ? `?episodeId=${encodeURIComponent(episodeId)}` : '';
-    return request<{
-      directPlay: boolean;
-      videoCodec: string | null;
-      audioCodec: string | null;
-      durationSeconds: number | null;
-    }>(`/api/stream/${encodeURIComponent(mediaItemId)}/info${qs}`, { signal });
+    return request<PlaybackInfoDTO>(`/api/stream/${encodeURIComponent(mediaItemId)}/info${qs}`, { signal });
   },
   getHlsUrl(mediaItemId: string, episodeId?: string): string {
     if (typeof window === 'undefined') return '';

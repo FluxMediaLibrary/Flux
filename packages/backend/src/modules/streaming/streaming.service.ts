@@ -124,14 +124,43 @@ export interface PlaybackDecision {
  */
 export async function decidePlayback(
   filePath: string,
+  mediaItemId?: string,
+  episodeId?: string,
 ): Promise<PlaybackDecision> {
+  // 1. Try DB-stored analysis first (sub-millisecond)
+  if (mediaItemId || episodeId) {
+    const mediaInfo = await prisma.mediaInfo.findUnique({
+      where: mediaItemId ? { mediaItemId } : { episodeId: episodeId! },
+    });
+
+    if (mediaInfo) {
+      const streams = await prisma.mediaStream.findMany({
+        where: mediaItemId ? { mediaItemId } : { episodeId: episodeId! },
+        orderBy: { index: 'asc' },
+      });
+
+      const videoStream = streams.find(s => s.type === 'video');
+      const audioStream = streams.find(s => s.type === 'audio');
+      const ext = path.extname(filePath).toLowerCase();
+      const containerOk = DIRECT_CONTAINERS.has(ext);
+      const videoOk = videoStream?.codec != null && DIRECT_VIDEO.has(videoStream.codec);
+      const audioOk = audioStream?.codec != null && DIRECT_AUDIO.has(audioStream.codec);
+
+      return {
+        directPlay: containerOk && videoOk && audioOk,
+        videoCodec: videoStream?.codec ?? null,
+        audioCodec: audioStream?.codec ?? null,
+        durationSeconds: mediaInfo.durationSec,
+      };
+    }
+  }
+
+  // 2. Fall back to live ffprobe (existing behavior)
   const probe = await probeMedia(filePath);
   const ext = path.extname(filePath).toLowerCase();
   const containerOk = DIRECT_CONTAINERS.has(ext);
   const videoOk = probe.videoCodec != null && DIRECT_VIDEO.has(probe.videoCodec);
-  // If we can't identify the audio codec, don't gamble — route to HLS.
-  const audioOk =
-    probe.audioCodec != null && DIRECT_AUDIO.has(probe.audioCodec);
+  const audioOk = probe.audioCodec != null && DIRECT_AUDIO.has(probe.audioCodec);
   return {
     directPlay: containerOk && videoOk && audioOk,
     videoCodec: probe.videoCodec,

@@ -101,6 +101,8 @@ model MediaItem {
   episodes      Episode[]
   watchProgress WatchProgress[]
   torrents      Torrent[]
+  mediaStreams  MediaStream[]
+  mediaInfo     MediaInfo?
 
   @@unique([tmdbId, type])
   @@index([type])
@@ -120,10 +122,60 @@ model Episode {
 
   mediaItem     MediaItem       @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
   watchProgress WatchProgress[]
+  mediaStreams  MediaStream[]
+  mediaInfo     MediaInfo?
 
   @@unique([mediaItemId, season, episode])
   @@index([mediaItemId])
   @@map("episodes")
+}
+
+model MediaStream {
+  id          String   @id @default(cuid())
+  mediaItemId String?
+  episodeId   String?
+  type        String   // "video" | "audio" | "subtitle"
+  index       Int      // stream index (0-based from ffprobe)
+  codec       String?  // h264, hevc, aac, dts, ass, etc.
+  profile     String?  // Main, High, High10, etc.
+  level       Int?
+  width       Int?     // video only
+  height      Int?     // video only
+  bitrate     Int?     // bits per second
+  framerate   Float?   // frames per second
+  hdr         String?  // "HDR10" | "DV" | "HLG" | null
+  channels    Int?     // audio only
+  language    String?  // eng, jpn, etc.
+  title       String?  // "Commentary", "Director's Cut", etc.
+  isDefault   Boolean  @default(false)
+  isForced    Boolean  @default(false)
+
+  mediaItem MediaItem? @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  episode   Episode?   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@index([mediaItemId])
+  @@index([episodeId])
+  @@map("media_streams")
+}
+
+model MediaInfo {
+  id            String   @id @default(cuid())
+  mediaItemId   String?  @unique
+  episodeId     String?  @unique
+  container     String   // mp4, mkv, avi, mov, webm
+  durationSec   Float    // duration in seconds (from ffprobe format.duration)
+  sizeBytes     BigInt   // file size in bytes
+  hasVideo      Boolean
+  hasAudio      Boolean
+  hasSubtitles  Boolean
+  analyzedAt    DateTime @default(now())
+
+  mediaItem MediaItem? @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  episode   Episode?   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@index([mediaItemId])
+  @@index([episodeId])
+  @@map("media_info")
 }
 
 // ─────────────────────────────────────────────────────────────
