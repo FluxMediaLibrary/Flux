@@ -231,6 +231,7 @@ function FluxPlayerChrome({
   const duration = useMediaState('duration');
   const paused = useMediaState('paused');
   const canPlay = useMediaState('canPlay');
+  const started = useMediaState('started');
   const waiting = useMediaState('waiting');
   const playing = useMediaState('playing');
   const remote = useMediaRemote();
@@ -238,6 +239,9 @@ function FluxPlayerChrome({
   const nearEndFiredRef = useRef(false);
   const autoplayAttemptedRef = useRef(false);
   const chromeRef = useRef<HTMLDivElement>(null);
+  const [idle, setIdle] = useState(false);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   const stableDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
     ? durationSeconds
     : typeof duration === 'number' && Number.isFinite(duration) && duration > 0
@@ -250,18 +254,14 @@ function FluxPlayerChrome({
 
       const hardMax = stableDuration > 0 ? stableDuration : Number.POSITIVE_INFINITY;
       const target = Math.max(0, Math.min(time, hardMax));
-      const player = playerRef.current;
 
       if (commit) {
-        if (player) {
-          player.currentTime = target;
-        }
         remote.seek(target, trigger);
       } else {
         remote.seeking(target, trigger);
       }
     },
-    [playerRef, remote, stableDuration],
+    [remote, stableDuration],
   );
 
   const togglePlayback = useCallback(
@@ -332,6 +332,45 @@ function FluxPlayerChrome({
     playerRef.current?.play().catch(() => {});
   }, [canPlay, paused, playerRef]);
 
+  /* Mouse idle tracking — hide controls after inactivity during playback */
+  useEffect(() => {
+    const root = chromeRef.current;
+    if (!root) return;
+
+    const IDLE_DELAY = 2600;
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const startTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        if (!pausedRef.current) setIdle(true);
+      }, IDLE_DELAY);
+    };
+
+    const wake = () => {
+      setIdle(false);
+      startTimer();
+    };
+
+    const handleLeave = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (!pausedRef.current) setIdle(true);
+    };
+
+    root.addEventListener('pointermove', wake);
+    root.addEventListener('pointerenter', wake);
+    root.addEventListener('pointerleave', handleLeave);
+
+    startTimer();
+
+    return () => {
+      root.removeEventListener('pointermove', wake);
+      root.removeEventListener('pointerenter', wake);
+      root.removeEventListener('pointerleave', handleLeave);
+      if (idleTimer) clearTimeout(idleTimer);
+    };
+  }, []);
+
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) => {
       if (!(target instanceof HTMLElement)) return false;
@@ -352,12 +391,15 @@ function FluxPlayerChrome({
 
       if (event.code === 'Space' || event.key === ' ') {
         event.preventDefault();
+        setIdle(false);
         togglePlayback(event);
       } else if (event.key === 'ArrowLeft') {
         event.preventDefault();
+        setIdle(false);
         seekTo(currentTime - 10, event);
       } else if (event.key === 'ArrowRight') {
         event.preventDefault();
+        setIdle(false);
         seekTo(currentTime + 10, event);
       }
     };
@@ -367,7 +409,7 @@ function FluxPlayerChrome({
   }, [currentTime, seekTo, togglePlayback]);
 
   return (
-    <div ref={chromeRef} className="fx-chrome">
+    <div ref={chromeRef} className={idle ? 'fx-chrome is-idle' : 'fx-chrome'}>
       <div className="fx-video-scrim" aria-hidden="true" />
       <button
         className="fx-click-layer"
@@ -376,7 +418,7 @@ function FluxPlayerChrome({
         onClick={(event) => togglePlayback(event.nativeEvent)}
       />
       <TitleOverlay title={title} subtitle={subtitle} onBack={onBack} />
-      <div className={waiting && !playing ? 'fx-spinner-wrap is-visible' : 'fx-spinner-wrap'}>
+      <div className={(!started || (waiting && !playing)) ? 'fx-spinner-wrap is-visible' : 'fx-spinner-wrap'}>
         <Spinner />
       </div>
       <Timeline
