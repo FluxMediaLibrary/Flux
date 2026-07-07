@@ -253,14 +253,21 @@ function FluxPlayerChrome({
 
       const hardMax = stableDuration > 0 ? stableDuration : Number.POSITIVE_INFINITY;
       const target = Math.max(0, Math.min(time, hardMax));
+      const player = playerRef.current;
 
       if (commit) {
+        if (player) {
+          player.currentTime = target;
+        }
         remote.seek(target, trigger);
       } else {
+        if (player) {
+          player.currentTime = target;
+        }
         remote.seeking(target, trigger);
       }
     },
-    [remote, stableDuration],
+    [playerRef, remote, stableDuration],
   );
 
   const togglePlayback = useCallback(
@@ -415,6 +422,7 @@ function FluxPlayerChrome({
         aria-label={paused ? 'Play' : 'Pause'}
         onClick={(event) => {
           event.stopPropagation();
+          event.nativeEvent.stopImmediatePropagation();
           togglePlayback();
         }}
       />
