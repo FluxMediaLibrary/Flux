@@ -66,6 +66,7 @@ export function buildAdaptiveHlsArgs(
   if (canCopy && tiers.length <= 1) {
     // Single-quality remux — simple case, no filter_complex needed.
     return [
+      '-fflags', '+genpts',
       '-i', sourceFile,
       '-map', '0:v:0', '-map', '0:a:0?',
       '-c:v', 'copy', '-c:a', 'copy',
@@ -101,6 +102,7 @@ export function buildAdaptiveHlsArgs(
   }
 
   const args: string[] = [
+    '-fflags', '+genpts',
     '-i', sourceFile,
     '-filter_complex', filterParts.join(';'),
   ];
