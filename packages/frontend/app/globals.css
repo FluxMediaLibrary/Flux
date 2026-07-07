@@ -2485,14 +2485,29 @@ table.data tr:last-child td {
 
 /* ── Flux Player (Vidstack-based) ─────────────────────────────────────────── */
 
+.fx-player-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 320px;
+  background: #000;
+}
+.fx-player-shell--fill {
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+}
+
 /* Container */
-.fx-player {
+media-player.fx-player {
   position: relative;
   overflow: hidden;
   background: #000;
   width: 100%;
 }
-.fx-player--fill {
+media-player.fx-player.fx-player--fill {
   width: 100%;
   height: 100%;
 }
@@ -2502,7 +2517,7 @@ media-player.fx-player[data-fullscreen] {
 }
 
 /* ── Top overlay ─────────────────────────────────────────────────────────── */
-.fx-top {
+media-player.fx-player .fx-top {
   position: absolute;
   top: 0; left: 0; right: 0;
   z-index: 10;
@@ -2516,10 +2531,6 @@ media-player.fx-player[data-fullscreen] {
   pointer-events: none;
 }
 /* Show top overlay when controls are visible or paused */
-media-player.fx-player .fx-top {
-  opacity: 1;
-  pointer-events: auto;
-}
 media-player.fx-player[data-paused] .fx-top,
 media-player.fx-player[data-controls] .fx-top,
 media-player.fx-player[data-focus] .fx-top,
@@ -2528,8 +2539,8 @@ media-player.fx-player[data-hocus] .fx-top {
   pointer-events: auto;
 }
 
-.fx-titlewrap { min-width: 0; flex: 1; }
-.fx-title {
+media-player.fx-player .fx-titlewrap { min-width: 0; flex: 1; }
+media-player.fx-player .fx-title {
   font-size: 1.05rem;
   font-weight: 600;
   color: #fff;
@@ -2537,10 +2548,11 @@ media-player.fx-player[data-hocus] .fx-top {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.fx-subtitle { font-size: 0.82rem; color: rgba(255,255,255,.75); }
+media-player.fx-player .fx-subtitle { font-size: 0.82rem; color: rgba(255,255,255,.75); }
 
 /* ── Buffering spinner ───────────────────────────────────────────────────── */
-.fx-spinner-wrap {
+media-player.fx-player .fx-spinner-wrap,
+.fx-player-shell .fx-spinner-wrap {
   position: absolute;
   inset: 0;
   display: flex;
@@ -2551,7 +2563,8 @@ media-player.fx-player[data-hocus] .fx-top {
 }
 
 /* ── Error overlay ───────────────────────────────────────────────────────── */
-.fx-error {
+media-player.fx-player .fx-error,
+.fx-player-shell .fx-error {
   position: absolute;
   inset: 0;
   display: flex;
@@ -2565,14 +2578,16 @@ media-player.fx-player[data-hocus] .fx-top {
   animation: fx-fade-in .3s var(--ease);
 }
 @keyframes fx-fade-in { from { opacity: 0; } to { opacity: 1; } }
-.fx-error-msg {
+media-player.fx-player .fx-error-msg,
+.fx-player-shell .fx-error-msg {
   max-width: 440px;
   color: var(--text);
   text-align: center;
   font-size: 0.95rem;
   margin: 0;
 }
-.fx-error-retry {
+media-player.fx-player .fx-error-retry,
+.fx-player-shell .fx-error-retry {
   padding: 8px 20px;
   border-radius: var(--radius-sm);
   background: var(--accent);
@@ -2582,10 +2597,11 @@ media-player.fx-player[data-hocus] .fx-top {
   cursor: pointer;
   transition: background .15s;
 }
-.fx-error-retry:hover { background: var(--accent-2); }
+media-player.fx-player .fx-error-retry:hover,
+.fx-player-shell .fx-error-retry:hover { background: var(--accent-2); }
 
 /* ── Debug overlay ──────────────────────────────────────────────────────── */
-.fx-debug {
+media-player.fx-player .fx-debug {
   position: absolute;
   top: 12px;
   left: 12px;
@@ -2603,22 +2619,22 @@ media-player.fx-player[data-hocus] .fx-top {
   pointer-events: none;
   user-select: none;
 }
-.fx-debug-row {
+media-player.fx-player .fx-debug-row {
   display: flex;
   justify-content: space-between;
   gap: 20px;
 }
-.fx-debug-row span:first-child {
+media-player.fx-player .fx-debug-row span:first-child {
   color: rgba(255,255,255,.45);
   flex-shrink: 0;
 }
-.fx-debug-row span:last-child {
+media-player.fx-player .fx-debug-row span:last-child {
   text-align: right;
   font-weight: 500;
 }
 
 /* ── Timeline / seek bar ─────────────────────────────────────────────────── */
-.fx-timeline {
+media-player.fx-player .fx-timeline {
   position: absolute;
   bottom: 56px; /* sits above control bar */
   left: 20px; right: 20px;
@@ -2626,7 +2642,7 @@ media-player.fx-player[data-hocus] .fx-top {
 }
 
 /* the TimeSlider root */
-.fx-seek {
+media-player.fx-player .fx-seek {
   display: flex;
   align-items: center;
   height: 20px;
@@ -2635,7 +2651,7 @@ media-player.fx-player[data-hocus] .fx-top {
 }
 
 /* track background */
-.fx-seek-track {
+media-player.fx-player .fx-seek-track {
   position: relative;
   width: 100%;
   height: 5px;
@@ -2643,11 +2659,11 @@ media-player.fx-player[data-hocus] .fx-top {
   border-radius: 3px;
   transition: height .15s var(--ease);
 }
-.fx-seek:hover .fx-seek-track,
+media-player.fx-player .fx-seek:hover .fx-seek-track,
 media-player.fx-player[data-seeking] .fx-seek .fx-seek-track { height: 7px; }
 
 /* buffered portion */
-.fx-seek-buffered {
+media-player.fx-player .fx-seek-buffered {
   position: absolute;
   top: 0; left: 0;
   height: 100%;
@@ -2656,7 +2672,7 @@ media-player.fx-player[data-seeking] .fx-seek .fx-seek-track { height: 7px; }
 }
 
 /* played portion */
-.fx-seek-played {
+media-player.fx-player .fx-seek-played {
   position: absolute;
   top: 0; left: 0;
   height: 100%;
@@ -2665,7 +2681,7 @@ media-player.fx-player[data-seeking] .fx-seek .fx-seek-track { height: 7px; }
 }
 
 /* scrubber thumb */
-.fx-seek-thumb {
+media-player.fx-player .fx-seek-thumb {
   position: absolute;
   top: 50%;
   width: 14px;
@@ -2677,14 +2693,14 @@ media-player.fx-player[data-seeking] .fx-seek .fx-seek-track { height: 7px; }
   transition: opacity .15s, box-shadow .15s;
   box-shadow: 0 0 0 0 rgba(255,255,255,.3);
 }
-.fx-seek:hover .fx-seek-thumb,
+media-player.fx-player .fx-seek:hover .fx-seek-thumb,
 media-player.fx-player[data-seeking] .fx-seek .fx-seek-thumb {
   opacity: 1;
   box-shadow: 0 0 0 6px rgba(255,255,255,.18);
 }
 
 /* hover time preview */
-.fx-seek-preview {
+media-player.fx-player .fx-seek-preview {
   position: absolute;
   bottom: 24px;
   transform: translateX(-50%);
@@ -2692,10 +2708,10 @@ media-player.fx-player[data-seeking] .fx-seek .fx-seek-thumb {
   opacity: 0;
   transition: opacity .12s;
 }
-.fx-seek:hover .fx-seek-preview,
+media-player.fx-player .fx-seek:hover .fx-seek-preview,
 media-player.fx-player[data-seeking] .fx-seek .fx-seek-preview { opacity: 1; }
 
-.fx-seek-preview-time {
+media-player.fx-player .fx-seek-preview-time {
   padding: 3px 8px;
   border-radius: 4px;
   background: rgba(0,0,0,.78);
@@ -2706,7 +2722,7 @@ media-player.fx-player[data-seeking] .fx-seek .fx-seek-preview { opacity: 1; }
 }
 
 /* ── Bottom control bar ──────────────────────────────────────────────────── */
-.fx-controls {
+media-player.fx-player .fx-controls {
   position: absolute;
   bottom: 0; left: 0; right: 0;
   z-index: 10;
@@ -2716,9 +2732,6 @@ media-player.fx-player[data-seeking] .fx-seek .fx-seek-preview { opacity: 1; }
   transition: opacity .25s var(--ease);
 }
 /* Show controls on pause, focus, hover, or when controls are active */
-media-player.fx-player .fx-controls {
-  opacity: 1;
-}
 media-player.fx-player[data-paused] .fx-controls,
 media-player.fx-player[data-controls] .fx-controls,
 media-player.fx-player[data-focus] .fx-controls,
@@ -2726,14 +2739,14 @@ media-player.fx-player[data-hocus] .fx-controls {
   opacity: 1;
 }
 
-.fx-row {
+media-player.fx-player .fx-row {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
 /* Icon button */
-.fx-btn {
+media-player.fx-player .fx-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2747,16 +2760,20 @@ media-player.fx-player[data-hocus] .fx-controls {
   transition: background .15s, transform .12s;
   flex-shrink: 0;
 }
-.fx-btn:hover { background: rgba(255,255,255,.14); }
-.fx-btn:active { transform: scale(.92); }
-.fx-btn.active { color: var(--accent); }
+media-player.fx-player .fx-btn:hover { background: rgba(255,255,255,.14); }
+media-player.fx-player .fx-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+media-player.fx-player .fx-btn:active { transform: scale(.92); }
+media-player.fx-player .fx-btn.active { color: var(--accent); }
 
 /* Volume control */
-.fx-vol {
+media-player.fx-player .fx-vol {
   display: flex;
   align-items: center;
 }
-.fx-vol-slider {
+media-player.fx-player .fx-vol-slider {
   width: 0;
   opacity: 0;
   height: 4px;
@@ -2769,7 +2786,7 @@ media-player.fx-player[data-hocus] .fx-controls {
   margin: 0;
   accent-color: var(--accent);
 }
-.fx-vol-slider::-webkit-slider-thumb {
+media-player.fx-player .fx-vol-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 12px;
   height: 12px;
@@ -2777,15 +2794,15 @@ media-player.fx-player[data-hocus] .fx-controls {
   background: #fff;
   cursor: pointer;
 }
-.fx-vol:hover .fx-vol-slider,
-.fx-vol:focus-within .fx-vol-slider {
+media-player.fx-player .fx-vol:hover .fx-vol-slider,
+media-player.fx-player .fx-vol:focus-within .fx-vol-slider {
   width: 80px;
   opacity: 1;
   margin: 0 6px;
 }
 
 /* Time display */
-.fx-time {
+media-player.fx-player .fx-time {
   font-size: 0.82rem;
   color: rgba(255,255,255,.9);
   font-variant-numeric: tabular-nums;
@@ -2793,17 +2810,17 @@ media-player.fx-player[data-hocus] .fx-controls {
   margin-left: 8px;
   user-select: none;
 }
-.fx-time-sep { color: rgba(255,255,255,.5); margin: 0 2px; }
+media-player.fx-player .fx-time-sep { color: rgba(255,255,255,.5); margin: 0 2px; }
 
-.fx-spacer { flex: 1; }
+media-player.fx-player .fx-spacer { flex: 1; }
 
 /* Settings wrap */
-.fx-settings-wrap {
+media-player.fx-player .fx-settings-wrap {
   position: relative;
 }
 
 /* ── Settings panel ──────────────────────────────────────────────────────── */
-.fx-settings-panel {
+media-player.fx-player .fx-settings-panel {
   position: absolute;
   bottom: 44px;
   right: 0;
@@ -2819,15 +2836,15 @@ media-player.fx-player[data-hocus] .fx-controls {
   z-index: 20;
   animation: fx-fade-in .15s var(--ease);
 }
-.fx-settings-panel::-webkit-scrollbar { display: none; }
+media-player.fx-player .fx-settings-panel::-webkit-scrollbar { display: none; }
 
-.fx-settings-section {
+media-player.fx-player .fx-settings-section {
   border-bottom: 1px solid rgba(255,255,255,.06);
   padding: 4px 0;
 }
-.fx-settings-section:last-child { border-bottom: none; }
+media-player.fx-player .fx-settings-section:last-child { border-bottom: none; }
 
-.fx-settings-label {
+media-player.fx-player .fx-settings-label {
   padding: 6px 14px;
   font-size: 0.72rem;
   font-weight: 600;
@@ -2836,7 +2853,7 @@ media-player.fx-player[data-hocus] .fx-controls {
   color: rgba(255,255,255,.5);
 }
 
-.fx-settings-item {
+media-player.fx-player .fx-settings-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2850,35 +2867,37 @@ media-player.fx-player[data-hocus] .fx-controls {
   text-align: left;
   transition: background .1s;
 }
-.fx-settings-item:hover { background: rgba(255,255,255,.08); }
-.fx-settings-item.sel { color: var(--accent); }
+media-player.fx-player .fx-settings-item:hover { background: rgba(255,255,255,.08); }
+media-player.fx-player .fx-settings-item.sel { color: var(--accent); }
 
-.fx-settings-sub {
+media-player.fx-player .fx-settings-sub {
   font-size: 0.75rem;
   color: rgba(255,255,255,.4);
   margin-left: 8px;
 }
 
-.fx-settings-check {
+media-player.fx-player .fx-settings-check {
   margin-left: 8px;
   font-size: 0.85rem;
 }
 
 /* ── Reduced motion ──────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .fx-top, .fx-controls, .fx-seek-track { transition: none; }
+  media-player.fx-player .fx-top,
+  media-player.fx-player .fx-controls,
+  media-player.fx-player .fx-seek-track { transition: none; }
 }
 
 /* ── Mobile tweaks ───────────────────────────────────────────────────────── */
 @media (max-width: 560px) {
-  .fx-time { font-size: 0.76rem; }
-  .fx-btn { width: 34px; height: 34px; }
-  .fx-timeline { left: 10px; right: 10px; }
-  .fx-controls { padding: 14px 8px 10px; }
+  media-player.fx-player .fx-time { font-size: 0.76rem; }
+  media-player.fx-player .fx-btn { width: 34px; height: 34px; }
+  media-player.fx-player .fx-timeline { left: 10px; right: 10px; }
+  media-player.fx-player .fx-controls { padding: 14px 8px 10px; }
 }
 
 /* ── Skip button (intro / recap / credits) ──────────────────────────────── */
-.fx-skip-btn {
+media-player.fx-player .fx-skip-btn {
   position: absolute;
   bottom: 80px;
   right: 20px;
@@ -2895,13 +2914,13 @@ media-player.fx-player[data-hocus] .fx-controls {
   transition: background .15s, border-color .15s;
   animation: fx-fade-in .2s var(--ease);
 }
-.fx-skip-btn:hover {
+media-player.fx-player .fx-skip-btn:hover {
   background: rgba(255,255,255,.12);
   border-color: rgba(255,255,255,.45);
 }
 
 /* ── Chapter markers ────────────────────────────────────────────────────── */
-.fx-chapter-marker {
+media-player.fx-player .fx-chapter-marker {
   position: absolute;
   top: 50%;
   width: 3px;
@@ -2913,20 +2932,20 @@ media-player.fx-player[data-hocus] .fx-controls {
   z-index: 2;
   transition: height .12s, background .12s;
 }
-.fx-chapter-marker:hover {
+media-player.fx-player .fx-chapter-marker:hover {
   background: #fff;
   height: 16px;
 }
 
 /* ── Scrub preview (thumbnail on timeline hover) ────────────────────────── */
-.fx-scrub-preview {
+media-player.fx-player .fx-scrub-preview {
   position: absolute;
   bottom: 48px;
   z-index: 12;
   pointer-events: none;
   transform: translateX(-50%);
 }
-.fx-scrub-thumb {
+media-player.fx-player .fx-scrub-thumb {
   width: 160px;
   height: 90px;
   border-radius: 4px;
@@ -2934,7 +2953,7 @@ media-player.fx-player[data-hocus] .fx-controls {
   background-repeat: no-repeat;
   box-shadow: 0 4px 16px rgba(0,0,0,.5);
 }
-.fx-scrub-time {
+media-player.fx-player .fx-scrub-time {
   display: block;
   text-align: center;
   margin-top: 4px;

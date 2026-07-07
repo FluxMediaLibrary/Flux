@@ -15,7 +15,7 @@ export function ErrorOverlay({ message, onRetry, children }: ErrorOverlayProps) 
     <div className="fx-error">
       <p className="fx-error-msg">{message}</p>
       {onRetry && (
-        <button className="fx-error-retry" onClick={onRetry}>
+        <button className="fx-error-retry" type="button" onClick={onRetry}>
           Retry
         </button>
       )}

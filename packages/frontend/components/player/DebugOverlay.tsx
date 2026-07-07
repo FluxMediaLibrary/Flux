@@ -1,202 +1,101 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMediaStore } from '@vidstack/react';
+import { useMediaState } from '@vidstack/react';
 
 interface DebugOverlayProps {
   open: boolean;
-  mediaItemId: string;
-  episodeId?: string;
-  /** Playback method from the initial getPlaybackInfo call */
-  playbackMethod?: 'direct' | 'hls';
+  playbackMethod: string;
   videoCodec?: string | null;
   audioCodec?: string | null;
   durationSeconds?: number | null;
 }
 
-const fmt = (t: number): string => {
-  if (!Number.isFinite(t) || t < 0) return '0:00';
-  const h = Math.floor(t / 3600);
-  const m = Math.floor((t % 3600) / 60);
-  const s = Math.floor(t % 60);
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  return `${m}:${String(s).padStart(2, '0')}`;
-};
+function formatTime(value: number | null | undefined): string {
+  if (!value || !Number.isFinite(value) || value < 0) return '-';
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  const seconds = Math.floor(value % 60);
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
 
-/**
- * Debug overlay showing live playback statistics.
- * Toggled via Ctrl+Shift+D — the parent player manages the keyboard listener
- * and passes `open` / `onToggle` props.
- *
- * Non-interactive overlay (pointer-events: none) positioned in the top-left.
- */
+function getBufferedEnd(buffered: unknown): number | null {
+  if (!buffered || typeof buffered !== 'object' || !('length' in buffered) || !('end' in buffered)) return null;
+  const range = buffered as { length: number; end: (index: number) => number };
+  if (range.length <= 0) return null;
+  try {
+    return range.end(range.length - 1);
+  } catch {
+    return null;
+  }
+}
+
 export function DebugOverlay({
   open,
-  mediaItemId,
-  episodeId,
   playbackMethod,
   videoCodec,
   audioCodec,
   durationSeconds,
 }: DebugOverlayProps) {
-  // ── Vidstack state ─────────────────────────────────────────────────────────
-  const mediaState = useMediaStore();
-
-  const {
-    paused,
-    duration,
-    currentTime,
-    volume,
-    qualities,
-    audioTrack,
-    textTrack,
-    streamType,
-    playbackRate,
-    buffered,
-  } = mediaState;
-
-  // ── Dropped frames & FPS polling ──────────────────────────────────────────
-  const [droppedFrames, setDroppedFrames] = useState(0);
-  const [currentFps, setCurrentFps] = useState(0);
+  const currentTime = useMediaState('currentTime');
+  const duration = useMediaState('duration');
+  const playbackRate = useMediaState('playbackRate');
+  const streamType = useMediaState('streamType');
+  const qualities = useMediaState('qualities');
+  const audioTrack = useMediaState('audioTrack');
+  const textTracks = useMediaState('textTracks');
+  const buffered = useMediaState('buffered');
+  const [frames, setFrames] = useState({ dropped: 0, fps: 0 });
 
   useEffect(() => {
     if (!open) return;
-    let startTime = performance.now();
-    let startFrames = 0;
 
-    const interval = setInterval(() => {
-      const videoEl = document.querySelector(
-        'media-player video',
-      ) as HTMLVideoElement | null;
-      if (videoEl?.getVideoPlaybackQuality) {
-        const q = videoEl.getVideoPlaybackQuality();
-        setDroppedFrames(q.droppedVideoFrames ?? 0);
+    let lastTime = performance.now();
+    let lastFrames = 0;
+    const interval = window.setInterval(() => {
+      const video = document.querySelector('media-player.fx-player video') as HTMLVideoElement | null;
+      const quality = video?.getVideoPlaybackQuality?.();
+      if (!quality) return;
 
-        const now = performance.now();
-        const elapsed = (now - startTime) / 1000;
-        const totalFrames = q.totalVideoFrames ?? 0;
-        if (elapsed > 1 && totalFrames > startFrames) {
-          setCurrentFps(Math.round((totalFrames - startFrames) / elapsed));
-          startTime = now;
-          startFrames = totalFrames;
-        }
-      }
-    }, 2000);
+      const now = performance.now();
+      const elapsed = (now - lastTime) / 1000;
+      const totalFrames = quality.totalVideoFrames ?? 0;
+      const fps = elapsed > 0 && totalFrames >= lastFrames ? Math.round((totalFrames - lastFrames) / elapsed) : 0;
+      setFrames({ dropped: quality.droppedVideoFrames ?? 0, fps });
+      lastTime = now;
+      lastFrames = totalFrames;
+    }, 1000);
 
-    return () => clearInterval(interval);
+    return () => window.clearInterval(interval);
   }, [open]);
 
   if (!open) return null;
 
-  // ── Derived stats ─────────────────────────────────────────────────────────
+  const qualityList = qualities ? Array.from({ length: qualities.length }, (_, index) => qualities[index]) : [];
+  const selectedQuality = qualityList.find((quality) => quality?.selected);
+  const subtitleList = textTracks ? Array.from({ length: textTracks.length }, (_, index) => textTracks[index]) : [];
+  const subtitle = subtitleList.find((track) => track?.mode === 'showing');
+  const bufferEnd = getBufferedEnd(buffered);
 
-  // Current quality (width, height, bitrate) from qualities array
-  let qualityLabel = '—';
-  let bitrateLabel = '—';
-  let resWidth = 0;
-  let resHeight = 0;
+  const audioLabel =
+    audioTrack?.label || audioTrack?.language || audioCodec || '-';
+  const qualityLabel = selectedQuality
+    ? `${selectedQuality.height ?? '-'}p / ${selectedQuality.bitrate ? `${Math.round(selectedQuality.bitrate / 1000)} kbps` : 'auto'}`
+    : 'Auto';
 
-  if (qualities) {
-    const arr = Array.from(qualities as Iterable<unknown>) as Array<{
-      selected?: boolean;
-      width?: number;
-      height?: number;
-      bitrate?: number;
-    }>;
-    const selected = arr.find((q) => q.selected);
-    if (selected) {
-      resWidth = selected.width ?? 0;
-      resHeight = selected.height ?? 0;
-      qualityLabel = resHeight > 0 ? `${resHeight}p` : '—';
-      bitrateLabel = selected.bitrate
-        ? `${Math.round(selected.bitrate / 1000)} kbps`
-        : '—';
-    }
-  }
-
-  // Audio track name
-  const audioTrackName =
-    ((audioTrack as { name?: string; lang?: string } | null)?.name) ??
-    ((audioTrack as { lang?: string } | null)?.lang) ??
-    '—';
-
-  // Subtitle status
-  const subtitleStatus =
-    (textTrack as { mode?: string; label?: string } | null)?.mode === 'showing'
-      ? ((textTrack as { label?: string } | null)?.label ?? 'On')
-      : 'Off';
-
-  // Buffer end time
-  let bufferedEnd: number | null = null;
-  if (
-    buffered &&
-    typeof buffered === 'object' &&
-    'length' in buffered
-  ) {
-    const len = (buffered as { length: number; end: (i: number) => number }).length;
-    if (len > 0) {
-      bufferedEnd = (buffered as { end: (i: number) => number }).end(len - 1);
-    }
-  }
-
-  const formatTime = (t: number | null | undefined) =>
-    t != null && t > 0 ? fmt(t) : '—';
-
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="fx-debug">
-      <div className="fx-debug-row">
-        <span>Method</span>
-        <span>
-          {playbackMethod ?? '—'}
-          {streamType === 'on-demand' ? '' : streamType ? ` (${streamType})` : ''}
-        </span>
-      </div>
-      <div className="fx-debug-row">
-        <span>Video</span>
-        <span>
-          {videoCodec ?? '—'}
-          {resWidth > 0 && resHeight > 0 ? ` · ${resWidth}×${resHeight}` : ''}
-        </span>
-      </div>
-      <div className="fx-debug-row">
-        <span>Audio</span>
-        <span>
-          {audioCodec ?? '—'} · {audioTrackName}
-        </span>
-      </div>
-      <div className="fx-debug-row">
-        <span>Quality</span>
-        <span>
-          {qualityLabel} · {bitrateLabel}
-        </span>
-      </div>
-      <div className="fx-debug-row">
-        <span>Buffer</span>
-        <span>{bufferedEnd != null ? `${bufferedEnd.toFixed(1)}s` : '—'}</span>
-      </div>
-      <div className="fx-debug-row">
-        <span>Dropped</span>
-        <span>{droppedFrames}</span>
-      </div>
-      <div className="fx-debug-row">
-        <span>FPS</span>
-        <span>{currentFps || '—'}</span>
-      </div>
-      <div className="fx-debug-row">
-        <span>Subtitle</span>
-        <span>{subtitleStatus}</span>
-      </div>
-      <div className="fx-debug-row">
-        <span>Speed</span>
-        <span>{playbackRate ?? 1}×</span>
-      </div>
-      <div className="fx-debug-row">
-        <span>Time</span>
-        <span>
-          {formatTime(currentTime)} / {formatTime(duration)}
-        </span>
-      </div>
+    <div className="fx-debug" aria-label="Playback debug stats">
+      <div className="fx-debug-row"><span>Method</span><span>{playbackMethod}{streamType ? ` / ${streamType}` : ''}</span></div>
+      <div className="fx-debug-row"><span>Video</span><span>{videoCodec ?? '-'}</span></div>
+      <div className="fx-debug-row"><span>Quality</span><span>{qualityLabel}</span></div>
+      <div className="fx-debug-row"><span>Audio</span><span>{audioLabel}</span></div>
+      <div className="fx-debug-row"><span>Buffer</span><span>{bufferEnd != null ? `${Math.max(0, bufferEnd - currentTime).toFixed(1)}s` : '-'}</span></div>
+      <div className="fx-debug-row"><span>Dropped</span><span>{frames.dropped}</span></div>
+      <div className="fx-debug-row"><span>FPS</span><span>{frames.fps || '-'}</span></div>
+      <div className="fx-debug-row"><span>Subtitle</span><span>{subtitle?.label || subtitle?.language || 'Off'}</span></div>
+      <div className="fx-debug-row"><span>Speed</span><span>{playbackRate}x</span></div>
+      <div className="fx-debug-row"><span>Time</span><span>{formatTime(currentTime)} / {formatTime(duration || durationSeconds)}</span></div>
     </div>
   );
 }

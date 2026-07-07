@@ -3,9 +3,5 @@
  * Uses the project's global `.spinner` class for consistent styling.
  */
 export function Spinner() {
-  return (
-    <div className="fx-spinner-wrap">
-      <div className="spinner" />
-    </div>
-  );
+  return <div className="spinner" aria-label="Loading" />;
 }
