@@ -88,6 +88,7 @@ export function FluxPlayer({
   const [rate, setRate] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const scrubbingRef = useRef(false);
   const [scrubbing, setScrubbing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -460,17 +461,6 @@ export function FluxPlayer({
     revealControls();
   }, [cast.connected, cast.currentTime, cast.duration, revealControls]);
 
-  const seekTo = useCallback((frac: number) => {
-    const clamped = Math.min(Math.max(0, frac), 1);
-    if (cast.connected) {
-      if (cast.duration) castSeek(clamped * cast.duration);
-      return;
-    }
-    const v = videoRef.current;
-    if (!v || !v.duration) return;
-    v.currentTime = clamped * v.duration;
-  }, [cast.connected, cast.duration]);
-
   const toggleMute = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -499,21 +489,31 @@ export function FluxPlayer({
   // ── Seek bar scrubbing ──────────────────────────────────────────────────
   const seekFromPointer = useCallback((clientX: number, el: HTMLElement) => {
     const rect = el.getBoundingClientRect();
-    seekTo((clientX - rect.left) / rect.width);
-  }, [seekTo]);
+    const frac = (clientX - rect.left) / rect.width;
+    const clamped = Math.min(Math.max(0, frac), 1);
+    if (cast.connected) {
+      if (cast.duration) castSeek(clamped * cast.duration);
+      return;
+    }
+    const v = videoRef.current;
+    if (!v || !v.duration) return;
+    v.currentTime = clamped * v.duration;
+  }, [cast.connected, cast.duration]);
 
   const onSeekDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
+    scrubbingRef.current = true;
     setScrubbing(true);
     seekFromPointer(e.clientX, e.currentTarget);
   }, [seekFromPointer]);
 
   const onSeekMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!scrubbing) return;
+    if (!scrubbingRef.current) return;
     seekFromPointer(e.clientX, e.currentTarget);
-  }, [scrubbing, seekFromPointer]);
+  }, [seekFromPointer]);
 
   const onSeekUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    scrubbingRef.current = false;
     setScrubbing(false);
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   }, []);
