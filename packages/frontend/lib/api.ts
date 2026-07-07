@@ -437,15 +437,15 @@ export const api = {
   /** Admin: enqueue intro detection for a specific season of a show. */
   analyzeIntro(mediaItemId: string, season: number) {
     return request<{ queued: boolean }>(
-      `/api/library/items/${encodeURIComponent(mediaItemId)}/analyze-intro`,
-      { method: 'POST', body: { season } },
+      '/api/admin/analyze-intro',
+      { method: 'POST', body: { mediaItemId, season } },
     );
   },
 
   /** Admin: scan all shows for intros. */
   scanAllIntros() {
     return request<{ queued: number; shows: number }>(
-      '/api/library/scan-all-intros',
+      '/api/admin/scan-all-intros',
       { method: 'POST' },
     );
   },

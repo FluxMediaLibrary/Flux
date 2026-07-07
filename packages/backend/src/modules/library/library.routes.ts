@@ -8,7 +8,6 @@
  */
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { prisma } from '../../lib/db.js';
 import {
   getHomepage,
   getMediaItemDetail,
@@ -16,7 +15,6 @@ import {
   saveProgress,
   getPlaybackMarker,
 } from './library.service.js';
-import { introDetectionQueue } from '../../jobs/queues.js';
 
 const listQuerySchema = z.object({
   type: z.enum(['movie', 'tv', 'show', 'all']).optional().default('all'),
@@ -85,52 +83,5 @@ export const libraryRoutes: FastifyPluginAsync = async (
     const { id } = request.params as { id: string };
     const { season } = introQuerySchema.parse(request.query);
     return getPlaybackMarker(id, season);
-  });
-
-  // ── Manual re-analysis trigger (admin-only inside the library prefix) ─────
-  // Since /items/:id/intro doesn't require admin, we add a separate route that
-  // does. The requireProfile guard is already on; for admin-only we could add a
-  // separate guard, but for simplicity this is exposed under /api/library with
-  // profile requirement. Admin-only enforcement happens at the route caller level
-  // (only admin UI surfaces the button).
-  app.post('/items/:id/analyze-intro', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { season } = introQuerySchema.parse(request.body ?? {});
-    
-    await introDetectionQueue.add(
-      'intro-detection',
-      { mediaItemId: id, season },
-      { jobId: `intro-${id}-s${season}` },
-    );
-
-    return reply.status(202).send({ queued: true, mediaItemId: id, season });
-  });
-
-  // ── Scan all shows for intros (admin action) ──────────────────────────────
-
-  app.post('/scan-all-intros', async (request, reply) => {
-    const shows = await prisma.mediaItem.findMany({
-      where: { type: 'SHOW' },
-      select: { id: true, title: true },
-    });
-
-    let queued = 0;
-    for (const show of shows) {
-      const seasons = await prisma.episode.groupBy({
-        by: ['season'],
-        where: { mediaItemId: show.id, filePath: { not: null } },
-      });
-
-      for (const { season } of seasons) {
-        await introDetectionQueue.add(
-          'intro-detection',
-          { mediaItemId: show.id, season },
-          { jobId: `intro-${show.id}-s${season}` },
-        );
-        queued++;
-      }
-    }
-
-    return reply.status(202).send({ queued, shows: shows.length });
   });
 }
