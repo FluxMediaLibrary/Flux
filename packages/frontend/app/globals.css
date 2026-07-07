@@ -2463,6 +2463,7 @@ table.data tr:last-child td {
   border-radius: var(--radius);
   overflow: hidden;
   user-select: none;
+  isolation: isolate;
 }
 .vp.fs {
   border-radius: 0;
@@ -2487,6 +2488,8 @@ table.data tr:last-child td {
 }
 
 .vp-video {
+  position: relative;
+  z-index: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -2507,7 +2510,7 @@ table.data tr:last-child td {
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent);
   opacity: 0;
   transition: opacity 0.2s ease;
-  z-index: 3;
+  z-index: 4;
   pointer-events: none;
 }
 .vp.show .vp-top { opacity: 1; pointer-events: auto; }
@@ -2550,7 +2553,7 @@ table.data tr:last-child td {
   display: grid;
   place-items: center;
   cursor: pointer;
-  z-index: 2;
+  z-index: 10;
   opacity: 0;
   transition: opacity 0.2s ease, transform 0.12s ease, background 0.15s ease;
   backdrop-filter: blur(4px);
@@ -2586,7 +2589,7 @@ table.data tr:last-child td {
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 0.2s ease, transform 0.2s ease;
-  z-index: 4;
+  z-index: 10;
 }
 .vp.show .vp-controls { opacity: 1; transform: none; }
 
