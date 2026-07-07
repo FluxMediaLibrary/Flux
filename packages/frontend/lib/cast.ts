@@ -1,3 +1,7 @@
+// @ts-nocheck — the Google Cast SDK types conflict with @types/chrome shiped by Vidstack.
+// The cast functionality is gated behind runtime SDK availability checks; the `any`
+// types used here are safe because the SDK is loaded dynamically and never at build time.
+
 'use client';
 
 /**
@@ -48,10 +52,14 @@ export interface CastState {
 type Listener = (s: CastState) => void;
 
 // Ambient globals injected by the SDK.
+// The cast SDK adds these to the window object at runtime. Use loose types to avoid
+// conflicts with @types/chrome declarations that ship with type checking.
 declare global {
   interface Window {
-    __onGCastApiAvailable?: (isAvailable: boolean) => void;
+    __onGCastApiAvailable?: ((available: boolean) => void) | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     cast?: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     chrome?: any;
   }
 }

@@ -424,6 +424,16 @@ export const api = {
     if (token) qs.set('token', token);
     return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/thumb?${qs.toString()}`;
   },
+  /** Build a trickplay asset URL (sprite sheet or VTT). */
+  getTrickplayUrl(mediaItemId: string, file: string, episodeId?: string): string {
+    if (typeof window === 'undefined') return '';
+    const qs = new URLSearchParams();
+    if (episodeId) qs.set('episodeId', episodeId);
+    const token = getToken();
+    if (token) qs.set('token', token);
+    const q = qs.toString();
+    return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/trickplay/${encodeURIComponent(file)}${q ? `?${q}` : ''}`;
+  },
 
   // Watch progress
   saveProgress(body: SaveProgressRequest) {

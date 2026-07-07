@@ -6,6 +6,7 @@ import { prisma } from '../../lib/db.js';
 import { moviePlacement, episodePlacement } from '../../lib/media-paths.js';
 import { isVideoFile, fileExtension } from '../../lib/filename.js';
 import { analyzeAndStoreMedia } from '../../lib/media-analyzer.js';
+import { generateTrickplay } from '../../lib/trickplay-generator.js';
 import {
   type TorrentPostprocessJob,
 } from '../../jobs/queues.js';
@@ -254,6 +255,66 @@ export async function processTorrentPostprocess(
             analyzeAndStoreMedia(ep.filePath, { episodeId: ep.id }).catch((err) => {
               console.error(`[PostProcess] Media analysis failed for episode ${ep.id}:`, err);
             });
+          }
+        }
+      }
+    }
+
+    // Trigger trickplay generation (best-effort, non-blocking).
+    // Generates sprite sheets + VTT for seek-bar thumbnail previews.
+    if (torrent.category === 'MOVIE') {
+      const movieItem = await prisma.mediaItem.findUnique({
+        where: { id: mediaItemId },
+        select: { filePath: true },
+      });
+      if (movieItem?.filePath) {
+        const filePath = movieItem.filePath;
+        const mediaInfo = await prisma.mediaInfo.findUnique({
+          where: { mediaItemId },
+        });
+        if (mediaInfo?.durationSec) {
+          const trickplayDir = path.dirname(filePath);
+          generateTrickplay(filePath, trickplayDir, mediaInfo.durationSec)
+            .then((spritePath) => {
+              if (spritePath) {
+                console.log(`[Trickplay] Generated sprite sheet for ${path.basename(filePath)}`);
+              }
+            })
+            .catch((err) => {
+              console.error(`[Trickplay] Failed for ${filePath}:`, err);
+            });
+        }
+      }
+    } else {
+      const fileMapping = torrent.fileMapping as unknown as FileMappingEntry[] | null;
+      if (fileMapping) {
+        for (const mapping of fileMapping) {
+          const ep = await prisma.episode.findUnique({
+            where: {
+              mediaItemId_season_episode: {
+                mediaItemId,
+                season: mapping.season,
+                episode: mapping.episode,
+              },
+            },
+          });
+          if (ep?.filePath) {
+            const filePath = ep.filePath;
+            const mediaInfo = await prisma.mediaInfo.findUnique({
+              where: { episodeId: ep.id },
+            });
+            if (mediaInfo?.durationSec) {
+              const trickplayDir = path.dirname(filePath);
+              generateTrickplay(filePath, trickplayDir, mediaInfo.durationSec)
+                .then((spritePath) => {
+                  if (spritePath) {
+                    console.log(`[Trickplay] Generated sprite sheet for ${path.basename(filePath)}`);
+                  }
+                })
+                .catch((err) => {
+                  console.error(`[Trickplay] Failed for ${filePath}:`, err);
+                });
+            }
           }
         }
       }
