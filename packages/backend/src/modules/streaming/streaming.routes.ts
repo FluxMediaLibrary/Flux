@@ -298,4 +298,60 @@ export const streamingRoutes: FastifyPluginAsync = async (
         .send(stream);
     },
   );
+
+  // ── GET /:mediaItemId/thumb — thumbnail frame at a given timestamp ─────────
+
+  app.get(
+    '/:mediaItemId/thumb',
+    { preHandler: [app.requireProfileStream] },
+    async (request, reply) => {
+      const { mediaItemId } = request.params as { mediaItemId: string };
+      const { t, episodeId } = request.query as {
+        t?: string;
+        episodeId?: string;
+      };
+      const time = parseFloat(t ?? '');
+      if (!Number.isFinite(time) || time < 0) {
+        throw ApiError.badRequest('Invalid timestamp', 'INVALID_THUMB_TIME');
+      }
+
+      const { filePath } = await getMediaFilePath(mediaItemId, episodeId);
+
+      const args = [
+        '-ss', String(time),
+        '-i', filePath,
+        '-vframes', '1',
+        '-vf', 'scale=160:-1',
+        '-f', 'image2pipe',
+        '-vcodec', 'mjpeg',
+        '-q:v', '5',
+        '-',
+      ];
+
+      return new Promise<void>((resolve) => {
+        const proc = spawn('ffmpeg', args, {
+          stdio: ['ignore', 'pipe', 'ignore'],
+        });
+        const chunks: Buffer[] = [];
+        proc.stdout!.on('data', (c: Buffer) => chunks.push(c));
+        proc.stdout!.on('end', () => {
+          const buf = Buffer.concat(chunks);
+          if (buf.length === 0) {
+            reply.status(404).send();
+            resolve();
+            return;
+          }
+          reply
+            .header('Content-Type', 'image/jpeg')
+            .header('Cache-Control', 'public, max-age=86400')
+            .send(buf);
+          resolve();
+        });
+        proc.on('error', () => {
+          if (!reply.sent) reply.status(500).send();
+          resolve();
+        });
+      });
+    },
+  );
 };

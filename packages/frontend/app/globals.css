@@ -2593,6 +2593,34 @@ table.data tr:last-child td {
 }
 .vp.show .vp-controls { opacity: 1; transform: none; }
 
+/* ── Seek preview thumbnail ─────────────────────────────────────────────── */
+
+.vp-scrub-preview {
+  position: absolute;
+  bottom: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 12;
+  pointer-events: none;
+}
+.vp-scrub-thumb {
+  width: 160px;
+  height: 90px;
+  border-radius: 6px;
+  background: #111;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  object-fit: cover;
+}
+.vp-scrub-time {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.65);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
 .vp-seek { padding: 10px 0; cursor: pointer; touch-action: none; }
 .vp-seek-track {
   position: relative;
