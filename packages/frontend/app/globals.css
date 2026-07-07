@@ -1052,6 +1052,12 @@ table.data tr:last-child td {
   flex-shrink: 0;
 }
 
+.auto-match-badge {
+  color: var(--accent-2);
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
 .mapping-table .mapping-path {
   font-family: 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
   font-size: 0.78rem;
