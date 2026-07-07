@@ -7,7 +7,6 @@ import { moviePlacement, episodePlacement } from '../../lib/media-paths.js';
 import { isVideoFile, fileExtension } from '../../lib/filename.js';
 import {
   type TorrentPostprocessJob,
-  introDetectionQueue,
 } from '../../jobs/queues.js';
 import { getDetail as getTmdbDetail } from '../tmdb/tmdb.service.js';
 import { notifyRequestFulfilled } from '../notifications/notify.js';
@@ -212,18 +211,6 @@ export async function processTorrentPostprocess(
             filePath: placement.file,
           },
         });
-      }
-
-      // Trigger intro detection for each season that just received new files.
-      const seasonSet = new Set(fileMapping.map((m) => m.season));
-      const seasons = Array.from(seasonSet);
-      for (const s of seasons) {
-        await introDetectionQueue.add(
-          'intro-detection',
-          { mediaItemId: mediaItem.id, season: s },
-          { jobId: `intro-${mediaItem.id}-s${s}` }, // dedupe by season
-        );
-        job.log(`Enqueued intro detection for S${s}.`);
       }
     }
 

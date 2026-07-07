@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { AdminInfoDTO } from '@flux/shared';
-import type { LibraryItemDTO } from '@flux/shared';
-import type { IntroJobsDTO } from '@flux/shared';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -45,11 +43,6 @@ export default function AdminInfoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Intro scan state
-  const [shows, setShows] = useState<LibraryItemDTO[]>([]);
-  const [scanMsg, setScanMsg] = useState<string | null>(null);
-  const [scanning, setScanning] = useState(false);
-
   useEffect(() => {
     api.getAdminInfo().then(
       (data) => {
@@ -67,44 +60,6 @@ export default function AdminInfoPage() {
     }, 30_000);
     return () => clearInterval(interval);
   }, []);
-
-  // Fetch shows for intro scan dropdown
-  useEffect(() => {
-    api.listLibrary('SHOW').then(setShows).catch(() => {});
-  }, []);
-
-  async function handleScanAll() {
-    setScanning(true);
-    setScanMsg(null);
-    try {
-      const res = await api.scanAllIntros();
-      setScanMsg(`Queued intro detection for ${res.queued} seasons across ${res.shows} shows.`);
-    } catch (err: any) {
-      setScanMsg(err?.message ?? 'Scan failed.');
-    } finally {
-      setScanning(false);
-    }
-  }
-
-  async function handleScanShow(mediaItemId: string, title: string) {
-    setScanning(true);
-    setScanMsg(null);
-    try {
-      const detail = await api.getMediaItem(mediaItemId);
-      const seasons = detail.episodes
-        ? [...new Set(detail.episodes.filter(e => e.available).map(e => e.season))]
-        : [];
-
-      for (const s of seasons) {
-        await api.analyzeIntro(mediaItemId, s);
-      }
-      setScanMsg(`Queued intro detection for "${title}" (${seasons.length} seasons).`);
-    } catch (err: any) {
-      setScanMsg(err?.message ?? 'Scan failed.');
-    } finally {
-      setScanning(false);
-    }
-  }
 
   if (loading) {
     return (
@@ -688,79 +643,6 @@ export default function AdminInfoPage() {
         </div>
       )}
 
-      {/* ── Media Tools ──────────────────────────────────────────────────── */}
-      <div className="card" style={{ padding: '22px 24px' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            marginBottom: scanMsg ? 12 : 20,
-          }}
-        >
-          <IconFilm />
-          <h3
-            style={{
-              fontSize: '0.95rem',
-              fontWeight: 600,
-              margin: 0,
-              letterSpacing: '-0.01em',
-            }}
-          >
-            Intro Detection
-          </h3>
-        </div>
-
-        {scanMsg && (
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 14 }}>
-            {scanMsg}
-          </p>
-        )}
-
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-          <button
-            className="btn btn-primary"
-            onClick={handleScanAll}
-            disabled={scanning}
-            style={{ margin: 0 }}
-          >
-            {scanning ? 'Scanning…' : 'Scan All Shows'}
-          </button>
-
-          <select
-            className="input"
-            style={{ width: 220, margin: 0 }}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (!val) return;
-              const parts = val.split('|');
-              if (parts[0] && parts[1]) {
-                void handleScanShow(parts[0], parts[1]);
-              }
-              e.target.value = '';
-            }}
-            disabled={scanning}
-            defaultValue=""
-          >
-            <option value="" disabled>
-              {shows.length === 0 ? 'No shows in library' : 'Scan a specific show…'}
-            </option>
-            {shows.map((s) => (
-              <option key={s.id} value={`${s.id}|${s.title}`}>
-                {s.title}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <p style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: 12 }}>
-          Analyzes episode audio to detect recurring intro sequences. Runs in the background.
-          Results appear as a "Skip Intro" button during playback.
-        </p>
-      </div>
-
-      {/* ── Intro Job Status ──────────────────────────────────────────────── */}
-      <IntroJobStatus />
     </div>
   );
 }
@@ -1134,129 +1016,6 @@ function PipelineArrow() {
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
-
-function IntroJobStatus() {
-  const [jobs, setJobs] = useState<IntroJobsDTO | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    function poll() {
-      if (cancelled) return;
-      api.getIntroJobs().then((data) => {
-        if (!cancelled) setJobs(data);
-      }).catch(() => {});
-    }
-    poll();
-    const interval = setInterval(poll, 5000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
-
-  if (!jobs) return null;
-
-  const hasAny = jobs.active.length > 0 || jobs.waiting > 0 || jobs.recent.length > 0;
-  if (!hasAny) return null;
-
-  return (
-    <div className="card" style={{ padding: '22px 24px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-        <IconCpu />
-        <h3 style={{ fontSize: '0.95rem', fontWeight: 600, margin: 0, letterSpacing: '-0.01em' }}>
-          Intro Scan Progress
-        </h3>
-        <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: 'var(--text-dim)' }}>
-          refreshes 5s
-        </span>
-      </div>
-
-      {/* Summary bar */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-        <StatusBadge label="Active" count={jobs.active.length} color="var(--accent)" />
-        <StatusBadge label="Waiting" count={jobs.waiting} color="var(--warn)" />
-        <StatusBadge
-          label="Done"
-          count={jobs.recent.filter((j) => j.state === 'completed').length}
-          color="var(--ok)"
-        />
-        <StatusBadge
-          label="Failed"
-          count={jobs.recent.filter((j) => j.state === 'failed').length}
-          color="var(--danger)"
-        />
-      </div>
-
-      {/* Active jobs */}
-      {jobs.active.length > 0 && (
-        <div style={{ marginBottom: jobs.recent.length > 0 ? 16 : 0 }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
-            Running
-          </span>
-          {jobs.active.map((j) => (
-            <div
-              key={j.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '6px 0',
-                fontSize: '0.85rem',
-              }}
-            >
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {j.showTitle ?? j.mediaItemId} S{j.season}
-              </span>
-              {j.progress != null && (
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-                  {j.progress}%
-                </span>
-              )}
-              <span className="spinner" aria-hidden style={{ width: 14, height: 14, flexShrink: 0 }} />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Recent completed/failed */}
-      {jobs.recent.length > 0 && (
-        <div>
-          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
-            Recent
-          </span>
-          {jobs.recent.map((j) => (
-            <div
-              key={j.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '4px 0',
-                fontSize: '0.82rem',
-              }}
-            >
-              <span
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: '50%',
-                  background: j.state === 'completed' ? 'var(--ok)' : 'var(--danger)',
-                  flexShrink: 0,
-                }}
-              />
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                S{j.season}
-                {j.failedReason ? (
-                  <span style={{ color: 'var(--danger)', marginLeft: 8 }}>{j.failedReason}</span>
-                ) : null}
-              </span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', flexShrink: 0 }}>
-                {j.finishedAt ? new Date(j.finishedAt).toLocaleTimeString() : ''}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 const ico = {
   width: 17,

@@ -2590,53 +2590,6 @@ table.data tr:last-child td {
 }
 .vp.show .vp-controls { opacity: 1; transform: none; }
 
-/* ── Skip Intro button ──────────────────────────────────────────────────── */
-.vp-skip-intro {
-  position: absolute;
-  right: 20px;
-  bottom: 80px;
-  z-index: 5;
-  animation: skipFadeIn 0.3s ease-out;
-}
-
-@keyframes skipFadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.vp-skip-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 18px 8px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 8px;
-  background: rgba(20, 20, 20, 0.72);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  color: #fff;
-  font-size: 0.92rem;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
-}
-
-.vp-skip-btn:hover {
-  background: rgba(40, 40, 40, 0.85);
-  border-color: var(--accent-2);
-  transform: scale(1.04);
-}
-
-.vp-skip-btn:active {
-  transform: scale(0.96);
-}
-
-.vp-skip-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
 .vp-seek { padding: 10px 0; cursor: pointer; touch-action: none; }
 .vp-seek-track {
   position: relative;

@@ -7,8 +7,6 @@ import { prisma } from '../../lib/db.js';
 import { config } from '../../config.js';
 import type { AdminInfoDTO } from '@flux/shared';
 import type { TorrentStatus, RequestStatus } from '@flux/shared';
-import type { IntroJobsDTO } from '@flux/shared';
-import { introDetectionQueue } from '../../jobs/queues.js';
 
 export async function getAdminInfo(): Promise<AdminInfoDTO> {
   // ── System ──────────────────────────────────────────────────────────────
@@ -131,56 +129,4 @@ export async function getAdminInfo(): Promise<AdminInfoDTO> {
     requests,
     errors,
   };
-}
-
-/** Query BullMQ for intro detection job status. */
-export async function getIntroJobs(): Promise<IntroJobsDTO> {
-  const [activeJobs, waitingCount, completedJobs, failedJobs] = await Promise.all([
-    introDetectionQueue.getActive(),
-    introDetectionQueue.getWaitingCount(),
-    introDetectionQueue.getCompleted(0, 5),
-    introDetectionQueue.getFailed(0, 5),
-  ]);
-
-  // Build a quick lookup of show titles from active/waiting job data
-  const mediaIds = new Set<string>();
-  for (const j of activeJobs) {
-    if (j.data?.mediaItemId) mediaIds.add(j.data.mediaItemId);
-  }
-
-  const titleMap = new Map<string, string>();
-  if (mediaIds.size > 0) {
-    const items = await prisma.mediaItem.findMany({
-      where: { id: { in: Array.from(mediaIds) } },
-      select: { id: true, title: true },
-    });
-    for (const item of items) {
-      titleMap.set(item.id, item.title);
-    }
-  }
-
-  const active: IntroJobsDTO['active'] = activeJobs.map((j) => ({
-    id: j.id ?? '',
-    mediaItemId: j.data?.mediaItemId ?? '',
-    season: j.data?.season ?? 0,
-    state: 'active',
-    progress: j.progress as number | undefined,
-    showTitle: j.data?.mediaItemId ? titleMap.get(j.data.mediaItemId) : undefined,
-  }));
-
-  const recent: IntroJobsDTO['recent'] = [];
-
-  for (const j of [...completedJobs, ...failedJobs].slice(0, 5)) {
-    const isFailed = j.failedReason != null;
-    recent.push({
-      id: j.id ?? '',
-      mediaItemId: j.data?.mediaItemId ?? '',
-      season: j.data?.season ?? 0,
-      state: isFailed ? 'failed' : 'completed',
-      finishedAt: j.finishedOn ? new Date(j.finishedOn).toISOString() : undefined,
-      failedReason: j.failedReason ?? undefined,
-    });
-  }
-
-  return { active, waiting: waitingCount, recent };
 }
