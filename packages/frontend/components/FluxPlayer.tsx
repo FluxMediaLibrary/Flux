@@ -93,6 +93,10 @@ export function FluxPlayer({
   const [controlsVisible, setControlsVisible] = useState(true);
   const scrubbingRef = useRef(false);
   const [scrubbing, setScrubbing] = useState(false);
+  // Seek-bar preview thumbnail — set during scrub, cleared after.
+  const [scrubPos, setScrubPos] = useState<number | null>(null);
+  const [scrubLeft, setScrubLeft] = useState(0);
+  const seekTrackRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
   // ── Casting (Chromecast) ────────────────────────────────────────────────
@@ -173,6 +177,10 @@ export function FluxPlayer({
   useEffect(() => {
     let cancelled = false;
     setDecided(false);
+    // Clear stale server duration from a previous media item while the new
+    // probe is in flight. If the probe fails, effectiveDuration stays 0 and
+    // the seek bar won't register clicks until the video reports a real duration.
+    serverDurationRef.current = null;
     api.getPlaybackInfo(mediaItemId, episodeId).then(
       (info) => {
         if (cancelled) return;
@@ -464,7 +472,11 @@ export function FluxPlayer({
     }
     const v = videoRef.current;
     if (!v) return;
-    v.currentTime = Math.min(Math.max(0, v.currentTime + delta), v.duration || 0);
+    // Use server-probed duration for the clamp when video.duration is Infinity (HLS).
+    const cap = Number.isFinite(v.duration) && v.duration > 0
+      ? v.duration
+      : (serverDurationRef.current ?? 0);
+    v.currentTime = Math.min(Math.max(0, v.currentTime + delta), cap || 0);
     revealControls();
   }, [cast.connected, cast.currentTime, cast.duration, revealControls]);
 
@@ -508,7 +520,11 @@ export function FluxPlayer({
       ? v!.duration
       : (serverDurationRef.current ?? 0);
     if (!v || !effective) return;
-    v.currentTime = clamped * effective;
+    const target = clamped * effective;
+    v.currentTime = target;
+    // Update scrub preview position for the thumbnail.
+    setScrubPos(target);
+    setScrubLeft(clientX - rect.left - 80); // center 160px preview on pointer
   }, [cast.connected, cast.duration]);
 
   const onSeekDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
@@ -526,6 +542,7 @@ export function FluxPlayer({
   const onSeekUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     scrubbingRef.current = false;
     setScrubbing(false);
+    setScrubPos(null); // hide preview
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   }, []);
 
@@ -629,7 +646,22 @@ export function FluxPlayer({
 
       {/* Bottom controls */}
       <div className="vp-controls">
+        {/* Seek preview thumbnail — shown while scrubbing */}
+        {scrubPos != null && (
+          <div
+            className="vp-scrub-preview"
+            style={{ left: Math.min(Math.max(0, scrubLeft), (seekTrackRef.current?.getBoundingClientRect().width ?? 0) - 160) }}
+          >
+            <img
+              src={api.getThumbUrl(mediaItemId, scrubPos, episodeId)}
+              alt=""
+              className="vp-scrub-thumb"
+            />
+            <span className="vp-scrub-time">{fmt(scrubPos)}</span>
+          </div>
+        )}
         <div
+          ref={seekTrackRef}
           className={`vp-seek${scrubbing ? ' active' : ''}`}
           onPointerDown={onSeekDown}
           onPointerMove={onSeekMove}

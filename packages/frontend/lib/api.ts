@@ -419,6 +419,15 @@ export const api = {
     const q = qs.toString();
     return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/hls/index.m3u8${q ? `?${q}` : ''}`;
   },
+  /** Build a thumbnail frame URL for the seek-bar preview. */
+  getThumbUrl(mediaItemId: string, timeSeconds: number, episodeId?: string): string {
+    if (typeof window === 'undefined') return '';
+    const qs = new URLSearchParams({ t: String(Math.floor(timeSeconds)) });
+    if (episodeId) qs.set('episodeId', episodeId);
+    const token = getToken();
+    if (token) qs.set('token', token);
+    return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/thumb?${qs.toString()}`;
+  },
 
   // Watch progress
   saveProgress(body: SaveProgressRequest) {
