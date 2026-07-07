@@ -1,28 +1,32 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
-import { useMediaState, useMediaRemote } from '@vidstack/react';
+import { useCallback, useMemo, useState } from 'react';
+import { useMediaRemote, useMediaState } from '@vidstack/react';
 import {
-  PlayIcon,
+  CastIcon,
+  FullscreenExitIcon,
+  FullscreenIcon,
+  MuteIcon,
   PauseIcon,
+  PictureInPictureIcon,
+  PlayIcon,
+  SettingsIcon,
   SkipBackIcon,
   SkipForwardIcon,
-  VolumeIcon,
-  MuteIcon,
-  FullscreenIcon,
-  FullscreenExitIcon,
-  SettingsIcon,
-  CastIcon,
   SubtitlesIcon,
+  VolumeIcon,
 } from './icons';
 import { SettingsPanel } from './SettingsPanel';
 
-/**
- * Flux-branded bottom control bar.
- *
- * Uses Vidstack's headless hooks for state and remote for dispatching
- * media requests. Styling is done via the `.fx-*` CSS namespace (see globals.css).
- */
+function formatTime(value: number): string {
+  if (!Number.isFinite(value) || value < 0) return '0:00';
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  const seconds = Math.floor(value % 60);
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 export function ControlBar() {
   const remote = useMediaRemote();
   const paused = useMediaState('paused');
@@ -32,136 +36,120 @@ export function ControlBar() {
   const duration = useMediaState('duration');
   const fullscreen = useMediaState('fullscreen');
   const canPictureInPicture = useMediaState('canPictureInPicture');
-
-  // Cast state — Vidstack surfaces this via data attributes on the player element.
-  // We read from the DOM or use a simple ref-based approach.
+  const pictureInPicture = useMediaState('pictureInPicture');
+  const textTracks = useMediaState('textTracks');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const settingsRef = useRef<HTMLDivElement>(null);
 
-  const togglePlay = useCallback(() => {
-    remote.togglePaused();
-  }, [remote]);
+  const subtitleActive = useMemo(() => {
+    const tracks = textTracks ? Array.from({ length: textTracks.length }, (_, index) => textTracks[index]) : [];
+    return tracks.some((track) => track?.mode === 'showing');
+  }, [textTracks]);
 
-  const skipBack = useCallback(() => {
-    remote.seek(Math.max(0, (currentTime ?? 0) - 10));
-  }, [remote, currentTime]);
+  const toggleSubtitles = useCallback(() => {
+    const tracks = textTracks ? Array.from({ length: textTracks.length }, (_, index) => textTracks[index]) : [];
+    const activeIndex = tracks.findIndex((track) => track?.mode === 'showing');
+    if (activeIndex >= 0) {
+      remote.changeTextTrackMode(activeIndex, 'disabled');
+      return;
+    }
+    if (tracks.length > 0) remote.changeTextTrackMode(0, 'showing');
+  }, [remote, textTracks]);
 
-  const skipForward = useCallback(() => {
-    const d = duration ?? 0;
-    remote.seek(Math.min(d, (currentTime ?? 0) + 10));
-  }, [remote, currentTime, duration]);
-
-  const changeVolume = useCallback(
-    (val: number) => {
-      remote.changeVolume(val);
+  const seekBy = useCallback(
+    (delta: number) => {
+      const target = Math.max(0, Math.min(duration || 0, (currentTime || 0) + delta));
+      remote.seek(target);
     },
-    [remote],
+    [currentTime, duration, remote],
   );
 
-  const toggleMute = useCallback(() => {
-    remote.toggleMuted();
-  }, [remote]);
+  const changeVolume = useCallback(
+    (value: number) => {
+      remote.changeVolume(value);
+      if (value > 0 && muted) remote.toggleMuted();
+    },
+    [muted, remote],
+  );
 
-  const toggleFullscreen = useCallback(() => {
-    remote.toggleFullscreen();
-  }, [remote]);
+  const togglePip = useCallback(() => {
+    if (pictureInPicture) remote.exitPictureInPicture();
+    else remote.enterPictureInPicture();
+  }, [pictureInPicture, remote]);
 
-  const enterPip = useCallback(() => {
-    remote.enterPictureInPicture();
-  }, [remote]);
-
-  // Format time as H:MM:SS or M:SS
-  const fmt = (t: number): string => {
-    if (!Number.isFinite(t) || t < 0) return '0:00';
-    const h = Math.floor(t / 3600);
-    const m = Math.floor((t % 3600) / 60);
-    const s = Math.floor(t % 60);
-    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    return `${m}:${String(s).padStart(2, '0')}`;
-  };
-
-  const cur = currentTime ?? 0;
-  const dur = duration ?? 0;
-  const vol = muted ? 0 : (volume ?? 1);
+  const displayVolume = muted ? 0 : volume;
 
   return (
     <div className="fx-controls">
+      <div className="fx-controls-gradient" aria-hidden="true" />
       <div className="fx-row">
-        {/* Play/Pause */}
-        <button className="fx-btn" onClick={togglePlay} aria-label={paused ? 'Play' : 'Pause'}>
+        <button className="fx-btn fx-btn--primary" type="button" onClick={() => remote.togglePaused()} aria-label={paused ? 'Play' : 'Pause'}>
           {paused ? <PlayIcon /> : <PauseIcon />}
         </button>
 
-        {/* Skip back */}
-        <button className="fx-btn" onClick={skipBack} aria-label="Back 10 seconds">
+        <button className="fx-btn" type="button" onClick={() => seekBy(-10)} aria-label="Back 10 seconds">
           <SkipBackIcon />
         </button>
-
-        {/* Skip forward */}
-        <button className="fx-btn" onClick={skipForward} aria-label="Forward 10 seconds">
+        <button className="fx-btn" type="button" onClick={() => seekBy(10)} aria-label="Forward 10 seconds">
           <SkipForwardIcon />
         </button>
 
-        {/* Volume */}
         <div className="fx-vol">
-          <button className="fx-btn" onClick={toggleMute} aria-label={muted ? 'Unmute' : 'Mute'}>
-            {muted || vol === 0 ? <MuteIcon /> : <VolumeIcon />}
+          <button className="fx-btn" type="button" onClick={() => remote.toggleMuted()} aria-label={muted ? 'Unmute' : 'Mute'}>
+            {muted || displayVolume === 0 ? <MuteIcon /> : <VolumeIcon />}
           </button>
           <input
             className="fx-vol-slider"
             type="range"
             min={0}
             max={1}
-            step={0.05}
-            value={vol}
-            onChange={(e) => changeVolume(Number(e.target.value))}
+            step={0.01}
+            value={displayVolume}
+            onChange={(event) => changeVolume(Number(event.currentTarget.value))}
             aria-label="Volume"
           />
         </div>
 
-        {/* Time display */}
-        <div className="fx-time">
-          {fmt(cur)} <span className="fx-time-sep">/</span> {fmt(dur)}
+        <div className="fx-time" aria-label="Playback time">
+          <span>{formatTime(currentTime)}</span>
+          <span className="fx-time-sep">/</span>
+          <span>{formatTime(duration)}</span>
         </div>
 
-        {/* Spacer */}
         <div className="fx-spacer" />
 
-        {/* Subtitles toggle */}
-        <button className="fx-btn" aria-label="Subtitles">
+        <button
+          className={subtitleActive ? 'fx-btn active' : 'fx-btn'}
+          type="button"
+          onClick={toggleSubtitles}
+          aria-label={subtitleActive ? 'Disable subtitles' : 'Enable subtitles'}
+        >
           <SubtitlesIcon />
         </button>
 
-        {/* Cast */}
-        <button className="fx-btn" aria-label="Cast to TV">
+        <button className="fx-btn" type="button" onClick={() => remote.requestGoogleCast()} aria-label="Cast">
           <CastIcon connected={false} />
         </button>
 
-        {/* Picture-in-Picture */}
         {canPictureInPicture && (
-          <button className="fx-btn" onClick={enterPip} aria-label="Picture in Picture">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 20, height: 20 }}>
-              <rect x="10" y="10" width="12" height="8" rx="2" />
-              <rect x="2" y="4" width="16" height="12" rx="2" />
-            </svg>
+          <button className={pictureInPicture ? 'fx-btn active' : 'fx-btn'} type="button" onClick={togglePip} aria-label="Picture in picture">
+            <PictureInPictureIcon />
           </button>
         )}
 
-        {/* Settings */}
-        <div className="fx-settings-wrap" ref={settingsRef}>
+        <div className="fx-settings-wrap">
           <button
-            className={`fx-btn${settingsOpen ? ' active' : ''}`}
-            onClick={() => setSettingsOpen((v) => !v)}
+            className={settingsOpen ? 'fx-btn active' : 'fx-btn'}
+            type="button"
+            onClick={() => setSettingsOpen((open) => !open)}
             aria-label="Settings"
+            aria-expanded={settingsOpen}
           >
             <SettingsIcon />
           </button>
-          {/* Settings panel rendered by SettingsPanel component */}
-          <SettingsPanel open={settingsOpen} onToggle={() => setSettingsOpen((v) => !v)} />
+          <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </div>
 
-        {/* Fullscreen */}
-        <button className="fx-btn" onClick={toggleFullscreen} aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+        <button className="fx-btn" type="button" onClick={() => remote.toggleFullscreen()} aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
           {fullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
         </button>
       </div>

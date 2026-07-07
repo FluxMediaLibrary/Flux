@@ -1,6 +1,5 @@
 'use client';
 
-import { useMediaState } from '@vidstack/react';
 import { BackIcon } from './icons';
 
 interface TitleOverlayProps {
@@ -17,7 +16,7 @@ export function TitleOverlay({ title, subtitle, onBack }: TitleOverlayProps) {
   return (
     <div className="fx-top">
       {onBack && (
-        <button className="fx-btn" onClick={onBack} aria-label="Back">
+        <button className="fx-btn" type="button" onClick={onBack} aria-label="Back">
           <BackIcon />
         </button>
       )}

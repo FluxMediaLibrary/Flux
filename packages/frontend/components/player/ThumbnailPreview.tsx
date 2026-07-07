@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 
 interface VttEntry {
@@ -23,6 +23,14 @@ interface ThumbnailPreviewProps {
   visible: boolean;
 }
 
+function parseTimecode(value: string): number {
+  const parts = value.split(':');
+  const seconds = parts.pop() ?? '0';
+  const minutes = parts.pop() ?? '0';
+  const hours = parts.pop() ?? '0';
+  return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
+}
+
 function parseTrickplayVtt(vttText: string): VttEntry[] {
   const entries: VttEntry[] = [];
   const lines = vttText.split('\n');
@@ -30,20 +38,10 @@ function parseTrickplayVtt(vttText: string): VttEntry[] {
   let currentEnd = 0;
 
   for (const line of lines) {
-    const timeMatch = line.match(
-      /^(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})/,
-    );
+    const timeMatch = line.match(/^((?:\d{2}:)?\d{2}:\d{2}\.\d{3})\s*-->\s*((?:\d{2}:)?\d{2}:\d{2}\.\d{3})/);
     if (timeMatch) {
-      currentStart =
-        parseInt(timeMatch[1]) * 3600 +
-        parseInt(timeMatch[2]) * 60 +
-        parseInt(timeMatch[3]) +
-        parseInt(timeMatch[4]) / 1000;
-      currentEnd =
-        parseInt(timeMatch[5]) * 3600 +
-        parseInt(timeMatch[6]) * 60 +
-        parseInt(timeMatch[7]) +
-        parseInt(timeMatch[8]) / 1000;
+      currentStart = parseTimecode(timeMatch[1]);
+      currentEnd = parseTimecode(timeMatch[2]);
     }
 
     const xywhMatch = line.match(/#xywh=(\d+),(\d+),(\d+),(\d+)/);
@@ -84,6 +82,10 @@ export function ThumbnailPreview({
 }: ThumbnailPreviewProps) {
   const [entries, setEntries] = useState<VttEntry[]>([]);
   const lastMediaRef = useRef('');
+  const spriteUrl = useMemo(
+    () => api.getTrickplayUrl(mediaItemId, 'trickplay-sprite.jpg', episodeId),
+    [episodeId, mediaItemId],
+  );
 
   // Fetch VTT metadata when media changes
   useEffect(() => {
@@ -94,7 +96,9 @@ export function ThumbnailPreview({
     const vttUrl = api.getTrickplayUrl(mediaItemId, 'trickplay.vtt', episodeId);
     if (!vttUrl) return;
 
-    fetch(vttUrl)
+    const controller = new AbortController();
+
+    fetch(vttUrl, { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error('VTT not found');
         return r.text();
@@ -105,6 +109,8 @@ export function ThumbnailPreview({
       .catch(() => {
         setEntries([]); // trickplay not available for this media
       });
+
+    return () => controller.abort();
   }, [mediaItemId, episodeId]);
 
   if (!visible || entries.length === 0) return null;
@@ -112,12 +118,6 @@ export function ThumbnailPreview({
   // Find the matching entry for the current time
   const entry = entries.find((e) => time >= e.start && time < e.end);
   if (!entry) return null;
-
-  const spriteUrl = api.getTrickplayUrl(
-    mediaItemId,
-    'trickplay-sprite.jpg',
-    episodeId,
-  );
 
   return (
     <div className="fx-scrub-preview" style={{ left: `${left}px` }}>

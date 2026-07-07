@@ -1,39 +1,32 @@
 'use client';
 
-interface Chapter {
-  time: number;
-  title: string;
-}
+import { useMediaRemote } from '@vidstack/react';
+import type { ChapterMarker } from './Timeline';
 
 interface ChapterMarkersProps {
-  chapters: Chapter[];
+  chapters: ChapterMarker[];
   duration: number;
-  onSeek: (time: number) => void;
 }
 
-/**
- * Visual chapter markers on the timeline.
- * Each marker is a thin vertical bar positioned at the chapter's time.
- * Hover for title tooltip, click to seek.
- */
-export function ChapterMarkers({
-  chapters,
-  duration,
-  onSeek,
-}: ChapterMarkersProps) {
-  if (!duration || chapters.length === 0) return null;
+export function ChapterMarkers({ chapters, duration }: ChapterMarkersProps) {
+  const remote = useMediaRemote();
+
+  if (!Number.isFinite(duration) || duration <= 0 || chapters.length === 0) return null;
 
   return (
     <>
-      {chapters.map((ch, i) => (
-        <div
-          key={i}
+      {chapters.map((chapter, index) => (
+        <button
+          key={`${chapter.time}-${index}`}
           className="fx-chapter-marker"
-          style={{ left: `${(ch.time / duration) * 100}%` }}
-          title={ch.title}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSeek(ch.time);
+          type="button"
+          style={{ left: `${Math.max(0, Math.min(100, (chapter.time / duration) * 100))}%` }}
+          title={chapter.title}
+          aria-label={`Seek to ${chapter.title}`}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            remote.seek(chapter.time);
           }}
         />
       ))}
