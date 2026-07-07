@@ -101,7 +101,6 @@ model MediaItem {
   episodes      Episode[]
   watchProgress WatchProgress[]
   torrents      Torrent[]
-  playbackMarkers PlaybackMarker[]
 
   @@unique([tmdbId, type])
   @@index([type])
@@ -249,32 +248,4 @@ model NotificationSettings {
   updatedAt         DateTime @updatedAt @default(now())
 
   @@map("notification_settings")
-}
-
-// ─────────────────────────────────────────────────────────────
-// Playback markers (intro, recap, credits)
-// ─────────────────────────────────────────────────────────────
-
-enum MarkerType {
-  INTRO
-  RECAP
-  CREDITS
-}
-
-model PlaybackMarker {
-  id             String     @id @default(cuid())
-  mediaItemId    String
-  season         Int
-  markerType     MarkerType @default(INTRO)
-  startSeconds   Float
-  endSeconds     Float
-  confidence     Float      @default(0)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-
-  mediaItem MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
-
-  @@unique([mediaItemId, season, markerType])
-  @@index([mediaItemId])
-  @@map("playback_markers")
 }

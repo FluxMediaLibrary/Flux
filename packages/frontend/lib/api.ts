@@ -28,8 +28,6 @@ import type {
   TorrentParseResult,
   UpdateNotificationSettingsRequest,
   WatchProgressDTO,
-  PlaybackMarkerDTO,
-  IntroJobsDTO,
 } from '@flux/shared';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
@@ -426,30 +424,6 @@ export const api = {
     return request<WatchProgressDTO>('/api/library/progress', { body });
   },
 
-  // Playback markers (intro detection)
-  getPlaybackMarker(mediaItemId: string, season: number, signal?: AbortSignal) {
-    return request<PlaybackMarkerDTO>(
-      `/api/library/items/${encodeURIComponent(mediaItemId)}/intro?season=${season}`,
-      { signal },
-    );
-  },
-
-  /** Admin: enqueue intro detection for a specific season of a show. */
-  analyzeIntro(mediaItemId: string, season: number) {
-    return request<{ queued: boolean }>(
-      '/api/admin/analyze-intro',
-      { method: 'POST', body: { mediaItemId, season } },
-    );
-  },
-
-  /** Admin: scan all shows for intros. */
-  scanAllIntros() {
-    return request<{ queued: number; shows: number }>(
-      '/api/admin/scan-all-intros',
-      { method: 'POST' },
-    );
-  },
-
   // Notification settings (admin)
   getNotificationSettings() {
     return request<NotificationSettingsDTO>('/api/notifications/settings');
@@ -461,11 +435,6 @@ export const api = {
   // Admin dashboard
   getAdminInfo() {
     return request<AdminInfoDTO>('/api/admin/info');
-  },
-
-  /** Admin: poll intro detection job status. */
-  getIntroJobs() {
-    return request<IntroJobsDTO>('/api/admin/intro-jobs');
   },
 };
 

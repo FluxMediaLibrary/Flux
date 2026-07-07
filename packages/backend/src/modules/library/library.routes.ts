@@ -13,7 +13,6 @@ import {
   getMediaItemDetail,
   listLibrary,
   saveProgress,
-  getPlaybackMarker,
 } from './library.service.js';
 
 const listQuerySchema = z.object({
@@ -71,17 +70,5 @@ export const libraryRoutes: FastifyPluginAsync = async (
       ...body,
       durationSeconds: body.durationSeconds ?? undefined,
     });
-  });
-
-  // ── Playback marker (intro) ──────────────────────────────────────────────
-
-  const introQuerySchema = z.object({
-    season: z.coerce.number().int().min(1),
-  });
-
-  app.get('/items/:id/intro', async (request) => {
-    const { id } = request.params as { id: string };
-    const { season } = introQuerySchema.parse(request.query);
-    return getPlaybackMarker(id, season);
   });
 }
