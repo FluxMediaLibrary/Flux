@@ -43,6 +43,9 @@ export function UploadConfirm({ onConfirmed }: { onConfirmed: () => void }) {
   const [selected, setSelected] = useState<TmdbSearchResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const [autoMatched, setAutoMatched] = useState(false);
+  const [matchError, setMatchError] = useState(false);
+
   const reset = useCallback(() => {
     setParsed(null);
     setError(null);
@@ -53,6 +56,8 @@ export function UploadConfirm({ onConfirmed }: { onConfirmed: () => void }) {
     setSelected(null);
     setSearching(false);
     setSubmitting(false);
+    setAutoMatched(false);
+    setMatchError(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
@@ -60,6 +65,7 @@ export function UploadConfirm({ onConfirmed }: { onConfirmed: () => void }) {
     setError(null);
     setUploading(true);
     setParsed(null);
+    setMatchError(false);
     try {
       const result = await api.uploadTorrent(file);
       setParsed(result);
@@ -68,6 +74,21 @@ export function UploadConfirm({ onConfirmed }: { onConfirmed: () => void }) {
       setQuery(result.guessedTitle);
       setResults(null);
       setSelected(null);
+      setAutoMatched(false);
+
+      // Auto-search TMDb with the guessed title and select the first match.
+      if (result.guessedTitle) {
+        try {
+          const list = await api.searchTmdb(result.guessedTitle, result.guessedType);
+          setResults(list);
+          if (list.length > 0) {
+            setSelected(list[0]);
+            setAutoMatched(true);
+          }
+        } catch {
+          setMatchError(true);
+        }
+      }
     } catch (err) {
       setError(
         err instanceof FluxApiError ? err.message : 'Failed to parse the .torrent file.',
@@ -83,6 +104,8 @@ export function UploadConfirm({ onConfirmed }: { onConfirmed: () => void }) {
     if (!q) return;
     setSearching(true);
     setError(null);
+    setAutoMatched(false);
+    setMatchError(false);
     try {
       const list = await api.searchTmdb(q, category);
       setResults(list);
@@ -230,7 +253,14 @@ export function UploadConfirm({ onConfirmed }: { onConfirmed: () => void }) {
 
           {/* TMDb search-and-confirm */}
           <div className="field">
-            <label htmlFor="tmdb-q">Match against TMDb</label>
+            <label htmlFor="tmdb-q">
+              Match against TMDb
+              {autoMatched && (
+                <span className="auto-match-badge" aria-label="Auto-matched">
+                  {' '}— auto-matched
+                </span>
+              )}
+            </label>
             <div className="search-row">
               <input
                 id="tmdb-q"
@@ -255,49 +285,62 @@ export function UploadConfirm({ onConfirmed }: { onConfirmed: () => void }) {
               </button>
             </div>
 
-            {results && results.length === 0 && !searching && (
+            {matchError && (
+              <p className="muted" style={{ fontSize: '0.85rem', marginTop: 10 }}>
+                Auto-match failed. Search manually above.
+              </p>
+            )}
+
+            {results && results.length === 0 && !searching && !matchError && (
               <p className="muted" style={{ fontSize: '0.85rem', marginTop: 10 }}>
                 No TMDb matches. Refine the search above.
               </p>
             )}
 
             {results && results.length > 0 && (
-              <ul className="tmdb-results">
-                {results.map((r) => {
-                  const active = selected?.tmdbId === r.tmdbId;
-                  return (
-                    <li key={`${r.mediaType}-${r.tmdbId}`}>
-                      <button
-                        type="button"
-                        className={active ? 'tmdb-result active' : 'tmdb-result'}
-                        onClick={() => setSelected(r)}
-                      >
-                        {r.posterPath ? (
-                          <Image
-                            src={`${TMDB_THUMB}${r.posterPath}`}
-                            alt=""
-                            width={46}
-                            height={69}
-                            className="tmdb-poster"
-                          />
-                        ) : (
-                          <span className="tmdb-poster placeholder" aria-hidden />
-                        )}
-                        <span className="tmdb-meta">
-                          <span className="tmdb-title">
-                            {r.title}
-                            {r.year ? <span className="dim"> · {r.year}</span> : null}
+              <>
+                <ul className="tmdb-results">
+                  {results.map((r) => {
+                    const active = selected?.tmdbId === r.tmdbId;
+                    return (
+                      <li key={`${r.mediaType}-${r.tmdbId}`}>
+                        <button
+                          type="button"
+                          className={active ? 'tmdb-result active' : 'tmdb-result'}
+                          onClick={() => { setSelected(r); setAutoMatched(false); }}
+                        >
+                          {r.posterPath ? (
+                            <Image
+                              src={`${TMDB_THUMB}${r.posterPath}`}
+                              alt=""
+                              width={46}
+                              height={69}
+                              className="tmdb-poster"
+                            />
+                          ) : (
+                            <span className="tmdb-poster placeholder" aria-hidden />
+                          )}
+                          <span className="tmdb-meta">
+                            <span className="tmdb-title">
+                              {r.title}
+                              {r.year ? <span className="dim"> · {r.year}</span> : null}
+                            </span>
+                            <span className="tmdb-overview">
+                              {r.overview || 'No synopsis available.'}
+                            </span>
                           </span>
-                          <span className="tmdb-overview">
-                            {r.overview || 'No synopsis available.'}
-                          </span>
-                        </span>
-                        {active && <span className="tmdb-check" aria-hidden>✓</span>}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                          {active && <span className="tmdb-check" aria-hidden>✓</span>}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {autoMatched && selected && (
+                  <p className="dim" style={{ fontSize: '0.8rem', marginTop: 6 }}>
+                    First result auto-selected. Wrong match? Edit the search query above and click Search.
+                  </p>
+                )}
+              </>
             )}
           </div>
 
