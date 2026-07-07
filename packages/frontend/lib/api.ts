@@ -407,6 +407,7 @@ export const api = {
       directPlay: boolean;
       videoCodec: string | null;
       audioCodec: string | null;
+      durationSeconds: number | null;
     }>(`/api/stream/${encodeURIComponent(mediaItemId)}/info${qs}`, { signal });
   },
   getHlsUrl(mediaItemId: string, episodeId?: string): string {

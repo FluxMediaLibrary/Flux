@@ -46,6 +46,8 @@ export interface HlsPaths {
 export interface MediaProbe {
   videoCodec: string | null;
   audioCodec: string | null;
+  /** Source file duration in seconds (from ffprobe format.duration). */
+  durationSeconds: number | null;
 }
 
 /** Video codecs a browser HLS player can play without re-encoding. */
@@ -56,33 +58,39 @@ const COPYABLE_AUDIO = new Set(['aac']);
 /**
  * Inspect a media file's first video/audio codecs via ffprobe. Best-effort:
  * returns nulls if ffprobe fails, which makes the caller fall back to a full
- * re-encode (safe default).
+ * re-encode (safe default). Also returns the source file duration so the
+ * frontend can display an accurate seek bar even for HLS event playlists
+ * where video.duration reports Infinity.
  */
 export function probeMedia(filePath: string): Promise<MediaProbe> {
   return new Promise((resolve) => {
     const proc = spawn('ffprobe', [
       '-v', 'error',
-      '-show_entries', 'stream=codec_type,codec_name',
+      '-show_entries', 'stream=codec_type,codec_name:format=duration',
       '-of', 'json',
       filePath,
     ]);
     let out = '';
     proc.stdout.on('data', (c) => { out += c.toString(); });
-    proc.on('error', () => resolve({ videoCodec: null, audioCodec: null }));
+    proc.on('error', () => resolve({ videoCodec: null, audioCodec: null, durationSeconds: null }));
     proc.on('close', () => {
       try {
         const json = JSON.parse(out) as {
+          format?: { duration?: string };
           streams?: { codec_type?: string; codec_name?: string }[];
         };
         const streams = json.streams ?? [];
         const video = streams.find((s) => s.codec_type === 'video');
         const audio = streams.find((s) => s.codec_type === 'audio');
+        const durRaw = json.format?.duration;
+        const durationSeconds = durRaw ? parseFloat(durRaw) : null;
         resolve({
           videoCodec: video?.codec_name ?? null,
           audioCodec: audio?.codec_name ?? null,
+          durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
         });
       } catch {
-        resolve({ videoCodec: null, audioCodec: null });
+        resolve({ videoCodec: null, audioCodec: null, durationSeconds: null });
       }
     });
   });
@@ -100,6 +108,8 @@ export interface PlaybackDecision {
   directPlay: boolean;
   videoCodec: string | null;
   audioCodec: string | null;
+  /** Source file duration in seconds (from ffprobe). Null if probe failed. */
+  durationSeconds: number | null;
 }
 
 /**
@@ -126,6 +136,7 @@ export async function decidePlayback(
     directPlay: containerOk && videoOk && audioOk,
     videoCodec: probe.videoCodec,
     audioCodec: probe.audioCodec,
+    durationSeconds: probe.durationSeconds,
   };
 }
 
