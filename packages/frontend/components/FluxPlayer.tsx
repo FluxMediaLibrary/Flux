@@ -22,6 +22,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { api } from '@/lib/api';
+import type { PlaybackMarkerDTO } from '@flux/shared';
 import {
   useCast,
   requestSession,
@@ -40,6 +41,8 @@ interface FluxPlayerProps {
   startPositionSeconds?: number;
   /** Fill the parent (used for the full-window watch page). */
   fill?: boolean;
+  /** Season number for the current episode (enables intro detection lookup). */
+  season?: number;
   onProgress?: (positionSeconds: number, durationSeconds: number) => void;
   onBack?: () => void;
 }
@@ -62,6 +65,7 @@ export function FluxPlayer({
   subtitle,
   startPositionSeconds = 0,
   fill = false,
+  season,
   onProgress,
   onBack,
 }: FluxPlayerProps) {
@@ -90,6 +94,40 @@ export function FluxPlayer({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [scrubbing, setScrubbing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ── Intro detection (Skip Intro button) ─────────────────────────────────────
+  const [introStart, setIntroStart] = useState<number | null>(null);
+  const [introEnd, setIntroEnd] = useState<number | null>(null);
+  const [introSkipped, setIntroSkipped] = useState(false);
+  const introShownRef = useRef(false); // only show once per playback
+
+  // Fetch intro marker when an episode with a known season is loaded.
+  useEffect(() => {
+    if (!episodeId || season == null) {
+      setIntroStart(null);
+      setIntroEnd(null);
+      setIntroSkipped(false);
+      introShownRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
+    api.getPlaybackMarker(mediaItemId, season).then((marker) => {
+      if (cancelled) return;
+      if (marker.hasMarker && marker.start != null && marker.end != null) {
+        setIntroStart(marker.start);
+        setIntroEnd(marker.end);
+      }
+    }).catch(() => { /* intro detection is best-effort */ });
+
+    return () => { cancelled = true; };
+  }, [mediaItemId, episodeId, season]);
+
+  // Reset intro skipped state when source changes.
+  useEffect(() => {
+    setIntroSkipped(false);
+    introShownRef.current = false;
+  }, [mode, decided]);
 
   // ── Casting (Chromecast) ────────────────────────────────────────────────
   const cast = useCast();
@@ -545,6 +583,28 @@ export function FluxPlayer({
       ? (buffered / duration) * 100
       : 0;
 
+  // ── Skip Intro visibility ──────────────────────────────────────────────────
+  const introVisible =
+    introStart != null &&
+    introEnd != null &&
+    dispCurrent >= introStart &&
+    dispCurrent <= introEnd &&
+    !introSkipped &&
+    !cast.connected;
+
+  // Track that we've shown it (set to true on first visibility)
+  const showIntro = introVisible && (introShownRef.current || (introShownRef.current = true));
+
+  const skipIntro = useCallback(() => {
+    if (introEnd == null) return;
+    const v = videoRef.current;
+    if (v) {
+      v.currentTime = introEnd + 0.25;
+      setIntroSkipped(true);
+      introShownRef.current = false;
+    }
+  }, [introEnd]);
+
   return (
     <div
       ref={containerRef}
@@ -594,6 +654,16 @@ export function FluxPlayer({
         <button className="vp-center" onClick={togglePlay} aria-label={dispPlaying ? 'Pause' : 'Play'}>
           {dispPlaying ? <PauseIcon big /> : <PlayIcon big />}
         </button>
+      )}
+
+      {/* Skip Intro button */}
+      {showIntro && (
+        <div className="vp-skip-intro">
+          <button className="vp-skip-btn" onClick={skipIntro} aria-label="Skip Intro">
+            <SkipIcon />
+            <span>Skip Intro</span>
+          </button>
+        </div>
       )}
 
       {/* Error overlay */}
@@ -725,4 +795,9 @@ const FsExitIcon = () => (
 );
 const BackIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={s()}><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+);
+const SkipIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor" style={s()}>
+    <path d="M5 4h2v16H5zM9 12l10 8V4z" />
+  </svg>
 );

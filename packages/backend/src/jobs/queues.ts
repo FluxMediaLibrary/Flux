@@ -8,6 +8,7 @@ import { bullConnection } from '../lib/redis.js';
 export const QUEUE_NAMES = {
   torrentPostprocess: 'torrent-postprocess',
   transcode: 'transcode',
+  introDetection: 'intro-detection',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -26,6 +27,11 @@ export interface TranscodeJob {
   sessionId: string;
 }
 
+export interface IntroDetectionJob {
+  mediaItemId: string;
+  season: number;
+}
+
 const defaultJobOptions = {
   attempts: 3,
   backoff: { type: 'exponential', delay: 5000 },
@@ -42,3 +48,8 @@ export const transcodeQueue = new Queue<TranscodeJob>(QUEUE_NAMES.transcode, {
   connection: bullConnection,
   defaultJobOptions,
 });
+
+export const introDetectionQueue = new Queue<IntroDetectionJob>(
+  QUEUE_NAMES.introDetection,
+  { connection: bullConnection, defaultJobOptions },
+);

@@ -16,8 +16,9 @@ import type {
   SaveProgressRequest,
   ContinueWatchingItemDTO,
   MediaType,
+  PlaybackMarkerDTO,
 } from '@flux/shared';
-import type { MediaItem, Episode, WatchProgress } from '@prisma/client';
+import type { MediaItem, Episode, WatchProgress, PlaybackMarker } from '@prisma/client';
 
 // ─── DTO mappers ─────────────────────────────────────────────────────────────
 
@@ -335,4 +336,33 @@ export async function saveProgress(
     },
   });
   return mapProgressToDTO(row);
+}
+
+/**
+ * Return the INTRO playback marker for a media item + season, if one exists
+ * and meets the confidence threshold.
+ */
+export async function getPlaybackMarker(
+  mediaItemId: string,
+  season: number,
+): Promise<PlaybackMarkerDTO> {
+  const marker = await prisma.playbackMarker.findUnique({
+    where: {
+      mediaItemId_season_markerType: {
+        mediaItemId,
+        season,
+        markerType: 'INTRO',
+      },
+    },
+  });
+
+  if (!marker) return { hasMarker: false };
+
+  return {
+    hasMarker: true,
+    type: marker.markerType,
+    start: marker.startSeconds,
+    end: marker.endSeconds,
+    confidence: marker.confidence,
+  };
 }

@@ -10,8 +10,10 @@ import {
   QUEUE_NAMES,
   type TorrentPostprocessJob,
   type TranscodeJob,
+  type IntroDetectionJob,
 } from './queues.js';
 import { processTorrentPostprocess } from '../modules/torrents/postprocess.js';
+import { analyzeAndStoreIntro } from '../lib/intro-detection.js';
 
 let workers: Worker[] = [];
 
@@ -24,6 +26,15 @@ async function processTorrentPostprocessJob(
 async function processTranscode(job: Job<TranscodeJob>): Promise<void> {
   // TODO(phase 6): spawn FFmpeg to produce HLS segments for the session.
   job.log(`transcode stub for session ${job.data.sessionId}`);
+}
+
+async function processIntroDetection(job: Job<IntroDetectionJob>): Promise<void> {
+  const { mediaItemId, season } = job.data;
+  const log = (msg: string) => job.log(msg);
+  const found = await analyzeAndStoreIntro(mediaItemId, season, log);
+  if (!found) {
+    job.log(`No intro marker stored for season ${season} (below confidence threshold or not detected).`);
+  }
 }
 
 /** Start all background workers. Called from server bootstrap. */
@@ -40,7 +51,13 @@ export function startWorkers(): Worker[] {
     { connection: bullConnection, concurrency: 2 },
   );
 
-  workers = [torrentWorker, transcodeWorker];
+  const introWorker = new Worker<IntroDetectionJob>(
+    QUEUE_NAMES.introDetection,
+    processIntroDetection,
+    { connection: bullConnection, concurrency: 1 },
+  );
+
+  workers = [torrentWorker, transcodeWorker, introWorker];
   return workers;
 }
 
