@@ -5,7 +5,7 @@
  *   GET  /info   — system dashboard aggregating backend stats
  */
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { getAdminInfo } from './admin.service.js';
+import { getAdminInfo, getIntroJobs } from './admin.service.js';
 
 export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   // All admin routes require ADMIN role.
@@ -13,5 +13,9 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
   app.get('/info', async () => {
     return getAdminInfo();
+  });
+
+  app.get('/intro-jobs', async () => {
+    return getIntroJobs();
   });
 };

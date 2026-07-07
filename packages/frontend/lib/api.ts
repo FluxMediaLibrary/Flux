@@ -29,6 +29,7 @@ import type {
   UpdateNotificationSettingsRequest,
   WatchProgressDTO,
   PlaybackMarkerDTO,
+  IntroJobsDTO,
 } from '@flux/shared';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
@@ -460,6 +461,11 @@ export const api = {
   // Admin dashboard
   getAdminInfo() {
     return request<AdminInfoDTO>('/api/admin/info');
+  },
+
+  /** Admin: poll intro detection job status. */
+  getIntroJobs() {
+    return request<IntroJobsDTO>('/api/admin/intro-jobs');
   },
 };
 

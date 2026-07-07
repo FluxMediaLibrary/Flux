@@ -534,3 +534,22 @@ export interface AnalyzeSeasonRequest {
   season: number;
   markerType?: PlaybackMarkerType;
 }
+
+// ─── Intro detection job status ──────────────────────────────────────────────
+
+export interface IntroJobItem {
+  id: string;
+  mediaItemId: string;
+  season: number;
+  state: 'active' | 'waiting' | 'completed' | 'failed';
+  progress?: number;      // 0..100
+  showTitle?: string;
+  finishedAt?: string;
+  failedReason?: string;
+}
+
+export interface IntroJobsDTO {
+  active: IntroJobItem[];
+  waiting: number;
+  recent: IntroJobItem[];  // last 5 completed/failed
+}

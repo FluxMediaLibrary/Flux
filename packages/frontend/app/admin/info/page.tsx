@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { AdminInfoDTO } from '@flux/shared';
 import type { LibraryItemDTO } from '@flux/shared';
+import type { IntroJobsDTO } from '@flux/shared';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -757,6 +758,9 @@ export default function AdminInfoPage() {
           Results appear as a "Skip Intro" button during playback.
         </p>
       </div>
+
+      {/* ── Intro Job Status ──────────────────────────────────────────────── */}
+      <IntroJobStatus />
     </div>
   );
 }
@@ -1130,6 +1134,129 @@ function PipelineArrow() {
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
+
+function IntroJobStatus() {
+  const [jobs, setJobs] = useState<IntroJobsDTO | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    function poll() {
+      if (cancelled) return;
+      api.getIntroJobs().then((data) => {
+        if (!cancelled) setJobs(data);
+      }).catch(() => {});
+    }
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  if (!jobs) return null;
+
+  const hasAny = jobs.active.length > 0 || jobs.waiting > 0 || jobs.recent.length > 0;
+  if (!hasAny) return null;
+
+  return (
+    <div className="card" style={{ padding: '22px 24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <IconCpu />
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 600, margin: 0, letterSpacing: '-0.01em' }}>
+          Intro Scan Progress
+        </h3>
+        <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+          refreshes 5s
+        </span>
+      </div>
+
+      {/* Summary bar */}
+      <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+        <StatusBadge label="Active" count={jobs.active.length} color="var(--accent)" />
+        <StatusBadge label="Waiting" count={jobs.waiting} color="var(--warn)" />
+        <StatusBadge
+          label="Done"
+          count={jobs.recent.filter((j) => j.state === 'completed').length}
+          color="var(--ok)"
+        />
+        <StatusBadge
+          label="Failed"
+          count={jobs.recent.filter((j) => j.state === 'failed').length}
+          color="var(--danger)"
+        />
+      </div>
+
+      {/* Active jobs */}
+      {jobs.active.length > 0 && (
+        <div style={{ marginBottom: jobs.recent.length > 0 ? 16 : 0 }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
+            Running
+          </span>
+          {jobs.active.map((j) => (
+            <div
+              key={j.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '6px 0',
+                fontSize: '0.85rem',
+              }}
+            >
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {j.showTitle ?? j.mediaItemId} S{j.season}
+              </span>
+              {j.progress != null && (
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                  {j.progress}%
+                </span>
+              )}
+              <span className="spinner" aria-hidden style={{ width: 14, height: 14, flexShrink: 0 }} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Recent completed/failed */}
+      {jobs.recent.length > 0 && (
+        <div>
+          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
+            Recent
+          </span>
+          {jobs.recent.map((j) => (
+            <div
+              key={j.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '4px 0',
+                fontSize: '0.82rem',
+              }}
+            >
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: j.state === 'completed' ? 'var(--ok)' : 'var(--danger)',
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                S{j.season}
+                {j.failedReason ? (
+                  <span style={{ color: 'var(--danger)', marginLeft: 8 }}>{j.failedReason}</span>
+                ) : null}
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', flexShrink: 0 }}>
+                {j.finishedAt ? new Date(j.finishedAt).toLocaleTimeString() : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const ico = {
   width: 17,
