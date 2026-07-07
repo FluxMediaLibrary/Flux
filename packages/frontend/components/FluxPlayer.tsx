@@ -196,6 +196,7 @@ export function FluxPlayer({
     <MediaPlayer
       ref={playerRef}
       src={src}
+      className={fill ? 'fx-player fx-player--fill' : 'fx-player'}
       aspectRatio={fill ? undefined : '16/9'}
       load="visible"
       playsInline
