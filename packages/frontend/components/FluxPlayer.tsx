@@ -168,6 +168,7 @@ function FluxMediaPlayer({
       crossOrigin
       controls={false}
       keyDisabled
+      streamType="on-demand"
       controlsDelay={2600}
       googleCast={{}}
       onError={onFatalError}
