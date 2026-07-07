@@ -105,8 +105,12 @@ export interface PlaybackDecision {
 /**
  * Decide, Plex-style, whether a file can be direct-played by a browser or must
  * go through HLS. Direct play needs a browser-friendly container AND both a
- * decodable video and audio codec — the audio check is what stops "video plays
- * but there's no sound" for AC3/DTS tracks.
+ * decodable video and audio codec.
+ *
+ * When ffprobe can't identify a codec (returns null), we route through HLS
+ * to be safe — the browser can't decode what we can't identify, and a silent
+ * direct-play failure produces "video plays but no audio" which is worse than
+ * a brief transcode start.
  */
 export async function decidePlayback(
   filePath: string,
@@ -115,8 +119,9 @@ export async function decidePlayback(
   const ext = path.extname(filePath).toLowerCase();
   const containerOk = DIRECT_CONTAINERS.has(ext);
   const videoOk = probe.videoCodec != null && DIRECT_VIDEO.has(probe.videoCodec);
+  // If we can't identify the audio codec, don't gamble — route to HLS.
   const audioOk =
-    probe.audioCodec == null || DIRECT_AUDIO.has(probe.audioCodec);
+    probe.audioCodec != null && DIRECT_AUDIO.has(probe.audioCodec);
   return {
     directPlay: containerOk && videoOk && audioOk,
     videoCodec: probe.videoCodec,

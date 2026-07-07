@@ -22,7 +22,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { api } from '@/lib/api';
-import type { PlaybackMarkerDTO } from '@flux/shared';
 import {
   useCast,
   requestSession,
@@ -99,7 +98,7 @@ export function FluxPlayer({
   const [introStart, setIntroStart] = useState<number | null>(null);
   const [introEnd, setIntroEnd] = useState<number | null>(null);
   const [introSkipped, setIntroSkipped] = useState(false);
-  const introShownRef = useRef(false); // only show once per playback
+  const [introButtonShown, setIntroButtonShown] = useState(false);
 
   // Fetch intro marker when an episode with a known season is loaded.
   useEffect(() => {
@@ -107,7 +106,7 @@ export function FluxPlayer({
       setIntroStart(null);
       setIntroEnd(null);
       setIntroSkipped(false);
-      introShownRef.current = false;
+      setIntroButtonShown(false);
       return;
     }
 
@@ -126,7 +125,7 @@ export function FluxPlayer({
   // Reset intro skipped state when source changes.
   useEffect(() => {
     setIntroSkipped(false);
-    introShownRef.current = false;
+    setIntroButtonShown(false);
   }, [mode, decided]);
 
   // ── Casting (Chromecast) ────────────────────────────────────────────────
@@ -291,10 +290,13 @@ export function FluxPlayer({
           }
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              // Segment not flushed yet or a blip — wait a beat and resume.
+              // Segment not flushed yet or a blip — back off with increasing
+              // delay so a slow transcode has time to catch up rather than
+              // burning through all retries at a fixed 1 s interval.
               if (netRetry < 30) {
                 netRetry += 1;
-                setTimeout(() => { try { hls.startLoad(); } catch { /* destroyed */ } }, 1000);
+                const delay = Math.min(1000 * netRetry, 15000);
+                setTimeout(() => { try { hls.startLoad(); } catch { /* destroyed */ } }, delay);
               } else {
                 setError('Playback keeps stalling. Retry in a moment.');
                 hls.destroy();
@@ -584,7 +586,7 @@ export function FluxPlayer({
       : 0;
 
   // ── Skip Intro visibility ──────────────────────────────────────────────────
-  const introVisible =
+  const introInWindow =
     introStart != null &&
     introEnd != null &&
     dispCurrent >= introStart &&
@@ -592,8 +594,15 @@ export function FluxPlayer({
     !introSkipped &&
     !cast.connected;
 
-  // Track that we've shown it (set to true on first visibility)
-  const showIntro = introVisible && (introShownRef.current || (introShownRef.current = true));
+  // Show the button on the first frame where currentTime enters the intro
+  // window. Once shown it stays visible until the window is exited or skipped.
+  const showIntro = introInWindow && !introButtonShown;
+  if (showIntro && !introButtonShown) {
+    // Schedule the state update after render to avoid setState during render.
+    queueMicrotask(() => setIntroButtonShown(true));
+  }
+  // Keep the button visible while still in the intro window.
+  const introButtonVisible = introInWindow && introButtonShown;
 
   const skipIntro = useCallback(() => {
     if (introEnd == null) return;
@@ -601,7 +610,7 @@ export function FluxPlayer({
     if (v) {
       v.currentTime = introEnd + 0.25;
       setIntroSkipped(true);
-      introShownRef.current = false;
+      setIntroButtonShown(false);
     }
   }, [introEnd]);
 
@@ -657,7 +666,7 @@ export function FluxPlayer({
       )}
 
       {/* Skip Intro button */}
-      {showIntro && (
+      {introButtonVisible && (
         <div className="vp-skip-intro">
           <button className="vp-skip-btn" onClick={skipIntro} aria-label="Skip Intro">
             <SkipIcon />
