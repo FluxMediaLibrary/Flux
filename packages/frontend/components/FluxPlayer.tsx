@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import {
   MediaPlayer,
   MediaProvider,
@@ -13,9 +13,8 @@ import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
 import { ControlBar } from './player/ControlBar';
 import { DebugOverlay } from './player/DebugOverlay';
 import { ErrorOverlay } from './player/ErrorOverlay';
-import { SkipButton, type PlaybackMarker } from './player/SkipButton';
 import { Spinner } from './player/Spinner';
-import { Timeline, type ChapterMarker } from './player/Timeline';
+import { Timeline } from './player/Timeline';
 import { TitleOverlay } from './player/TitleOverlay';
 
 interface FluxPlayerProps {
@@ -42,36 +41,6 @@ function getStreamLabel(streams: MediaStreamDTO[], type: MediaStreamDTO['type'])
   const parts = [stream.codec, stream.width && stream.height ? `${stream.width}x${stream.height}` : null]
     .filter(Boolean);
   return parts.join(' / ') || null;
-}
-
-function deriveMarkers(info: PlaybackInfoDTO | null): PlaybackMarker[] {
-  const duration = info?.durationSeconds ?? 0;
-  if (!Number.isFinite(duration) || duration <= 0) return [];
-
-  const markers: PlaybackMarker[] = [];
-  if (duration > 900) {
-    markers.push({ startTime: 0, endTime: Math.min(90, duration * 0.08), type: 'intro' });
-  }
-  if (duration > 1800) {
-    markers.push({
-      startTime: Math.max(duration - 90, duration * 0.92),
-      endTime: Math.max(duration - 10, duration * 0.98),
-      type: 'credits',
-    });
-  }
-  return markers;
-}
-
-function deriveChapters(markers: PlaybackMarker[]): ChapterMarker[] {
-  return markers.map((marker) => ({
-    time: marker.startTime,
-    title:
-      marker.type === 'intro'
-        ? 'Intro'
-        : marker.type === 'recap'
-          ? 'Recap'
-          : 'Credits',
-  }));
 }
 
 export function FluxPlayer(props: FluxPlayerProps) {
@@ -170,9 +139,6 @@ function FluxMediaPlayer({
   const playerRef = useRef<MediaPlayerInstance>(null);
   const [debugOpen, setDebugOpen] = useState(false);
 
-  const markers = useMemo(() => deriveMarkers(source.info), [source.info]);
-  const chapters = useMemo(() => deriveChapters(markers), [markers]);
-
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd') {
@@ -216,8 +182,6 @@ function FluxMediaPlayer({
         onProgress={onProgress}
         onNearEnd={onNearEnd}
         playerRef={playerRef}
-        markers={markers}
-        chapters={chapters}
         debugOpen={debugOpen}
         methodLabel={methodLabel}
         videoCodec={videoLabel ?? source.info?.videoCodec ?? null}
@@ -238,8 +202,6 @@ function FluxPlayerChrome({
   onProgress,
   onNearEnd,
   playerRef,
-  markers,
-  chapters,
   debugOpen,
   methodLabel,
   videoCodec,
@@ -257,8 +219,6 @@ function FluxPlayerChrome({
   | 'onNearEnd'
 > & {
   playerRef: RefObject<MediaPlayerInstance | null>;
-  markers: PlaybackMarker[];
-  chapters: ChapterMarker[];
   debugOpen: boolean;
   methodLabel: string;
   videoCodec: string | null;
@@ -268,9 +228,26 @@ function FluxPlayerChrome({
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
   const paused = useMediaState('paused');
+  const waiting = useMediaState('waiting');
+  const playing = useMediaState('playing');
   const remote = useMediaRemote();
   const resumeTargetRef = useRef(startPositionSeconds ?? 0);
   const nearEndFiredRef = useRef(false);
+
+  const seekTo = useCallback(
+    (time: number, trigger?: Event) => {
+      if (!Number.isFinite(time)) return;
+
+      const max = Number.isFinite(duration) && duration > 0 ? duration : Number.POSITIVE_INFINITY;
+      const target = Math.max(0, Math.min(time, max));
+      remote.seek(target, trigger);
+
+      const playerElement = playerRef.current as unknown as HTMLElement | null;
+      const media = playerElement?.querySelector?.('video,audio') as HTMLMediaElement | null;
+      if (media && Number.isFinite(target)) media.currentTime = target;
+    },
+    [duration, playerRef, remote],
+  );
 
   const reportProgress = useCallback(() => {
     const player = playerRef.current;
@@ -318,21 +295,20 @@ function FluxPlayerChrome({
   useEffect(() => {
     const target = resumeTargetRef.current;
     if (target > 0 && Number.isFinite(target) && duration > 0) {
-      remote.seek(Math.min(target, duration - 1));
+      seekTo(Math.min(target, duration - 1));
       resumeTargetRef.current = 0;
     }
-  }, [duration, remote]);
+  }, [duration, seekTo]);
 
   return (
     <>
       <div className="fx-video-scrim" aria-hidden="true" />
       <TitleOverlay title={title} subtitle={subtitle} onBack={onBack} />
-      <div className="fx-spinner-wrap">
+      <div className={waiting && !playing ? 'fx-spinner-wrap is-visible' : 'fx-spinner-wrap'}>
         <Spinner />
       </div>
-      <Timeline mediaItemId={mediaItemId} episodeId={episodeId} chapters={chapters} />
-      <SkipButton currentTime={currentTime} markers={markers} onSkip={(time) => remote.seek(time)} />
-      <ControlBar />
+      <Timeline mediaItemId={mediaItemId} episodeId={episodeId} onSeek={seekTo} />
+      <ControlBar onSeek={seekTo} />
       <DebugOverlay
         open={debugOpen}
         playbackMethod={methodLabel}
