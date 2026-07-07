@@ -75,6 +75,9 @@ export function FluxPlayer({
   const lastTimeRef = useRef(0);
   const directRecoverRef = useRef(0);
   const hlsRecoverRef = useRef(0);
+  // Server-probed source duration — used as the authoritative duration for
+  // the seek bar when hls.js event playlists report video.duration = Infinity.
+  const serverDurationRef = useRef<number | null>(null);
 
   const [mode, setMode] = useState<Mode>('direct');
   const [decided, setDecided] = useState(false);
@@ -174,6 +177,7 @@ export function FluxPlayer({
       (info) => {
         if (cancelled) return;
         setMode(info.directPlay ? 'direct' : 'hls');
+        if (info.durationSeconds) serverDurationRef.current = info.durationSeconds;
         setDecided(true);
       },
       () => {
@@ -499,8 +503,12 @@ export function FluxPlayer({
       return;
     }
     const v = videoRef.current;
-    if (!v || !v.duration) return;
-    v.currentTime = clamped * v.duration;
+    // Use server-probed duration when video.duration is Infinity (HLS event playlist).
+    const effective = Number.isFinite(v?.duration ?? NaN)
+      ? v!.duration
+      : (serverDurationRef.current ?? 0);
+    if (!v || !effective) return;
+    v.currentTime = clamped * effective;
   }, [cast.connected, cast.duration]);
 
   const onSeekDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
@@ -542,13 +550,20 @@ export function FluxPlayer({
 
   // When casting, mirror the receiver's clock + play state in the UI.
   const dispCurrent = cast.connected ? cast.currentTime : current;
-  const dispDuration = cast.connected ? cast.duration : duration;
+  // Use server-probed duration when the video element reports Infinity (HLS event playlist).
+  const effectiveDuration =
+    Number.isFinite(duration) && duration > 0
+      ? duration
+      : (serverDurationRef.current ?? 0);
+  const dispDuration = cast.connected
+    ? cast.duration
+    : effectiveDuration;
   const dispPlaying = cast.connected ? cast.isPlaying : playing;
   const playedPct = dispDuration ? (dispCurrent / dispDuration) * 100 : 0;
   const bufferedPct = cast.connected
     ? playedPct
-    : duration
-      ? (buffered / duration) * 100
+    : effectiveDuration
+      ? (buffered / effectiveDuration) * 100
       : 0;
 
   return (
