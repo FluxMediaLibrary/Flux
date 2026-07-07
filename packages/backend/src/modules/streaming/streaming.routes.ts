@@ -435,4 +435,35 @@ export const streamingRoutes: FastifyPluginAsync = async (
       });
     },
   );
+
+  // ── GET /:mediaItemId/trickplay/:file — serve sprite sheets and VTT ─────────
+
+  app.get(
+    '/:mediaItemId/trickplay/:file',
+    { preHandler: [app.requireProfileStream] },
+    async (request, reply) => {
+      const { mediaItemId, file } = request.params as { mediaItemId: string; file: string };
+      const { episodeId } = request.query as { episodeId?: string };
+
+      const { filePath: sourceFile } = await getMediaFilePath(mediaItemId, episodeId);
+      const trickplayDir = path.dirname(sourceFile);
+
+      const assetPath = safeJoin(trickplayDir, file);
+      if (!fs.existsSync(assetPath)) {
+        throw ApiError.notFound('Trickplay asset not found');
+      }
+
+      const ext = path.extname(assetPath).toLowerCase();
+      const contentType =
+        ext === '.vtt' ? 'text/vtt' :
+        ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' :
+        'application/octet-stream';
+
+      const stream = fs.createReadStream(assetPath);
+      return reply
+        .header('Content-Type', contentType)
+        .header('Cache-Control', 'public, max-age=86400, immutable')
+        .send(stream);
+    },
+  );
 };
