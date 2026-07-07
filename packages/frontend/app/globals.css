@@ -2628,6 +2628,7 @@ table.data tr:last-child td {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.22);
   transition: height 0.12s ease;
+  pointer-events: none;
 }
 .vp-seek:hover .vp-seek-track,
 .vp-seek.active .vp-seek-track { height: 7px; }
@@ -2636,12 +2637,14 @@ table.data tr:last-child td {
   left: 0; top: 0; bottom: 0;
   background: rgba(255, 255, 255, 0.34);
   border-radius: 999px;
+  pointer-events: none;
 }
 .vp-seek-played {
   position: absolute;
   left: 0; top: 0; bottom: 0;
   background: var(--accent);
   border-radius: 999px;
+  pointer-events: none;
 }
 .vp-seek-thumb {
   position: absolute;
@@ -2653,7 +2656,7 @@ table.data tr:last-child td {
   transform: translate(-50%, -50%);
   opacity: 0;
   transition: opacity 0.12s ease;
-  box-shadow: 0 0 0 4px var(--accent-glow);
+  pointer-events: none;
 }
 .vp-seek:hover .vp-seek-thumb,
 .vp-seek.active .vp-seek-thumb { opacity: 1; }

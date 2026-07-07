@@ -476,7 +476,9 @@ export function FluxPlayer({
     const cap = Number.isFinite(v.duration) && v.duration > 0
       ? v.duration
       : (serverDurationRef.current ?? 0);
-    v.currentTime = Math.min(Math.max(0, v.currentTime + delta), cap || 0);
+    const newTime = Math.min(Math.max(0, v.currentTime + delta), cap || 0);
+    console.log('[Seek] seekBy', { delta, currentTime: v.currentTime, cap, newTime, videoDur: v.duration });
+    v.currentTime = newTime;
     revealControls();
   }, [cast.connected, cast.currentTime, cast.duration, revealControls]);
 
@@ -519,7 +521,10 @@ export function FluxPlayer({
     const effective = Number.isFinite(v?.duration ?? NaN)
       ? v!.duration
       : (serverDurationRef.current ?? 0);
-    if (!v || !effective) return;
+    if (!v || !effective) {
+      console.log('[Seek] seekFromPointer blocked', { hasVideo: !!v, effective, serverDur: serverDurationRef.current, videoDur: v?.duration });
+      return;
+    }
     const target = clamped * effective;
     v.currentTime = target;
     // Update scrub preview position for the thumbnail.
@@ -528,6 +533,7 @@ export function FluxPlayer({
   }, [cast.connected, cast.duration]);
 
   const onSeekDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    console.log('[Seek] down', { clientX: e.clientX, pointerId: e.pointerId, effective: Number.isFinite(videoRef.current?.duration ?? NaN) ? videoRef.current!.duration : serverDurationRef.current });
     e.currentTarget.setPointerCapture(e.pointerId);
     scrubbingRef.current = true;
     setScrubbing(true);
@@ -535,14 +541,15 @@ export function FluxPlayer({
   }, [seekFromPointer]);
 
   const onSeekMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!scrubbingRef.current) return;
+    if (!scrubbingRef.current) { console.log('[Seek] move ignored (not scrubbing)'); return; }
     seekFromPointer(e.clientX, e.currentTarget);
   }, [seekFromPointer]);
 
   const onSeekUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    console.log('[Seek] up');
     scrubbingRef.current = false;
     setScrubbing(false);
-    setScrubPos(null); // hide preview
+    setScrubPos(null);
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   }, []);
 
