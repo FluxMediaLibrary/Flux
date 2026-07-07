@@ -93,7 +93,6 @@ export function ControlBar({ durationSeconds, onSeek }: ControlBarProps) {
 
   return (
     <div className="fx-controls">
-      <div className="fx-controls-gradient" aria-hidden="true" />
       <div className="fx-row">
         <button className="fx-btn fx-btn--primary" type="button" onClick={() => remote.togglePaused()} aria-label={paused ? 'Play' : 'Pause'}>
           {paused ? <PlayIcon /> : <PauseIcon />}
