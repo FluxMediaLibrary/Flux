@@ -553,6 +553,28 @@ export function FluxPlayer({
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
   }, []);
 
+  // Container-level mouse-move: reveals controls + handles scrubbing when the
+  // seek bar captured a pointer-down but pointermove events aren't delivered
+  // to the captured element (common on touch devices / some browsers).
+  const onContainerMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      revealControls();
+      if (scrubbingRef.current && seekTrackRef.current) {
+        seekFromPointer(e.clientX, seekTrackRef.current);
+      }
+    },
+    [revealControls, seekFromPointer],
+  );
+
+  const onContainerMouseUp = useCallback(() => {
+    if (scrubbingRef.current) {
+      console.log('[Seek] container up (fallback)');
+      scrubbingRef.current = false;
+      setScrubbing(false);
+      setScrubPos(null);
+    }
+  }, []);
+
   // ── Keyboard shortcuts ──────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -594,7 +616,8 @@ export function FluxPlayer({
     <div
       ref={containerRef}
       className={`vp${fill ? ' vp--fill' : ''}${controlsVisible || !playing ? ' show' : ''}${fullscreen ? ' fs' : ''}`}
-      onMouseMove={revealControls}
+      onMouseMove={onContainerMouseMove}
+      onMouseUp={onContainerMouseUp}
       onMouseLeave={() => playing && setControlsVisible(false)}
     >
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
