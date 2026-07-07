@@ -8,7 +8,7 @@ interface TimelineProps {
   mediaItemId: string;
   episodeId?: string;
   durationSeconds?: number | null;
-  onSeek: (time: number, trigger?: Event) => void;
+  onSeek: (time: number, trigger?: Event, commit?: boolean) => void;
 }
 
 export interface ChapterMarker {
@@ -76,12 +76,12 @@ export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: Ti
   );
 
   const seekFromPointer = useCallback(
-    (event: PointerEvent<HTMLDivElement>) => {
+    (event: PointerEvent<HTMLDivElement>, commit: boolean) => {
       if (!canSeek && range.length <= 0) return;
       const position = getPosition(event.clientX);
       if (!position) return;
       setPreview({ visible: true, time: position.time, left: position.left });
-      onSeek(position.time, event.nativeEvent);
+      onSeek(position.time, event.nativeEvent, commit);
     },
     [canSeek, getPosition, onSeek, range.length],
   );
@@ -117,19 +117,27 @@ export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: Ti
       className={disabled ? 'fx-timeline is-disabled' : 'fx-timeline'}
       onPointerMove={(event) => {
         updatePreview(event.clientX, true);
-        if (dragging) seekFromPointer(event);
+        if (dragging) seekFromPointer(event, false);
       }}
       onPointerDown={(event) => {
         if (disabled) return;
         event.currentTarget.setPointerCapture(event.pointerId);
         setDragging(true);
-        seekFromPointer(event);
+        seekFromPointer(event, false);
       }}
       onPointerUp={(event) => {
-        if (dragging) seekFromPointer(event);
+        if (dragging) seekFromPointer(event, true);
         setDragging(false);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
       }}
-      onPointerCancel={() => setDragging(false)}
+      onPointerCancel={(event) => {
+        setDragging(false);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      }}
       onPointerLeave={() => {
         if (!dragging) setPreview((state) => ({ ...state, visible: false }));
       }}

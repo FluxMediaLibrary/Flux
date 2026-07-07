@@ -20,7 +20,7 @@ import { SettingsPanel } from './SettingsPanel';
 
 interface ControlBarProps {
   durationSeconds?: number | null;
-  onSeek: (time: number, trigger?: Event) => void;
+  onSeek: (time: number, trigger?: Event, commit?: boolean) => void;
 }
 
 function formatTime(value: number): string {

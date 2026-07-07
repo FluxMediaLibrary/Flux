@@ -227,7 +227,6 @@ function FluxPlayerChrome({
 }) {
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
-  const seekableEnd = useMediaState('seekableEnd');
   const paused = useMediaState('paused');
   const waiting = useMediaState('waiting');
   const playing = useMediaState('playing');
@@ -241,22 +240,26 @@ function FluxPlayerChrome({
       : 0;
 
   const seekTo = useCallback(
-    (time: number, trigger?: Event) => {
+    (time: number, trigger?: Event, commit = true) => {
       if (!Number.isFinite(time)) return;
 
       const hardMax = stableDuration > 0 ? stableDuration : Number.POSITIVE_INFINITY;
-      const generatedMax = typeof seekableEnd === 'number' && Number.isFinite(seekableEnd) && seekableEnd > 0
-        ? Math.max(0, seekableEnd - 0.25)
-        : hardMax;
-      const max = Math.min(hardMax, generatedMax);
-      const target = Math.max(0, Math.min(time, max));
-      remote.seek(target, trigger);
+      const target = Math.max(0, Math.min(time, hardMax));
+      if (commit) remote.seek(target, trigger);
+      else remote.seeking(target, trigger);
 
       const playerElement = playerRef.current as unknown as HTMLElement | null;
       const media = playerElement?.querySelector?.('video,audio') as HTMLMediaElement | null;
-      if (media && Number.isFinite(target)) media.currentTime = target;
+      if (commit && media && Number.isFinite(target)) {
+        try {
+          media.currentTime = target;
+        } catch {
+          // Some HLS states reject direct native seeks; Vidstack/hls.js still
+          // receives the committed seek request above.
+        }
+      }
     },
-    [playerRef, remote, seekableEnd, stableDuration],
+    [playerRef, remote, stableDuration],
   );
 
   const reportProgress = useCallback(() => {
