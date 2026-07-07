@@ -2479,9 +2479,7 @@ table.data tr:last-child td {
   aspect-ratio: auto;
   border-radius: 0;
 }
-/* Back button stays visible so there's always an exit from the full-window player. */
-.vp--fill .vp-top { opacity: 1; pointer-events: auto; }
-.vp--fill:not(.show) .vp-titlewrap { opacity: 0; transition: opacity 0.2s ease; }
+
 .vp-video {
   width: 100%;
   height: 100%;
