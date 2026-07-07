@@ -3016,6 +3016,7 @@ media-player.fx-player .fx-scrub-time {
 .fx-player[data-hocus] .fx-video-scrim {
   opacity: 1;
 }
+.fx-player:not([data-paused]) .fx-chrome.is-idle .fx-video-scrim { opacity: 0; }
 .fx-player button {
   font: inherit;
 }
@@ -3041,6 +3042,8 @@ media-player.fx-player .fx-scrub-time {
   opacity: 1;
   pointer-events: auto;
 }
+.fx-player:not([data-paused]) .fx-chrome.is-idle .fx-top { opacity: 0; pointer-events: none; }
+.fx-player .fx-chrome:not(.is-idle) .fx-top { opacity: 1; pointer-events: auto; }
 .fx-player .fx-titlewrap { min-width: 0; flex: 1; }
 .fx-player .fx-title {
   color: #fff;
@@ -3103,6 +3106,8 @@ media-player.fx-player .fx-scrub-time {
   cursor: default;
   opacity: .45;
 }
+.fx-player:not([data-paused]) .fx-chrome.is-idle .fx-timeline { opacity: 0; }
+.fx-player .fx-chrome:not(.is-idle) .fx-timeline { opacity: 1; }
 .fx-player .fx-seek {
   display: flex;
   align-items: center;
@@ -3203,6 +3208,8 @@ media-player.fx-player .fx-scrub-time {
 .fx-player[data-hocus] .fx-controls {
   opacity: 1;
 }
+.fx-player:not([data-paused]) .fx-chrome.is-idle .fx-controls { opacity: 0; }
+.fx-player .fx-chrome:not(.is-idle) .fx-controls { opacity: 1; }
 .fx-player .fx-row {
   display: flex;
   align-items: center;
