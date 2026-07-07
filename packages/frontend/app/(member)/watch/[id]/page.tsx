@@ -62,6 +62,18 @@ export default function WatchPage() {
     [id, activeEpisodeId],
   );
 
+  // Preload next episode when near the end of the current one.
+  const handleNearEnd = useCallback(() => {
+    if (!item || !activeEpisodeId) return;
+    const eps = item.episodes ?? [];
+    const idx = eps.findIndex((e) => e.id === activeEpisodeId);
+    const next = eps[idx + 1];
+    if (next?.id) {
+      // Warm the playback-info cache so the next episode starts instantly.
+      api.getPlaybackInfo(id, next.id).catch(() => {});
+    }
+  }, [id, item, activeEpisodeId]);
+
   // Resume position: episode-level for shows, movie-level otherwise. Skip when
   // the last session already completed the title (start fresh from 0).
   const resumeProgress = activeEpisodeId ? activeEpisode?.progress : item?.progress;
@@ -108,6 +120,7 @@ export default function WatchPage() {
         startPositionSeconds={startPosition}
         fill
         onProgress={handleProgress}
+        onNearEnd={handleNearEnd}
         onBack={() => router.push(`/library/${id}`)}
       />
     </div>

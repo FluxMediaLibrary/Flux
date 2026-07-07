@@ -373,6 +373,46 @@ export interface SaveProgressRequest {
   durationSeconds?: number;
 }
 
+// ─── Media analysis ───────────────────────────────────────────────────────────
+
+export interface MediaStreamDTO {
+  id: string;
+  type: 'video' | 'audio' | 'subtitle';
+  index: number;
+  codec: string | null;
+  profile: string | null;
+  level: number | null;
+  width: number | null;
+  height: number | null;
+  bitrate: number | null;
+  framerate: number | null;
+  hdr: string | null;
+  channels: number | null;
+  language: string | null;
+  title: string | null;
+  isDefault: boolean;
+  isForced: boolean;
+}
+
+export interface MediaInfoDTO {
+  id: string;
+  container: string;
+  durationSec: number;
+  sizeBytes: number;
+  hasVideo: boolean;
+  hasAudio: boolean;
+  hasSubtitles: boolean;
+  streams: MediaStreamDTO[];
+}
+
+export interface PlaybackInfoDTO {
+  directPlay: boolean;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  durationSeconds: number | null;
+  streams: MediaStreamDTO[];
+}
+
 // ─── Requests (per-profile) ───────────────────────────────────────────────────
 
 export interface RequestDTO {

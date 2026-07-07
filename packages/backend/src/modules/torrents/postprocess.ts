@@ -5,6 +5,7 @@
 import { prisma } from '../../lib/db.js';
 import { moviePlacement, episodePlacement } from '../../lib/media-paths.js';
 import { isVideoFile, fileExtension } from '../../lib/filename.js';
+import { analyzeAndStoreMedia } from '../../lib/media-analyzer.js';
 import {
   type TorrentPostprocessJob,
 } from '../../jobs/queues.js';
@@ -223,6 +224,40 @@ export async function processTorrentPostprocess(
         mediaItemId,
       },
     });
+
+    // Trigger background media analysis (best-effort, non-blocking).
+    // Runs ffprobe on each file and stores codec/stream info in the DB so
+    // future playback decisions are instant instead of a fresh ffprobe spawn.
+    if (torrent.category === 'MOVIE') {
+      const files = torrentData.files as unknown as TorrentFile[];
+      const videoFiles = files.filter((f) => isVideoFile(f.name));
+      const largestVideo = videoFiles.reduce((a, b) => a.length > b.length ? a : b);
+      const placement = moviePlacement(tmdbDetail.title, tmdbDetail.year, fileExtension(largestVideo.name));
+      analyzeAndStoreMedia(placement.file, { mediaItemId }).catch((err) => {
+        console.error(`[PostProcess] Media analysis failed for movie ${mediaItemId}:`, err);
+      });
+    } else {
+      // For shows: analyze each episode file we just placed
+      const fileMapping = torrent.fileMapping as unknown as FileMappingEntry[] | null;
+      if (fileMapping) {
+        for (const mapping of fileMapping) {
+          const ep = await prisma.episode.findUnique({
+            where: {
+              mediaItemId_season_episode: {
+                mediaItemId,
+                season: mapping.season,
+                episode: mapping.episode,
+              },
+            },
+          });
+          if (ep?.filePath) {
+            analyzeAndStoreMedia(ep.filePath, { episodeId: ep.id }).catch((err) => {
+              console.error(`[PostProcess] Media analysis failed for episode ${ep.id}:`, err);
+            });
+          }
+        }
+      }
+    }
 
     // 11. Fulfill matching Requests
     const requests = await prisma.request.findMany({
