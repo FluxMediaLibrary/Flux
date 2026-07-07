@@ -283,9 +283,9 @@ export async function detectIntroForSeason(
 ): Promise<IntroDetectionResult | null> {
   // Use raw query until prisma generate picks up the new model
   const episodes = await prisma.$queryRawUnsafe<
-    { id: string; file_path: string | null; episode: number }[]
+    { id: string; filePath: string | null; episode: number }[]
   >(
-    `SELECT id, file_path, episode FROM episodes WHERE media_item_id = $1 AND season = $2 AND file_path IS NOT NULL ORDER BY episode ASC`,
+    `SELECT id, "filePath", "episode" FROM "episodes" WHERE "mediaItemId" = $1 AND "season" = $2 AND "filePath" IS NOT NULL ORDER BY "episode" ASC`,
     mediaItemId,
     season,
   );
@@ -302,7 +302,7 @@ export async function detectIntroForSeason(
 
   try {
     for (const ep of episodes) {
-      const fp = ep.file_path;
+      const fp = ep.filePath;
       if (!fp) continue;
 
       log?.(`  Extracting S${String(season).padStart(2, '0')}E${String(ep.episode).padStart(2, '0')}...`);
@@ -354,7 +354,7 @@ export async function analyzeAndStoreIntro(
 
   if (!result || result.confidence < CONFIDENCE_THRESHOLD) {
     await prisma.$executeRawUnsafe(
-      `DELETE FROM playback_markers WHERE media_item_id = $1 AND season = $2 AND marker_type = 'INTRO'`,
+      `DELETE FROM "playback_markers" WHERE "mediaItemId" = $1 AND "season" = $2 AND "markerType" = 'INTRO'`,
       mediaItemId,
       season,
     );
@@ -363,10 +363,10 @@ export async function analyzeAndStoreIntro(
 
   // Upsert: try insert, on conflict update
   await prisma.$executeRawUnsafe(
-    `INSERT INTO playback_markers (id, media_item_id, season, marker_type, start_seconds, end_seconds, confidence, created_at, updated_at)
+    `INSERT INTO "playback_markers" ("id", "mediaItemId", "season", "markerType", "startSeconds", "endSeconds", "confidence", "createdAt", "updatedAt")
      VALUES ($1, $2, $3, 'INTRO', $4, $5, $6, NOW(), NOW())
-     ON CONFLICT (media_item_id, season, marker_type)
-     DO UPDATE SET start_seconds = $4, end_seconds = $5, confidence = $6, updated_at = NOW()`,
+     ON CONFLICT ("mediaItemId", "season", "markerType")
+     DO UPDATE SET "startSeconds" = $4, "endSeconds" = $5, "confidence" = $6, "updatedAt" = NOW()`,
     randomUUID(),
     mediaItemId,
     season,
@@ -388,7 +388,7 @@ export async function queueIntroDetectionForShow(
   log?: (msg: string) => void,
 ): Promise<number> {
   const seasons = await prisma.$queryRawUnsafe<{ season: number }[]>(
-    `SELECT DISTINCT season FROM episodes WHERE media_item_id = $1 AND file_path IS NOT NULL`,
+    `SELECT DISTINCT "season" FROM "episodes" WHERE "mediaItemId" = $1 AND "filePath" IS NOT NULL`,
     mediaItemId,
   );
 
