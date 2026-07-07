@@ -310,6 +310,7 @@ export function FluxPlayer({
       video.playbackRate = rate;
       video.play().catch(() => { /* autoplay may be blocked; user can press play */ });
     };
+    const onDuration = () => setDuration(video.duration || 0);
     const onTime = () => {
       setCurrent(video.currentTime);
       if (video.currentTime > 0) lastTimeRef.current = video.currentTime;
@@ -368,6 +369,7 @@ export function FluxPlayer({
     };
 
     video.addEventListener('loadedmetadata', onLoaded);
+    video.addEventListener('durationchange', onDuration);
     video.addEventListener('timeupdate', onTime);
     video.addEventListener('progress', onProg);
     video.addEventListener('play', onPlay);
@@ -378,6 +380,7 @@ export function FluxPlayer({
     video.addEventListener('error', onErr);
     return () => {
       video.removeEventListener('loadedmetadata', onLoaded);
+      video.removeEventListener('durationchange', onDuration);
       video.removeEventListener('timeupdate', onTime);
       video.removeEventListener('progress', onProg);
       video.removeEventListener('play', onPlay);
