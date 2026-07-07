@@ -526,11 +526,39 @@ export function FluxPlayer({
       return;
     }
     const target = clamped * effective;
+    console.log('[Seek] seekFromPointer', { clientX, frac: frac.toFixed(4), clamped: clamped.toFixed(4), effective, target: target.toFixed(2), currentTime: v.currentTime });
     v.currentTime = target;
     // Update scrub preview position for the thumbnail.
     setScrubPos(target);
     setScrubLeft(clientX - rect.left - 80); // center 160px preview on pointer
   }, [cast.connected, cast.duration]);
+
+  // Stable ref so native listeners always call the latest seekFromPointer.
+  const seekFromPointerRef = useRef(seekFromPointer);
+  seekFromPointerRef.current = seekFromPointer;
+
+  // Native pointermove / pointerup on the document — bypasses React's synthetic
+  // event system which doesn't reliably deliver captured pointer events to the
+  // element's React handlers.
+  useEffect(() => {
+    const onPointerMove = (e: PointerEvent) => {
+      if (!scrubbingRef.current || !seekTrackRef.current) return;
+      seekFromPointerRef.current(e.clientX, seekTrackRef.current);
+    };
+    const onPointerUp = () => {
+      if (!scrubbingRef.current) return;
+      console.log('[Seek] pointerup (native cleanup)');
+      scrubbingRef.current = false;
+      setScrubbing(false);
+      setScrubPos(null);
+    };
+    document.addEventListener('pointermove', onPointerMove);
+    document.addEventListener('pointerup', onPointerUp);
+    return () => {
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+    };
+  }, []);
 
   const onSeekDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     console.log('[Seek] down', { clientX: e.clientX, pointerId: e.pointerId, effective: Number.isFinite(videoRef.current?.duration ?? NaN) ? videoRef.current!.duration : serverDurationRef.current });
@@ -540,40 +568,12 @@ export function FluxPlayer({
     seekFromPointer(e.clientX, e.currentTarget);
   }, [seekFromPointer]);
 
-  const onSeekMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!scrubbingRef.current) { console.log('[Seek] move ignored (not scrubbing)'); return; }
-    seekFromPointer(e.clientX, e.currentTarget);
-  }, [seekFromPointer]);
-
-  const onSeekUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    console.log('[Seek] up');
-    scrubbingRef.current = false;
-    setScrubbing(false);
-    setScrubPos(null);
-    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-  }, []);
-
-  // Container-level mouse-move: reveals controls + handles scrubbing when the
-  // seek bar captured a pointer-down but pointermove events aren't delivered
-  // to the captured element (common on touch devices / some browsers).
+  // Container-level mouse-move: reveal controls only. Scrubbing is handled by
+  // the native document-level pointermove listener above.
   const onContainerMouseMove = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      revealControls();
-      if (scrubbingRef.current && seekTrackRef.current) {
-        seekFromPointer(e.clientX, seekTrackRef.current);
-      }
-    },
-    [revealControls, seekFromPointer],
+    () => { revealControls(); },
+    [revealControls],
   );
-
-  const onContainerMouseUp = useCallback(() => {
-    if (scrubbingRef.current) {
-      console.log('[Seek] container up (fallback)');
-      scrubbingRef.current = false;
-      setScrubbing(false);
-      setScrubPos(null);
-    }
-  }, []);
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────
   useEffect(() => {
@@ -617,7 +617,6 @@ export function FluxPlayer({
       ref={containerRef}
       className={`vp${fill ? ' vp--fill' : ''}${controlsVisible || !playing ? ' show' : ''}${fullscreen ? ' fs' : ''}`}
       onMouseMove={onContainerMouseMove}
-      onMouseUp={onContainerMouseUp}
       onMouseLeave={() => playing && setControlsVisible(false)}
     >
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
@@ -694,8 +693,6 @@ export function FluxPlayer({
           ref={seekTrackRef}
           className={`vp-seek${scrubbing ? ' active' : ''}`}
           onPointerDown={onSeekDown}
-          onPointerMove={onSeekMove}
-          onPointerUp={onSeekUp}
           role="slider"
           aria-label="Seek"
           aria-valuemin={0}
