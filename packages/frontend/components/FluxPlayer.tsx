@@ -163,9 +163,11 @@ function FluxMediaPlayer({
       className={fill ? 'fx-player fx-player--fill' : 'fx-player'}
       aspectRatio={fill ? undefined : '16/9'}
       load="visible"
+      autoPlay
       playsInline
       crossOrigin
       controls={false}
+      keyDisabled
       hideControlsOnMouseLeave
       controlsDelay={2600}
       googleCast={{}}
@@ -228,11 +230,14 @@ function FluxPlayerChrome({
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
   const paused = useMediaState('paused');
+  const canPlay = useMediaState('canPlay');
   const waiting = useMediaState('waiting');
   const playing = useMediaState('playing');
   const remote = useMediaRemote();
   const resumeTargetRef = useRef(startPositionSeconds ?? 0);
   const nearEndFiredRef = useRef(false);
+  const autoplayAttemptedRef = useRef(false);
+  const chromeRef = useRef<HTMLDivElement>(null);
   const stableDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
     ? durationSeconds
     : typeof duration === 'number' && Number.isFinite(duration) && duration > 0
@@ -245,21 +250,26 @@ function FluxPlayerChrome({
 
       const hardMax = stableDuration > 0 ? stableDuration : Number.POSITIVE_INFINITY;
       const target = Math.max(0, Math.min(time, hardMax));
-      if (commit) remote.seek(target, trigger);
-      else remote.seeking(target, trigger);
+      const player = playerRef.current;
 
-      const playerElement = playerRef.current as unknown as HTMLElement | null;
-      const media = playerElement?.querySelector?.('video,audio') as HTMLMediaElement | null;
-      if (commit && media && Number.isFinite(target)) {
-        try {
-          media.currentTime = target;
-        } catch {
-          // Some HLS states reject direct native seeks; Vidstack/hls.js still
-          // receives the committed seek request above.
+      if (commit) {
+        if (player) {
+          player.currentTime = target;
         }
+        remote.seek(target, trigger);
+      } else {
+        remote.seeking(target, trigger);
       }
     },
     [playerRef, remote, stableDuration],
+  );
+
+  const togglePlayback = useCallback(
+    (trigger?: Event) => {
+      if (paused) remote.play(trigger);
+      else remote.pause(trigger);
+    },
+    [paused, remote],
   );
 
   const reportProgress = useCallback(() => {
@@ -316,9 +326,55 @@ function FluxPlayerChrome({
     }
   }, [seekTo, stableDuration]);
 
+  useEffect(() => {
+    if (!canPlay || !paused || autoplayAttemptedRef.current) return;
+    autoplayAttemptedRef.current = true;
+    playerRef.current?.play().catch(() => {});
+  }, [canPlay, paused, playerRef]);
+
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      return (
+        target.isContentEditable ||
+        ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName)
+      );
+    };
+
+    const handleKey = (event: KeyboardEvent) => {
+      const root = chromeRef.current;
+      if (!root || isEditableTarget(event.target)) return;
+
+      const target = event.target instanceof Node ? event.target : null;
+      if (target && !root.contains(target) && document.activeElement && !root.contains(document.activeElement)) {
+        return;
+      }
+
+      if (event.code === 'Space' || event.key === ' ') {
+        event.preventDefault();
+        togglePlayback(event);
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        seekTo(currentTime - 10, event);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        seekTo(currentTime + 10, event);
+      }
+    };
+
+    window.addEventListener('keydown', handleKey, { capture: true });
+    return () => window.removeEventListener('keydown', handleKey, { capture: true });
+  }, [currentTime, seekTo, togglePlayback]);
+
   return (
-    <>
+    <div ref={chromeRef} className="fx-chrome">
       <div className="fx-video-scrim" aria-hidden="true" />
+      <button
+        className="fx-click-layer"
+        type="button"
+        aria-label={paused ? 'Play' : 'Pause'}
+        onClick={(event) => togglePlayback(event.nativeEvent)}
+      />
       <TitleOverlay title={title} subtitle={subtitle} onBack={onBack} />
       <div className={waiting && !playing ? 'fx-spinner-wrap is-visible' : 'fx-spinner-wrap'}>
         <Spinner />
@@ -337,6 +393,6 @@ function FluxPlayerChrome({
         audioCodec={audioCodec}
         durationSeconds={durationSeconds}
       />
-    </>
+    </div>
   );
 }

@@ -3070,6 +3070,26 @@ media-player.fx-player .fx-scrub-time {
 .fx-player .fx-spinner-wrap.is-visible {
   opacity: 1;
 }
+.fx-player .fx-chrome {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+}
+.fx-player .fx-click-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  appearance: none;
+  -webkit-appearance: none;
+}
 .fx-player .fx-timeline {
   position: absolute;
   left: 20px;
