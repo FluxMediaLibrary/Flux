@@ -9,7 +9,7 @@ interface TitleOverlayProps {
 }
 
 /**
- * Top gradient overlay with back button, title, and subtitle.
+ * Top overlay with back button, title, and subtitle.
  * Auto-hides with the control bar.
  */
 export function TitleOverlay({ title, subtitle, onBack }: TitleOverlayProps) {

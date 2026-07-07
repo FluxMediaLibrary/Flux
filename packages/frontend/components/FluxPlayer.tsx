@@ -168,7 +168,6 @@ function FluxMediaPlayer({
       crossOrigin
       controls={false}
       keyDisabled
-      hideControlsOnMouseLeave
       controlsDelay={2600}
       googleCast={{}}
       onError={onFatalError}
@@ -410,12 +409,14 @@ function FluxPlayerChrome({
 
   return (
     <div ref={chromeRef} className={idle ? 'fx-chrome is-idle' : 'fx-chrome'}>
-      <div className="fx-video-scrim" aria-hidden="true" />
       <button
         className="fx-click-layer"
         type="button"
         aria-label={paused ? 'Play' : 'Pause'}
-        onClick={(event) => togglePlayback(event.nativeEvent)}
+        onClick={(event) => {
+          event.stopPropagation();
+          togglePlayback();
+        }}
       />
       <TitleOverlay title={title} subtitle={subtitle} onBack={onBack} />
       <div className={(!started || (waiting && !playing)) ? 'fx-spinner-wrap is-visible' : 'fx-spinner-wrap'}>
