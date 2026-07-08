@@ -373,6 +373,20 @@ export const streamingRoutes: FastifyPluginAsync = async (
         ? 'application/vnd.apple.mpegurl'
         : 'video/mp2t';
 
+      // Variant playlists (stream_N/index.m3u8) must be tokenized so the
+      // segment URLs they reference carry the auth token. Without this,
+      // adaptive HLS silently fails: the master playlist is tokenized by
+      // the manifest endpoint but the variant playlists served here are
+      // raw, leaving segment requests without a token → 401 → retry loop.
+      if (ext === '.m3u8') {
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const tokenized = tokenizeManifest(raw, streamToken(request), episodeId);
+        return reply
+          .header('Content-Type', contentType)
+          .header('Cache-Control', 'no-store')
+          .send(tokenized);
+      }
+
       const stream = fs.createReadStream(filePath);
       return reply
         .header('Content-Type', contentType)

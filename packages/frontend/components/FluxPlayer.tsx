@@ -138,6 +138,23 @@ function FluxMediaPlayer({
 }) {
   const playerRef = useRef<MediaPlayerInstance>(null);
   const [debugOpen, setDebugOpen] = useState(false);
+  // Safety net: if playback doesn't start within 30 s of setting the source,
+  // show an error so the user isn't stuck on an infinite spinner.
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+
+  useEffect(() => {
+    // Reset on source change (including retry).
+    setLoadTimedOut(false);
+    if (!source) return;
+    const id = window.setTimeout(() => setLoadTimedOut(true), 30_000);
+    return () => window.clearTimeout(id);
+  }, [source]);
+
+  // Surface the timeout as a fatal error so the parent FluxPlayer shows the
+  // ErrorOverlay with a retry button instead of an infinite spinner.
+  useEffect(() => {
+    if (loadTimedOut) onFatalError();
+  }, [loadTimedOut, onFatalError]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
