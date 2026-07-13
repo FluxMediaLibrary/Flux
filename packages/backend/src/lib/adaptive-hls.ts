@@ -68,6 +68,7 @@ export function buildAdaptiveHlsArgs(
   sourceHeight: number | null,
   videoStreamIndex?: number,
   audioStreamIndex?: number,
+  startTimeSeconds = 0,
 ): string[] {
   const tiers = applicableTiers(sourceWidth ?? 1920, sourceHeight ?? 1080);
   const canCopy = sourceCodec === 'h264' && audioCodec === 'aac';
@@ -79,6 +80,7 @@ export function buildAdaptiveHlsArgs(
     // Single-quality remux — simple case, no filter_complex needed.
     return [
       '-fflags', '+genpts',
+      ...(startTimeSeconds > 0 ? ['-ss', startTimeSeconds.toFixed(3)] : []),
       '-i', sourceFile,
       '-map', videoMap,
       ...(audioMap ? ['-map', audioMap, '-c:a', 'copy'] : []),
@@ -116,6 +118,7 @@ export function buildAdaptiveHlsArgs(
 
   const args: string[] = [
     '-fflags', '+genpts',
+    ...(startTimeSeconds > 0 ? ['-ss', startTimeSeconds.toFixed(3)] : []),
     '-i', sourceFile,
     '-filter_complex', filterParts.join(';'),
   ];
@@ -196,9 +199,11 @@ export function spawnAdaptiveTranscode(
   sourceHeight: number | null,
   videoStreamIndex?: number,
   audioStreamIndex?: number,
+  startTimeSeconds = 0,
 ): { proc: ReturnType<typeof spawn>; args: string[] } {
   const args = buildAdaptiveHlsArgs(
-    sourceFile, sessionDir, sourceCodec, audioCodec, sourceWidth, sourceHeight, videoStreamIndex, audioStreamIndex,
+    sourceFile, sessionDir, sourceCodec, audioCodec, sourceWidth, sourceHeight,
+    videoStreamIndex, audioStreamIndex, startTimeSeconds,
   );
   console.log(
     `[AdaptiveTranscode] source=${path.basename(sourceFile)} ` +

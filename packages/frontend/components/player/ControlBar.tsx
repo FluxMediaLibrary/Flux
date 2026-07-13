@@ -20,6 +20,7 @@ import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
 
 interface ControlBarProps {
   durationSeconds?: number | null;
+  positionOffset?: number;
   onSeek: (time: number, trigger?: Event, commit?: boolean) => void;
   qualityOptions: PlaybackInfoDTO['qualities'];
   selectedQuality: PlaybackInfoDTO['qualities'][number]['label'];
@@ -41,6 +42,7 @@ function formatTime(value: number): string {
 
 export function ControlBar({
   durationSeconds,
+  positionOffset = 0,
   onSeek,
   qualityOptions,
   selectedQuality,
@@ -65,16 +67,17 @@ export function ControlBar({
     : typeof duration === 'number' && Number.isFinite(duration) && duration > 0
       ? duration
       : 0;
+  const displayCurrentTime = positionOffset + (Number.isFinite(currentTime) ? currentTime : 0);
 
   const seekBy = useCallback(
     (delta: number, trigger: Event) => {
-      const rawTarget = (Number.isFinite(currentTime) ? currentTime : 0) + delta;
+      const rawTarget = displayCurrentTime + delta;
       const target = Number.isFinite(displayDuration) && displayDuration > 0
         ? Math.max(0, Math.min(displayDuration, rawTarget))
         : Math.max(0, rawTarget);
       onSeek(target, trigger);
     },
-    [currentTime, displayDuration, onSeek],
+    [displayCurrentTime, displayDuration, onSeek],
   );
 
   const changeVolume = useCallback(
@@ -123,7 +126,7 @@ export function ControlBar({
         </div>
 
         <div className="fx-time" aria-label="Playback time">
-          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(displayCurrentTime)}</span>
           <span className="fx-time-sep">/</span>
           <span>{formatTime(displayDuration)}</span>
         </div>

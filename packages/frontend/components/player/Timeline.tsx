@@ -8,6 +8,7 @@ interface TimelineProps {
   mediaItemId: string;
   episodeId?: string;
   durationSeconds?: number | null;
+  positionOffset?: number;
   onSeek: (time: number, trigger?: Event, commit?: boolean) => void;
 }
 
@@ -16,7 +17,13 @@ export interface ChapterMarker {
   title: string;
 }
 
-export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: TimelineProps) {
+export function Timeline({
+  mediaItemId,
+  episodeId,
+  durationSeconds,
+  positionOffset = 0,
+  onSeek,
+}: TimelineProps) {
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
   const bufferedEnd = useMediaState('bufferedEnd');
@@ -28,17 +35,19 @@ export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: Ti
   const [preview, setPreview] = useState({ visible: false, time: 0, left: 0 });
 
   const range = useMemo(() => {
-    const start = Number.isFinite(seekableStart) && seekableStart > 0 ? seekableStart : 0;
     const sourceDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
       ? durationSeconds
       : 0;
     const finiteDuration = typeof duration === 'number' && Number.isFinite(duration) && duration > 0 ? duration : 0;
-    const finiteSeekEnd = typeof seekableEnd === 'number' && Number.isFinite(seekableEnd) && seekableEnd > start
-      ? seekableEnd
+    const localSeekStart = Number.isFinite(seekableStart) && seekableStart > 0 ? seekableStart : 0;
+    const absoluteSeekStart = positionOffset + localSeekStart;
+    const finiteSeekEnd = typeof seekableEnd === 'number' && Number.isFinite(seekableEnd) && seekableEnd > localSeekStart
+      ? positionOffset + seekableEnd
       : 0;
-    const end = sourceDuration || finiteDuration || finiteSeekEnd;
+    const start = sourceDuration > 0 ? 0 : absoluteSeekStart;
+    const end = sourceDuration || (finiteDuration ? positionOffset + finiteDuration : 0) || finiteSeekEnd;
     return { start, end, length: Math.max(0, end - start) };
-  }, [duration, durationSeconds, seekableEnd, seekableStart]);
+  }, [duration, durationSeconds, positionOffset, seekableEnd, seekableStart]);
 
   const getPosition = useCallback(
     (clientX: number) => {
@@ -81,11 +90,16 @@ export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: Ti
     [canSeek, getPosition, onSeek, range.length],
   );
 
+  const absoluteCurrentTime = positionOffset + currentTime;
+  const displayTime = dragging ? preview.time : absoluteCurrentTime;
   const playedPercent = range.length > 0
-    ? Math.max(0, Math.min(100, ((currentTime - range.start) / range.length) * 100))
+    ? Math.max(0, Math.min(100, ((displayTime - range.start) / range.length) * 100))
     : 0;
-  const bufferedPercent = range.length > 0 && typeof bufferedEnd === 'number' && Number.isFinite(bufferedEnd)
-    ? Math.max(playedPercent, Math.min(100, ((bufferedEnd - range.start) / range.length) * 100))
+  const bufferedStartPercent = range.length > 0
+    ? Math.max(0, Math.min(100, ((positionOffset - range.start) / range.length) * 100))
+    : 0;
+  const bufferedEndPercent = range.length > 0 && typeof bufferedEnd === 'number' && Number.isFinite(bufferedEnd)
+    ? Math.max(bufferedStartPercent, Math.min(100, ((positionOffset + bufferedEnd - range.start) / range.length) * 100))
     : 0;
   const disabled = range.length <= 0;
 
@@ -132,7 +146,13 @@ export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: Ti
       />
       <div className="fx-seek" aria-hidden="true">
         <div className="fx-seek-track">
-          <div className="fx-seek-buffered" style={{ width: `${bufferedPercent}%` }} />
+          <div
+            className="fx-seek-buffered"
+            style={{
+              left: `${bufferedStartPercent}%`,
+              width: `${Math.max(0, bufferedEndPercent - bufferedStartPercent)}%`,
+            }}
+          />
           <div className="fx-seek-played" style={{ width: `${playedPercent}%` }} />
           <div className="fx-seek-thumb" style={{ left: `${playedPercent}%` }} />
         </div>
