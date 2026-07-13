@@ -3218,6 +3218,8 @@ media-player.fx-player .fx-scrub-time {
   bottom: 66px;
   z-index: 12;
   cursor: pointer;
+  touch-action: none;
+  user-select: none;
   outline: none;
 }
 .fx-player .fx-timeline.is-disabled {

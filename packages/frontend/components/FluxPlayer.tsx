@@ -324,7 +324,7 @@ function FluxPlayerChrome({
 
   const seekTo = useCallback(
     (time: number, trigger?: Event, commit = true) => {
-      if (!Number.isFinite(time)) return;
+      if (!commit || !Number.isFinite(time)) return;
 
       const hardMax = stableDuration > 0 ? stableDuration : Number.POSITIVE_INFINITY;
       const target = Math.max(0, Math.min(time, hardMax));
@@ -339,21 +339,14 @@ function FluxPlayerChrome({
       );
 
       if (outsideGeneratedWindow) {
-        if (commit) onTranscodeSeek(target);
+        onTranscodeSeek(target);
         return;
       }
 
-      if (commit) {
-        if (player) {
-          player.currentTime = localTarget;
-        }
-        remote.seek(localTarget, trigger);
-      } else {
-        if (player) {
-          player.currentTime = localTarget;
-        }
-        remote.seeking(localTarget, trigger);
+      if (player) {
+        player.currentTime = localTarget;
       }
+      remote.seek(localTarget, trigger);
     },
     [
       onTranscodeSeek,
@@ -559,6 +552,7 @@ function FluxPlayerChrome({
         durationSeconds={stableDuration || null}
         positionOffset={timelineOffset}
         onSeek={seekTo}
+        onTogglePlayback={togglePlayback}
         qualityOptions={qualityOptions}
         selectedQuality={selectedQuality}
         onQualityChange={onQualityChange}
