@@ -19,8 +19,10 @@
 import type {
   MediaType,
   TmdbSearchResult,
+  TmdbPersonResult,
   TmdbDetail,
   TmdbCastMember,
+  TmdbCrewMember,
   TmdbGenreDTO,
   TmdbEpisode,
   TrendingWindow,
@@ -48,6 +50,29 @@ interface TmdbCastRaw {
   character?: string;
   profile_path: string | null;
 }
+interface TmdbCrewRaw {
+  name: string;
+  job?: string;
+  department?: string;
+  profile_path: string | null;
+}
+interface TmdbCompanyRaw {
+  name: string;
+}
+interface TmdbLanguageRaw {
+  english_name?: string;
+  name?: string;
+}
+interface TmdbCountryRaw {
+  name?: string;
+  iso_3166_1?: string;
+}
+interface TmdbReviewRaw {
+  author?: string;
+  content?: string;
+  url?: string;
+  author_details?: { rating?: number | null };
+}
 interface TmdbSearchItemRaw {
   id: number;
   media_type?: string; // present on multi search
@@ -62,6 +87,16 @@ interface TmdbSearchItemRaw {
 }
 interface TmdbSearchResponseRaw {
   results?: TmdbSearchItemRaw[];
+}
+interface TmdbPersonRaw {
+  id: number;
+  name: string;
+  profile_path?: string | null;
+  known_for_department?: string | null;
+  known_for?: TmdbSearchItemRaw[];
+}
+interface TmdbPersonSearchResponseRaw {
+  results?: TmdbPersonRaw[];
 }
 interface TmdbGenreListRaw {
   genres?: TmdbGenre[];
@@ -88,7 +123,26 @@ interface TmdbDetailRaw extends TmdbSearchItemRaw {
   runtime?: number | null; // movie
   episode_run_time?: number[]; // tv
   seasons?: TmdbSeasonRaw[]; // tv
-  credits?: { cast?: TmdbCastRaw[] };
+  status?: string | null;
+  tagline?: string | null;
+  original_language?: string | null;
+  spoken_languages?: TmdbLanguageRaw[];
+  production_countries?: TmdbCountryRaw[];
+  production_companies?: TmdbCompanyRaw[];
+  budget?: number;
+  revenue?: number;
+  imdb_id?: string | null;
+  external_ids?: { imdb_id?: string | null };
+  release_dates?: {
+    results?: { iso_3166_1?: string; release_dates?: { certification?: string }[] }[];
+  };
+  content_ratings?: {
+    results?: { iso_3166_1?: string; rating?: string }[];
+  };
+  reviews?: { results?: TmdbReviewRaw[] };
+  similar?: TmdbSearchResponseRaw;
+  recommendations?: TmdbSearchResponseRaw;
+  credits?: { cast?: TmdbCastRaw[]; crew?: TmdbCrewRaw[] };
   videos?: { results?: TmdbVideo[] };
 }
 
@@ -249,6 +303,40 @@ export async function search(
   return annotateLibrary(mapped);
 }
 
+export async function searchPeople(query: string): Promise<TmdbPersonResult[]> {
+  const data = await tmdbFetch<TmdbPersonSearchResponseRaw>('/search/person', {
+    query,
+    include_adult: 'false',
+  });
+
+  const people = (data.results ?? []).slice(0, 8);
+  const knownFor = people.flatMap((person) =>
+    (person.known_for ?? [])
+      .filter((item) => item.media_type === 'movie' || item.media_type === 'tv')
+      .map((item) =>
+        mapSearchItem(item, item.media_type === 'movie' ? 'MOVIE' : 'SHOW'),
+      ),
+  );
+  const annotatedKnownFor = await annotateLibrary(knownFor);
+  const knownForByKey = new Map(
+    annotatedKnownFor.map((item) => [`${item.mediaType}:${item.tmdbId}`, item]),
+  );
+
+  return people.map((person) => ({
+    tmdbId: person.id,
+    name: person.name,
+    profilePath: person.profile_path ?? null,
+    knownForDepartment: person.known_for_department ?? null,
+    knownFor: (person.known_for ?? [])
+      .filter((item) => item.media_type === 'movie' || item.media_type === 'tv')
+      .slice(0, 4)
+      .map((item) => {
+        const type = item.media_type === 'movie' ? 'MOVIE' : 'SHOW';
+        return knownForByKey.get(`${type}:${item.id}`) ?? mapSearchItem(item, type);
+      }),
+  }));
+}
+
 // ─── Discovery (trending / popular / genres / discover) ───────────────────────
 
 /** Trending movies or TV for a time window (`day` | `week`). */
@@ -324,13 +412,52 @@ function mapCast(cast?: TmdbCastRaw[]): TmdbCastMember[] {
   }));
 }
 
+function mapCrew(crew?: TmdbCrewRaw[]): TmdbCrewMember[] {
+  if (!crew) return [];
+  const priority = new Set(['Director', 'Writer', 'Screenplay', 'Producer', 'Executive Producer', 'Original Music Composer']);
+  return crew
+    .filter((member) => member.job && priority.has(member.job))
+    .slice(0, 18)
+    .map((member) => ({
+      name: member.name,
+      job: member.job ?? '',
+      department: member.department ?? '',
+      profilePath: member.profile_path ?? null,
+    }));
+}
+
+function pickAgeRating(raw: TmdbDetailRaw, type: MediaType): string | null {
+  if (type === 'MOVIE') {
+    const us = raw.release_dates?.results?.find((item) => item.iso_3166_1 === 'US');
+    const certification = us?.release_dates?.find((item) => item.certification)?.certification;
+    return certification || null;
+  }
+  const us = raw.content_ratings?.results?.find((item) => item.iso_3166_1 === 'US');
+  return us?.rating || null;
+}
+
+function mapReviews(reviews?: TmdbReviewRaw[]) {
+  return (reviews ?? []).slice(0, 8).map((review) => ({
+    author: review.author ?? 'TMDb user',
+    rating:
+      typeof review.author_details?.rating === 'number'
+        ? review.author_details.rating
+        : null,
+    content: review.content ?? '',
+    url: review.url ?? null,
+  })).filter((review) => review.content.trim().length > 0);
+}
+
 export async function getDetail(
   type: MediaType,
   tmdbId: number,
 ): Promise<TmdbDetail> {
   const segment = tmdbPathSegment(type);
   const raw = await tmdbFetch<TmdbDetailRaw>(`/${segment}/${tmdbId}`, {
-    append_to_response: 'credits,videos',
+    append_to_response:
+      type === 'MOVIE'
+        ? 'credits,videos,external_ids,release_dates,reviews,similar,recommendations'
+        : 'credits,videos,external_ids,content_ratings,reviews,similar,recommendations',
   });
 
   const runtime =
@@ -348,7 +475,28 @@ export async function getDetail(
     genres: (raw.genres ?? []).map((g) => g.name),
     runtime,
     cast: mapCast(raw.credits?.cast),
+    crew: mapCrew(raw.credits?.crew),
+    reviews: mapReviews(raw.reviews?.results),
+    similar: await annotateLibrary(
+      ((raw.recommendations?.results?.length ? raw.recommendations.results : raw.similar?.results) ?? [])
+        .slice(0, 18)
+        .map((result) => mapSearchItem(result, type)),
+    ),
     trailerYoutubeKey: pickTrailerKey(raw.videos?.results),
+    imdbId: raw.imdb_id ?? raw.external_ids?.imdb_id ?? null,
+    ageRating: pickAgeRating(raw, type),
+    status: raw.status ?? null,
+    tagline: raw.tagline ?? null,
+    originalLanguage: raw.original_language ?? null,
+    spokenLanguages: (raw.spoken_languages ?? [])
+      .map((language) => language.english_name ?? language.name)
+      .filter((language): language is string => Boolean(language)),
+    countries: (raw.production_countries ?? [])
+      .map((country) => country.name ?? country.iso_3166_1)
+      .filter((country): country is string => Boolean(country)),
+    studios: (raw.production_companies ?? []).map((company) => company.name).slice(0, 6),
+    budget: type === 'MOVIE' && raw.budget ? raw.budget : null,
+    revenue: type === 'MOVIE' && raw.revenue ? raw.revenue : null,
   };
 
   if (type === 'SHOW' && raw.seasons) {

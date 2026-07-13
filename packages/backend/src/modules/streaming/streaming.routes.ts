@@ -11,7 +11,7 @@ import {
   getMediaFilePath,
   probeMedia,
   buildHlsFfmpegArgs,
-  decidePlayback,
+  getPlaybackInfo,
 } from './streaming.service.js';
 import { buildAdaptiveHlsArgs } from '../../lib/adaptive-hls.js';
 import { safeJoin } from '../../lib/media-paths.js';
@@ -27,10 +27,15 @@ import { randomUUID } from 'node:crypto';
 // Maps a (mediaItemId, episodeId) pair → sessionDir so segment routes know
 // where .ts files live. Keyed per-episode so switching episodes of the same
 // show does not replay the previous episode's manifest.
-const hlsSessions = new Map<string, string>();
+interface HlsSession {
+  dir: string;
+  manifest: 'index.m3u8' | 'master.m3u8';
+}
 
-function sessionKey(mediaItemId: string, episodeId?: string): string {
-  return `${mediaItemId}::${episodeId ?? ''}`;
+const hlsSessions = new Map<string, HlsSession>();
+
+function sessionKey(mediaItemId: string, episodeId?: string, audioStreamIndex?: number): string {
+  return `${mediaItemId}::${episodeId ?? ''}::audio=${audioStreamIndex ?? 'default'}`;
 }
 
 /**
@@ -62,6 +67,7 @@ function tokenizeManifest(
   manifest: string,
   token: string,
   episodeId?: string,
+  audioStreamIndex?: number,
 ): string {
   if (!token) return manifest;
   return manifest
@@ -71,6 +77,7 @@ function tokenizeManifest(
       if (!trimmed || trimmed.startsWith('#')) return line;
       const params = new URLSearchParams({ token });
       if (episodeId) params.set('episodeId', episodeId);
+      if (typeof audioStreamIndex === 'number') params.set('audioStream', String(audioStreamIndex));
       const sep = trimmed.includes('?') ? '&' : '?';
       return `${trimmed}${sep}${params.toString()}`;
     })
@@ -139,8 +146,9 @@ async function spawnTranscode(
   sessionDir: string,
   mediaItemId: string,
   episodeId?: string,
+  audioStreamIndex?: number,
 ): Promise<'index.m3u8' | 'master.m3u8'> {
-  const probe = await probeMedia(sourceFile);
+  const probe = await probeMedia(sourceFile, audioStreamIndex);
   const resolution = await getSourceResolution(mediaItemId, episodeId);
 
   // Use adaptive when we have resolution info AND the source needs a transcode
@@ -152,7 +160,7 @@ async function spawnTranscode(
     const args = buildAdaptiveHlsArgs(
       sourceFile, sessionDir,
       probe.videoCodec, probe.audioCodec,
-      resolution.width, resolution.height,
+      resolution.width, resolution.height, audioStreamIndex,
     );
     console.log(
       `[Transcode] adaptive video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} ` +
@@ -177,7 +185,7 @@ async function spawnTranscode(
   }
 
   // Fall back to single-quality (existing behavior)
-  const args = buildHlsFfmpegArgs(probe, sourceFile, sessionDir);
+  const args = buildHlsFfmpegArgs(probe, sourceFile, sessionDir, audioStreamIndex);
   console.log(
     `[Transcode] single video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} → ${args.includes('copy') ? 'remux/partial-copy' : 'transcode'}`,
   );
@@ -275,7 +283,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { episodeId } = request.query as { episodeId?: string };
       const { filePath } = await getMediaFilePath(mediaItemId, episodeId);
-      return decidePlayback(filePath, mediaItemId, episodeId);
+      return getPlaybackInfo(filePath, mediaItemId, episodeId);
     },
   );
 
@@ -286,19 +294,23 @@ export const streamingRoutes: FastifyPluginAsync = async (
     { preHandler: [app.requireProfileStream] },
     async (request, reply) => {
       const { mediaItemId } = request.params as { mediaItemId: string };
-      const { episodeId } = request.query as { episodeId?: string };
-      const key = sessionKey(mediaItemId, episodeId);
+      const { episodeId, audioStream } = request.query as { episodeId?: string; audioStream?: string };
+      const audioStreamIndex =
+        audioStream !== undefined && Number.isInteger(Number(audioStream))
+          ? Number(audioStream)
+          : undefined;
+      const key = sessionKey(mediaItemId, episodeId, audioStreamIndex);
       const token = streamToken(request);
 
       const sendManifest = (raw: string) =>
         reply
           .header('Content-Type', 'application/vnd.apple.mpegurl')
           .header('Cache-Control', 'no-store')
-          .send(tokenizeManifest(raw, token, episodeId));
+          .send(tokenizeManifest(raw, token, episodeId, audioStreamIndex));
 
-      let sessionDir = hlsSessions.get(key);
+      let session = hlsSessions.get(key);
       let manifestType: 'index.m3u8' | 'master.m3u8' = 'index.m3u8';
-      if (!sessionDir) {
+      if (!session) {
         // 404 if the source file doesn't exist — before reserving a session.
         const { filePath: sourceFile } = await getMediaFilePath(
           mediaItemId,
@@ -306,23 +318,30 @@ export const streamingRoutes: FastifyPluginAsync = async (
         );
         // Re-check after the await: the set below is synchronous, so two
         // concurrent requests can't both spawn a transcode for the same key.
-        sessionDir = hlsSessions.get(key);
-        if (!sessionDir) {
-          sessionDir = safeJoin(config.TRANSCODE_ROOT, randomUUID());
-          hlsSessions.set(key, sessionDir);
+        session = hlsSessions.get(key);
+        if (!session) {
+          const sessionDir = safeJoin(config.TRANSCODE_ROOT, randomUUID());
           await fs.promises.mkdir(sessionDir, { recursive: true });
-          manifestType = await spawnTranscode(sourceFile, sessionDir, mediaItemId, episodeId);
+          manifestType = await spawnTranscode(sourceFile, sessionDir, mediaItemId, episodeId, audioStreamIndex);
+          session = { dir: sessionDir, manifest: manifestType };
+          hlsSessions.set(key, session);
         }
+      } else {
+        manifestType = session.manifest;
       }
 
       // Poll for the manifest (up to 40 attempts × 500 ms = 20 s).
       // Try master.m3u8 first (adaptive), then index.m3u8 (single-tier/remux).
-      let manifestPath = path.join(sessionDir, manifestType);
+      let manifestPath = path.join(session.dir, manifestType);
       let ready = await pollForFile(manifestPath, 40, 500);
       if (!ready && manifestType === 'master.m3u8') {
         // Adaptive transcode may have been downgraded — fall back to single-tier.
-        manifestPath = path.join(sessionDir, 'index.m3u8');
+        manifestPath = path.join(session.dir, 'index.m3u8');
         ready = await pollForFile(manifestPath, 8, 500);
+        if (ready) {
+          session.manifest = 'index.m3u8';
+          manifestType = 'index.m3u8';
+        }
       }
       if (!ready) {
         throw ApiError.badRequest(
@@ -336,7 +355,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
       // cause of a hard stop ~one segment in. Harmless for short clips.
       // For adaptive streams, segments are nested under stream_0/.
       const segDir = manifestType === 'master.m3u8' ? 'stream_0' : '.';
-      await pollForFile(path.join(sessionDir, segDir, 'segment_00002.ts'), 16, 500);
+      await pollForFile(path.join(session.dir, segDir, 'segment_00002.ts'), 16, 500);
 
       return sendManifest(fs.readFileSync(manifestPath, 'utf-8'));
     },
@@ -350,14 +369,18 @@ export const streamingRoutes: FastifyPluginAsync = async (
     async (request, reply) => {
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { '*': relPath } = request.params as { '*': string };
-      const { episodeId } = request.query as { episodeId?: string };
+      const { episodeId, audioStream } = request.query as { episodeId?: string; audioStream?: string };
+      const audioStreamIndex =
+        audioStream !== undefined && Number.isInteger(Number(audioStream))
+          ? Number(audioStream)
+          : undefined;
 
-      const sessionDir = hlsSessions.get(sessionKey(mediaItemId, episodeId));
-      if (!sessionDir) {
+      const session = hlsSessions.get(sessionKey(mediaItemId, episodeId, audioStreamIndex));
+      if (!session) {
         throw ApiError.notFound('No active HLS session for this media item');
       }
 
-      const filePath = safeJoin(sessionDir, relPath);
+      const filePath = safeJoin(session.dir, relPath);
       // The segment may be a beat behind the encoder — wait for it (up to ~15s)
       // rather than 404-ing, which hls.js treats as a fatal load error.
       if (!fs.existsSync(filePath)) {
@@ -380,7 +403,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
       // raw, leaving segment requests without a token → 401 → retry loop.
       if (ext === '.m3u8') {
         const raw = fs.readFileSync(filePath, 'utf-8');
-        const tokenized = tokenizeManifest(raw, streamToken(request), episodeId);
+        const tokenized = tokenizeManifest(raw, streamToken(request), episodeId, audioStreamIndex);
         return reply
           .header('Content-Type', contentType)
           .header('Cache-Control', 'no-store')
@@ -451,6 +474,40 @@ export const streamingRoutes: FastifyPluginAsync = async (
   );
 
   // ── GET /:mediaItemId/trickplay/:file — serve sprite sheets and VTT ─────────
+
+  app.get(
+    '/:mediaItemId/subtitles/:streamIndex.vtt',
+    { preHandler: [app.requireProfileStream] },
+    async (request, reply) => {
+      const { mediaItemId, streamIndex } = request.params as {
+        mediaItemId: string;
+        streamIndex: string;
+      };
+      const { episodeId } = request.query as { episodeId?: string };
+      const parsedIndex = Number(streamIndex);
+      if (!Number.isInteger(parsedIndex) || parsedIndex < 0) {
+        throw ApiError.badRequest('Invalid subtitle stream', 'INVALID_SUBTITLE_STREAM');
+      }
+
+      const { filePath } = await getMediaFilePath(mediaItemId, episodeId);
+      const proc = spawn('ffmpeg', [
+        '-v', 'error',
+        '-i', filePath,
+        '-map', `0:${parsedIndex}`,
+        '-f', 'webvtt',
+        '-',
+      ], { stdio: ['ignore', 'pipe', 'ignore'] });
+
+      proc.on('error', () => {
+        if (!reply.sent) reply.status(500).send();
+      });
+
+      return reply
+        .header('Content-Type', 'text/vtt; charset=utf-8')
+        .header('Cache-Control', 'public, max-age=86400')
+        .send(proc.stdout);
+    },
+  );
 
   app.get(
     '/:mediaItemId/trickplay/:file',

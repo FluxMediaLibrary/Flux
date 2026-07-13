@@ -15,6 +15,7 @@ const BACKDROP_BASE = 'https://image.tmdb.org/t/p/w1280';
 // TMDb serves stills only at w92 / w185 / w300 / original — w300 is the tile size.
 const STILL_BASE = 'https://image.tmdb.org/t/p/w300';
 const PROFILE_BASE = 'https://image.tmdb.org/t/p/w185';
+const POSTER_BASE = 'https://image.tmdb.org/t/p/w342';
 
 /** A library episode enriched with TMDb still/synopsis metadata by number. */
 interface DisplayEpisode extends EpisodeDTO {
@@ -38,6 +39,14 @@ function formatSeconds(s: number): string {
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m ${sec}s`;
   return `${sec}s`;
+}
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 export default function LibraryDetailPage() {
@@ -157,6 +166,9 @@ export default function LibraryDetailPage() {
   const runtime = detail?.runtime ?? null;
   const voteAverage = detail?.voteAverage ?? null;
   const cast = detail?.cast ?? [];
+  const crew = detail?.crew ?? [];
+  const reviews = detail?.reviews ?? [];
+  const similar = detail?.similar ?? [];
 
   // For shows: resume the most-recently-watched in-progress episode; otherwise
   // start the first available one. Movies use the movie-level progress above.
@@ -239,6 +251,7 @@ export default function LibraryDetailPage() {
               <span className="nfx-match">{Math.round(voteAverage * 10)}% Match</span>
             )}
             {runtime && <span>{formatRuntime(runtime)}</span>}
+            {detail?.ageRating && <span>{detail.ageRating}</span>}
             {isShow && (
               <span>
                 {seasons.length} Season{seasons.length === 1 ? '' : 's'}
@@ -258,6 +271,7 @@ export default function LibraryDetailPage() {
           </div>
 
           {item.overview && <p className="nfx-overview">{item.overview}</p>}
+          {detail?.tagline && <p className="nfx-tagline">{detail.tagline}</p>}
 
           {item.genres.length > 0 && (
             <p className="nfx-genres">
@@ -269,6 +283,31 @@ export default function LibraryDetailPage() {
       </div>
 
       <div className="page nfx-body">
+        <section className="nfx-section nfx-facts">
+          <div className="nfx-fact-grid">
+            {detail?.status && <Fact label="Status" value={detail.status} />}
+            {detail?.studios?.length ? <Fact label="Studio" value={detail.studios.join(', ')} /> : null}
+            {detail?.spokenLanguages?.length ? <Fact label="Languages" value={detail.spokenLanguages.join(', ')} /> : null}
+            {detail?.countries?.length ? <Fact label="Countries" value={detail.countries.join(', ')} /> : null}
+            {detail?.imdbId && <Fact label="IMDb" value={detail.imdbId} />}
+            {detail?.budget ? <Fact label="Budget" value={formatMoney(detail.budget)} /> : null}
+            {detail?.revenue ? <Fact label="Revenue" value={formatMoney(detail.revenue)} /> : null}
+          </div>
+        </section>
+
+        {detail?.trailerYoutubeKey && (
+          <section className="nfx-section">
+            <h2 className="nfx-section-title">Trailer</h2>
+            <div className="nfx-trailer">
+              <iframe
+                src={`https://www.youtube.com/embed/${detail.trailerYoutubeKey}`}
+                title={`${item.title} trailer`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            </div>
+          </section>
+        )}
         {/* ── Episodes ─────────────────────────────────────────────────── */}
         {isShow && seasons.length > 0 && (
           <section className="nfx-section">
@@ -408,7 +447,76 @@ export default function LibraryDetailPage() {
             </div>
           </section>
         )}
+
+        {crew.length > 0 && (
+          <section className="nfx-section">
+            <h2 className="nfx-section-title">Crew</h2>
+            <div className="nfx-crew-grid">
+              {crew.map((member, i) => (
+                <div className="nfx-crew-card" key={`${member.name}-${member.job}-${i}`}>
+                  <span className="nfx-crew-job">{member.job}</span>
+                  <span className="nfx-crew-name">{member.name}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {reviews.length > 0 && (
+          <section className="nfx-section">
+            <h2 className="nfx-section-title">Reviews</h2>
+            <div className="nfx-review-rail">
+              {reviews.map((review, i) => (
+                <article className="nfx-review" key={`${review.author}-${i}`}>
+                  <div className="nfx-review-head">
+                    <strong>{review.author}</strong>
+                    {review.rating !== null && <span>{review.rating}/10</span>}
+                  </div>
+                  <p>{review.content}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {similar.length > 0 && (
+          <section className="nfx-section">
+            <h2 className="nfx-section-title">More Like This</h2>
+            <div className="nfx-similar-grid">
+              {similar.map((entry) => {
+                const card = (
+                  <>
+                    {entry.posterPath ? (
+                      <img src={`${POSTER_BASE}${entry.posterPath}`} alt="" loading="lazy" />
+                    ) : (
+                      <div className="nfx-similar-ph">{entry.title.charAt(0)}</div>
+                    )}
+                    <span>{entry.title}</span>
+                  </>
+                );
+                return entry.inLibrary && entry.mediaItemId ? (
+                  <Link className="nfx-similar-card" href={`/library/${entry.mediaItemId}`} key={`${entry.mediaType}-${entry.tmdbId}`}>
+                    {card}
+                  </Link>
+                ) : (
+                  <div className="nfx-similar-card is-disabled" key={`${entry.mediaType}-${entry.tmdbId}`}>
+                    {card}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
       </div>
+    </div>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="nfx-fact">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }

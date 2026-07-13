@@ -17,10 +17,18 @@ import {
   VolumeIcon,
 } from './icons';
 import { SettingsPanel } from './SettingsPanel';
+import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
 
 interface ControlBarProps {
   durationSeconds?: number | null;
   onSeek: (time: number, trigger?: Event, commit?: boolean) => void;
+  qualityOptions: PlaybackInfoDTO['qualities'];
+  selectedQuality: PlaybackInfoDTO['qualities'][number]['label'];
+  onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label']) => void;
+  audioStreams: MediaStreamDTO[];
+  selectedAudioStreamIndex: number | null;
+  onAudioStreamChange: (streamIndex: number | null) => void;
+  playbackMethod: 'direct' | 'hls';
 }
 
 function formatTime(value: number): string {
@@ -32,7 +40,17 @@ function formatTime(value: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function ControlBar({ durationSeconds, onSeek }: ControlBarProps) {
+export function ControlBar({
+  durationSeconds,
+  onSeek,
+  qualityOptions,
+  selectedQuality,
+  onQualityChange,
+  audioStreams,
+  selectedAudioStreamIndex,
+  onAudioStreamChange,
+  playbackMethod,
+}: ControlBarProps) {
   const remote = useMediaRemote();
   const paused = useMediaState('paused');
   const muted = useMediaState('muted');
@@ -158,7 +176,17 @@ export function ControlBar({ durationSeconds, onSeek }: ControlBarProps) {
           >
             <SettingsIcon />
           </button>
-          <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+          <SettingsPanel
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            qualityOptions={qualityOptions}
+            selectedQuality={selectedQuality}
+            onQualityChange={onQualityChange}
+            audioStreams={audioStreams}
+            selectedAudioStreamIndex={selectedAudioStreamIndex}
+            onAudioStreamChange={onAudioStreamChange}
+            playbackMethod={playbackMethod}
+          />
         </div>
 
         <button className="fx-btn" type="button" onClick={() => remote.toggleFullscreen()} aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>

@@ -59,16 +59,18 @@ export function buildAdaptiveHlsArgs(
   audioCodec: string | null,
   sourceWidth: number | null,
   sourceHeight: number | null,
+  audioStreamIndex?: number,
 ): string[] {
   const tiers = applicableTiers(sourceWidth ?? 1920, sourceHeight ?? 1080);
   const canCopy = sourceCodec === 'h264' && audioCodec === 'aac';
+  const audioMap = typeof audioStreamIndex === 'number' ? `0:${audioStreamIndex}?` : '0:a:0?';
 
   if (canCopy && tiers.length <= 1) {
     // Single-quality remux — simple case, no filter_complex needed.
     return [
       '-fflags', '+genpts',
       '-i', sourceFile,
-      '-map', '0:v:0', '-map', '0:a:0?',
+      '-map', '0:v:0', '-map', audioMap,
       '-c:v', 'copy', '-c:a', 'copy',
       '-sn', '-dn',
       '-avoid_negative_ts', 'make_zero',
@@ -128,12 +130,12 @@ export function buildAdaptiveHlsArgs(
     const t = tiers[i]!;
     if (canCopy) {
       args.push(
-        '-map', '0:a:0?',
+        '-map', audioMap,
         '-c:a:' + i, 'copy',
       );
     } else {
       args.push(
-        '-map', '0:a:0?',
+        '-map', audioMap,
         '-c:a:' + i, 'aac',
         '-b:a:' + i, String(t.audioBitrate) + 'k',
         '-ac', '2',
@@ -178,9 +180,10 @@ export function spawnAdaptiveTranscode(
   audioCodec: string | null,
   sourceWidth: number | null,
   sourceHeight: number | null,
+  audioStreamIndex?: number,
 ): { proc: ReturnType<typeof spawn>; args: string[] } {
   const args = buildAdaptiveHlsArgs(
-    sourceFile, sessionDir, sourceCodec, audioCodec, sourceWidth, sourceHeight,
+    sourceFile, sessionDir, sourceCodec, audioCodec, sourceWidth, sourceHeight, audioStreamIndex,
   );
   console.log(
     `[AdaptiveTranscode] source=${path.basename(sourceFile)} ` +

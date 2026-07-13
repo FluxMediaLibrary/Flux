@@ -23,6 +23,7 @@ import type {
   SignupRequest,
   UpdateProfileRequest,
   TmdbGenreDTO,
+  TmdbPersonResult,
   TmdbSearchResult,
   TrendingWindow,
   TorrentDTO,
@@ -279,6 +280,12 @@ export const api = {
 
   // TMDb discovery — trending / popular / discover / genres. The wire `type`
   // is movie|tv; map the shared MOVIE|SHOW enum on the way out.
+  searchPeople(query: string, signal?: AbortSignal) {
+    const qs = new URLSearchParams({ q: query });
+    return request<TmdbPersonResult[]>(`/api/tmdb/people/search?${qs.toString()}`, {
+      signal,
+    });
+  },
   trending(type: MediaType, window: TrendingWindow = 'week', signal?: AbortSignal) {
     const qs = new URLSearchParams({
       type: type === 'SHOW' ? 'tv' : 'movie',
@@ -406,14 +413,24 @@ export const api = {
     const qs = episodeId ? `?episodeId=${encodeURIComponent(episodeId)}` : '';
     return request<PlaybackInfoDTO>(`/api/stream/${encodeURIComponent(mediaItemId)}/info${qs}`, { signal });
   },
-  getHlsUrl(mediaItemId: string, episodeId?: string): string {
+  getHlsUrl(mediaItemId: string, episodeId?: string, audioStreamIndex?: number | null): string {
+    if (typeof window === 'undefined') return '';
+    const qs = new URLSearchParams();
+    if (episodeId) qs.set('episodeId', episodeId);
+    if (typeof audioStreamIndex === 'number') qs.set('audioStream', String(audioStreamIndex));
+    const token = getToken();
+    if (token) qs.set('token', token);
+    const q = qs.toString();
+    return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/hls/index.m3u8${q ? `?${q}` : ''}`;
+  },
+  getSubtitleUrl(mediaItemId: string, streamIndex: number, episodeId?: string): string {
     if (typeof window === 'undefined') return '';
     const qs = new URLSearchParams();
     if (episodeId) qs.set('episodeId', episodeId);
     const token = getToken();
     if (token) qs.set('token', token);
     const q = qs.toString();
-    return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/hls/index.m3u8${q ? `?${q}` : ''}`;
+    return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/subtitles/${streamIndex}.vtt${q ? `?${q}` : ''}`;
   },
   /** Build a thumbnail frame URL for the seek-bar preview. */
   getThumbUrl(mediaItemId: string, timeSeconds: number, episodeId?: string): string {

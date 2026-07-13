@@ -22,6 +22,7 @@ import {
   getPopular,
   getGenres,
   discover,
+  searchPeople,
   normalizeMediaType,
 } from './tmdb.service.js';
 
@@ -32,6 +33,11 @@ export const tmdbRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.get('/search', async (request) => {
     const { q, type } = searchQuerySchema.parse(request.query);
     return search(q, type);
+  });
+
+  app.get('/people/search', async (request) => {
+    const { q } = searchQuerySchema.parse(request.query);
+    return searchPeople(q);
   });
 
   // ── Discovery feeds ───────────────────────────────────────────────────────

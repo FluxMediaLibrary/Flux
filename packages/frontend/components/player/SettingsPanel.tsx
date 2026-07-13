@@ -2,13 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useMediaRemote, useMediaState } from '@vidstack/react';
+import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
 
 interface SettingsPanelProps {
   open: boolean;
   onClose: () => void;
+  qualityOptions: PlaybackInfoDTO['qualities'];
+  selectedQuality: PlaybackInfoDTO['qualities'][number]['label'];
+  onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label']) => void;
+  audioStreams: MediaStreamDTO[];
+  selectedAudioStreamIndex: number | null;
+  onAudioStreamChange: (streamIndex: number | null) => void;
+  playbackMethod: 'direct' | 'hls';
 }
 
-const SPEEDS = [0.5, 1, 1.25, 1.5, 2] as const;
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 
 function sameId(a: unknown, b: unknown) {
   return Boolean(
@@ -22,7 +30,28 @@ function sameId(a: unknown, b: unknown) {
   );
 }
 
-export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
+function streamLabel(stream: MediaStreamDTO, fallback: string) {
+  const language = stream.language?.toUpperCase();
+  const parts = [
+    stream.title,
+    language,
+    stream.codec?.toUpperCase(),
+    stream.channels ? `${stream.channels}ch` : null,
+  ].filter(Boolean);
+  return parts.join(' · ') || fallback;
+}
+
+export function SettingsPanel({
+  open,
+  onClose,
+  qualityOptions,
+  selectedQuality,
+  onQualityChange,
+  audioStreams,
+  selectedAudioStreamIndex,
+  onAudioStreamChange,
+  playbackMethod,
+}: SettingsPanelProps) {
   const remote = useMediaRemote();
   const panelRef = useRef<HTMLDivElement>(null);
   const qualities = useMediaState('qualities');
@@ -30,7 +59,6 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
   const textTracks = useMediaState('textTracks');
   const audioTrack = useMediaState('audioTrack');
   const playbackRate = useMediaState('playbackRate');
-  const canSetQuality = useMediaState('canSetQuality');
 
   const qualityList = useMemo(
     () => (qualities ? Array.from({ length: qualities.length }, (_, index) => qualities[index]) : []),
@@ -78,46 +106,93 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
 
   if (!open) return null;
 
-  const hasManualQuality = qualityList.some((quality) => quality?.selected);
   const subtitleActive = subtitleList.findIndex((track) => track?.mode === 'showing');
+  const availableQualityOptions = qualityOptions.filter((quality) => quality.available);
 
   return (
     <div className="fx-settings-panel" ref={panelRef} role="menu" aria-label="Playback settings">
-      {canSetQuality && qualityList.length > 0 && (
+      {availableQualityOptions.length > 0 && (
         <section className="fx-settings-section">
           <div className="fx-settings-label">Quality</div>
-          <button
-            className={!hasManualQuality ? 'fx-settings-item sel' : 'fx-settings-item'}
-            type="button"
-            role="menuitemradio"
-            aria-checked={!hasManualQuality}
-            onClick={() => runAndClose(() => remote.changeQuality(-1))}
-          >
-            <span>Auto</span>
-            {!hasManualQuality && <span className="fx-settings-check">Selected</span>}
-          </button>
-          {qualityList.map((quality, index) => {
-            const label = quality?.height ? `${quality.height}p` : `Quality ${index + 1}`;
-            const bitrate = quality?.bitrate ? `${Math.round(quality.bitrate / 1000)} kbps` : '';
+          {availableQualityOptions.map((quality) => {
+            const selected = selectedQuality === quality.label;
+            const label = quality.label;
+            const liveQuality = quality.height
+              ? qualityList.find((item) => item?.height === quality.height)
+              : null;
+            const bitrate = liveQuality?.bitrate || quality.bitrate
+              ? `${Math.round((liveQuality?.bitrate ?? quality.bitrate ?? 0) / 1000)} kbps`
+              : '';
+            const detail = quality.source === 'direct'
+              ? 'Direct Play'
+              : quality.label === 'Auto'
+                ? 'Adaptive'
+                : bitrate;
             return (
               <button
-                key={`${label}-${index}`}
-                className={quality?.selected ? 'fx-settings-item sel' : 'fx-settings-item'}
+                key={quality.label}
+                className={selected ? 'fx-settings-item sel' : 'fx-settings-item'}
                 type="button"
                 role="menuitemradio"
-                aria-checked={Boolean(quality?.selected)}
-                onClick={() => runAndClose(() => remote.changeQuality(index))}
+                aria-checked={selected}
+                onClick={() =>
+                  runAndClose(() => {
+                    onQualityChange(quality.label);
+                    if (quality.label === 'Auto' && playbackMethod === 'hls') {
+                      remote.changeQuality(-1);
+                    } else if (quality.height && playbackMethod === 'hls') {
+                      const index = qualityList.findIndex((item) => item?.height === quality.height);
+                      if (index >= 0) remote.changeQuality(index);
+                    }
+                  })
+                }
               >
                 <span>{label}</span>
-                {bitrate && <span className="fx-settings-sub">{bitrate}</span>}
-                {quality?.selected && <span className="fx-settings-check">Selected</span>}
+                {detail && <span className="fx-settings-sub">{detail}</span>}
+                {selected && <span className="fx-settings-check">Selected</span>}
               </button>
             );
           })}
         </section>
       )}
 
-      {audioTrackList.length > 1 && (
+      {audioStreams.length > 1 ? (
+        <section className="fx-settings-section">
+          <div className="fx-settings-label">Audio</div>
+          <button
+            className={selectedAudioStreamIndex === null ? 'fx-settings-item sel' : 'fx-settings-item'}
+            type="button"
+            role="menuitemradio"
+            aria-checked={selectedAudioStreamIndex === null}
+            onClick={() => runAndClose(() => onAudioStreamChange(null))}
+          >
+            <span>Default</span>
+            <span className="fx-settings-sub">Source default</span>
+            {selectedAudioStreamIndex === null && <span className="fx-settings-check">Selected</span>}
+          </button>
+          {audioStreams.map((stream, index) => {
+            const selected = selectedAudioStreamIndex === stream.index;
+            return (
+              <button
+                key={stream.id}
+                className={selected ? 'fx-settings-item sel' : 'fx-settings-item'}
+                type="button"
+                role="menuitemradio"
+                aria-checked={selected}
+                onClick={() => runAndClose(() => onAudioStreamChange(stream.index))}
+              >
+                <span>{streamLabel(stream, `Track ${index + 1}`)}</span>
+                {(stream.isDefault || stream.isForced) && (
+                  <span className="fx-settings-sub">
+                    {stream.isDefault ? 'Default' : 'Forced'}
+                  </span>
+                )}
+                {selected && <span className="fx-settings-check">Selected</span>}
+              </button>
+            );
+          })}
+        </section>
+      ) : audioTrackList.length > 1 && (
         <section className="fx-settings-section">
           <div className="fx-settings-label">Audio</div>
           {audioTrackList.map((track, index) => {

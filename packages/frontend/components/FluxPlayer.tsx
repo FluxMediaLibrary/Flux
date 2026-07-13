@@ -33,6 +33,8 @@ interface PlayerSource {
   src: string;
   method: 'direct' | 'hls';
   info: PlaybackInfoDTO | null;
+  qualityLabel: PlaybackInfoDTO['qualities'][number]['label'];
+  audioStreamIndex: number | null;
 }
 
 function getStreamLabel(streams: MediaStreamDTO[], type: MediaStreamDTO['type']) {
@@ -41,6 +43,17 @@ function getStreamLabel(streams: MediaStreamDTO[], type: MediaStreamDTO['type'])
   const parts = [stream.codec, stream.width && stream.height ? `${stream.width}x${stream.height}` : null]
     .filter(Boolean);
   return parts.join(' / ') || null;
+}
+
+function streamDisplayName(stream: MediaStreamDTO, fallback: string) {
+  const language = stream.language?.toUpperCase();
+  const parts = [
+    stream.title,
+    language,
+    stream.codec?.toUpperCase(),
+    stream.channels ? `${stream.channels}ch` : null,
+  ].filter(Boolean);
+  return parts.join(' · ') || fallback;
 }
 
 export function FluxPlayer(props: FluxPlayerProps) {
@@ -56,6 +69,8 @@ export function FluxPlayer(props: FluxPlayerProps) {
   const [source, setSource] = useState<PlayerSource | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [qualityLabel, setQualityLabel] = useState<PlaybackInfoDTO['qualities'][number]['label']>('Auto');
+  const [audioStreamIndex, setAudioStreamIndex] = useState<number | null>(null);
   const loadSource = useCallback(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -64,11 +79,13 @@ export function FluxPlayer(props: FluxPlayerProps) {
 
     api.getPlaybackInfo(mediaItemId, episodeId, controller.signal).then(
       (info) => {
-        const direct = info.directPlay;
+        const direct = qualityLabel === 'Original' && info.directPlay && audioStreamIndex === null;
         setSource({
-          src: direct ? api.getStreamUrl(mediaItemId, episodeId) : api.getHlsUrl(mediaItemId, episodeId),
+          src: direct ? api.getStreamUrl(mediaItemId, episodeId) : api.getHlsUrl(mediaItemId, episodeId, audioStreamIndex),
           method: direct ? 'direct' : 'hls',
           info,
+          qualityLabel,
+          audioStreamIndex,
         });
         setLoading(false);
       },
@@ -78,13 +95,15 @@ export function FluxPlayer(props: FluxPlayerProps) {
           src: api.getStreamUrl(mediaItemId, episodeId),
           method: 'direct',
           info: null,
+          qualityLabel: 'Original',
+          audioStreamIndex: null,
         });
         setLoading(false);
       },
     );
 
     return () => controller.abort();
-  }, [episodeId, mediaItemId]);
+  }, [audioStreamIndex, episodeId, mediaItemId, qualityLabel]);
 
   useEffect(() => loadSource(), [loadSource]);
 
@@ -115,6 +134,11 @@ export function FluxPlayer(props: FluxPlayerProps) {
       source={source}
       startPositionSeconds={startPositionSeconds}
       fill={fill}
+      onQualityChange={setQualityLabel}
+      onAudioStreamChange={(streamIndex) => {
+        setAudioStreamIndex(streamIndex);
+        if (streamIndex !== null && qualityLabel === 'Original') setQualityLabel('Auto');
+      }}
       onFatalError={() => setError('Playback failed. Try again or choose another title.')}
     />
   );
@@ -131,9 +155,13 @@ function FluxMediaPlayer({
   onBack,
   onNearEnd,
   source,
+  onQualityChange,
+  onAudioStreamChange,
   onFatalError,
 }: FluxPlayerProps & {
   source: PlayerSource;
+  onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label']) => void;
+  onAudioStreamChange: (streamIndex: number | null) => void;
   onFatalError: () => void;
 }) {
   const playerRef = useRef<MediaPlayerInstance>(null);
@@ -190,7 +218,20 @@ function FluxMediaPlayer({
       googleCast={{}}
       onError={onFatalError}
     >
-      <MediaProvider />
+      <MediaProvider>
+        {(source.info?.streams ?? [])
+          .filter((stream) => stream.type === 'subtitle')
+          .map((stream, index) => (
+            <track
+              key={stream.id}
+              kind={stream.isForced ? 'subtitles' : 'captions'}
+              src={api.getSubtitleUrl(mediaItemId, stream.index, episodeId)}
+              label={streamDisplayName(stream, `Subtitle ${index + 1}`)}
+              srcLang={stream.language ?? undefined}
+              default={stream.isDefault || stream.isForced}
+            />
+          ))}
+      </MediaProvider>
       <FluxPlayerChrome
         mediaItemId={mediaItemId}
         episodeId={episodeId}
@@ -206,6 +247,13 @@ function FluxMediaPlayer({
         videoCodec={videoLabel ?? source.info?.videoCodec ?? null}
         audioCodec={audioLabel ?? source.info?.audioCodec ?? null}
         durationSeconds={source.info?.durationSeconds ?? null}
+        streams={source.info?.streams ?? []}
+        qualityOptions={source.info?.qualities ?? []}
+        selectedQuality={source.qualityLabel}
+        onQualityChange={onQualityChange}
+        selectedAudioStreamIndex={source.audioStreamIndex}
+        onAudioStreamChange={onAudioStreamChange}
+        playbackMethod={source.method}
       />
     </MediaPlayer>
   );
@@ -226,6 +274,13 @@ function FluxPlayerChrome({
   videoCodec,
   audioCodec,
   durationSeconds,
+  streams,
+  qualityOptions,
+  selectedQuality,
+  onQualityChange,
+  selectedAudioStreamIndex,
+  onAudioStreamChange,
+  playbackMethod,
 }: Pick<
   FluxPlayerProps,
   | 'mediaItemId'
@@ -243,6 +298,13 @@ function FluxPlayerChrome({
   videoCodec: string | null;
   audioCodec: string | null;
   durationSeconds: number | null;
+  streams: MediaStreamDTO[];
+  qualityOptions: PlaybackInfoDTO['qualities'];
+  selectedQuality: PlaybackInfoDTO['qualities'][number]['label'];
+  onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label']) => void;
+  selectedAudioStreamIndex: number | null;
+  onAudioStreamChange: (streamIndex: number | null) => void;
+  playbackMethod: PlayerSource['method'];
 }) {
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
@@ -251,6 +313,7 @@ function FluxPlayerChrome({
   const started = useMediaState('started');
   const waiting = useMediaState('waiting');
   const playing = useMediaState('playing');
+  const qualities = useMediaState('qualities');
   const remote = useMediaRemote();
   const resumeTargetRef = useRef(startPositionSeconds ?? 0);
   const nearEndFiredRef = useRef(false);
@@ -295,6 +358,19 @@ function FluxPlayerChrome({
     },
     [paused, remote],
   );
+
+  useEffect(() => {
+    if (playbackMethod !== 'hls') return;
+    if (selectedQuality === 'Auto') {
+      remote.changeQuality(-1);
+      return;
+    }
+    const target = qualityOptions.find((quality) => quality.label === selectedQuality);
+    if (!target?.height) return;
+    const qualityList = qualities ? Array.from({ length: qualities.length }, (_, index) => qualities[index]) : [];
+    const index = qualityList.findIndex((quality) => quality?.height === target.height);
+    if (index >= 0) remote.changeQuality(index);
+  }, [playbackMethod, qualities, qualityOptions, remote, selectedQuality]);
 
   const reportProgress = useCallback(() => {
     const player = playerRef.current;
@@ -425,12 +501,20 @@ function FluxPlayerChrome({
         event.preventDefault();
         setIdle(false);
         seekTo(currentTime + 10, event);
+      } else if (event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        setIdle(false);
+        remote.toggleFullscreen();
+      } else if (event.key.toLowerCase() === 'm') {
+        event.preventDefault();
+        setIdle(false);
+        remote.toggleMuted(event);
       }
     };
 
     window.addEventListener('keydown', handleKey, { capture: true });
     return () => window.removeEventListener('keydown', handleKey, { capture: true });
-  }, [currentTime, seekTo, togglePlayback]);
+  }, [currentTime, remote, seekTo, togglePlayback]);
 
   return (
     <div ref={chromeRef} className={idle ? 'fx-chrome is-idle' : 'fx-chrome'}>
@@ -454,7 +538,17 @@ function FluxPlayerChrome({
         durationSeconds={stableDuration || null}
         onSeek={seekTo}
       />
-      <ControlBar durationSeconds={stableDuration || null} onSeek={seekTo} />
+      <ControlBar
+        durationSeconds={stableDuration || null}
+        onSeek={seekTo}
+        qualityOptions={qualityOptions}
+        selectedQuality={selectedQuality}
+        onQualityChange={onQualityChange}
+        audioStreams={streams.filter((stream) => stream.type === 'audio')}
+        selectedAudioStreamIndex={selectedAudioStreamIndex}
+        onAudioStreamChange={onAudioStreamChange}
+        playbackMethod={playbackMethod}
+      />
       <DebugOverlay
         open={debugOpen}
         playbackMethod={methodLabel}
