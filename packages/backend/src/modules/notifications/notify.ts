@@ -29,7 +29,11 @@ export async function notifyNewRequest(requestId: string): Promise<void> {
 
     const settings = await getSettings();
 
-    const title = request.title;
+    const target =
+      request.mediaType === 'SHOW' && request.season
+        ? `${request.title} S${request.season}${request.episode ? ` E${request.episode}` : ''}`
+        : request.title;
+    const title = target;
     const userEmail = request.profile.user.email;
 
     // Discord
@@ -73,7 +77,11 @@ export async function notifyRequestFulfilled(requestId: string): Promise<void> {
 
     const settings = await getSettings();
 
-    const title = request.title;
+    const target =
+      request.mediaType === 'SHOW' && request.season
+        ? `${request.title} S${request.season}${request.episode ? ` E${request.episode}` : ''}`
+        : request.title;
+    const title = target;
     const userEmail = request.profile.user.email;
 
     // Discord

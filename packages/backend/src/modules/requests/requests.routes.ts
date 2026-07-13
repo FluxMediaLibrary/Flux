@@ -16,6 +16,7 @@ import {
   listAllRequests,
   approveRequest,
   rejectRequest,
+  syncFulfilledRequests,
 } from './requests.service.js';
 
 export const requestRoutes: FastifyPluginAsync = async (
@@ -41,6 +42,10 @@ export const requestRoutes: FastifyPluginAsync = async (
 
   app.get('/admin', { preHandler: [app.requireAdmin] }, async () => {
     return listAllRequests();
+  });
+
+  app.post('/admin/sync-fulfilled', { preHandler: [app.requireAdmin] }, async () => {
+    return syncFulfilledRequests();
   });
 
   app.post(

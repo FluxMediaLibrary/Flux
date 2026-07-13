@@ -17,6 +17,8 @@ import {
   confirmTorrent,
   listTorrents,
   getTorrent,
+  markTorrentStartFailed,
+  retryTorrentDownload,
   stopTorrent,
   removeTorrentById,
   startDownloading,
@@ -64,12 +66,13 @@ export const torrentRoutes: FastifyPluginAsync = async (
       const filePath = torrentFilePath(input.infoHash);
       const buffer = await readFile(filePath);
       await startDownloading(dto.id, buffer);
-    } catch {
-      // If the download fails to start, the torrent row remains PENDING_CONFIRM.
-      // The admin can retry or remove it.
+    } catch (err) {
+      // If the download fails to start, surface a retryable admin error instead
+      // of silently leaving the acquisition looking pending.
+      await markTorrentStartFailed(dto.id, err);
     }
 
-    return dto;
+    return getTorrent(dto.id);
   });
 
   // ─── GET / — list all torrents ────────────────────────────────────────
@@ -87,6 +90,11 @@ export const torrentRoutes: FastifyPluginAsync = async (
   app.post('/:id/stop', async (request) => {
     const { id } = request.params as { id: string };
     return stopTorrent(id);
+  });
+
+  app.post('/:id/retry', async (request) => {
+    const { id } = request.params as { id: string };
+    return retryTorrentDownload(id);
   });
 
   // ─── DELETE /:id — remove torrent ─────────────────────────────────────

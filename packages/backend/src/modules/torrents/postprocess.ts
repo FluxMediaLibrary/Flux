@@ -10,11 +10,15 @@ import { ensureTrickplay } from '../../lib/trickplay-generator.js';
 import {
   type TorrentPostprocessJob,
 } from '../../jobs/queues.js';
-import { getDetail as getTmdbDetail } from '../tmdb/tmdb.service.js';
+import {
+  getDetail as getTmdbDetail,
+  getSeasonEpisodes as getTmdbSeasonEpisodes,
+} from '../tmdb/tmdb.service.js';
 import { notifyRequestFulfilled } from '../notifications/notify.js';
 import { copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { MediaType } from '@flux/shared';
+import type { Prisma, RequestStatus } from '@prisma/client';
 import type { Job } from 'bullmq';
 
 // Transmission engine
@@ -88,6 +92,7 @@ export async function processTorrentPostprocess(
     );
 
     let mediaItemId: string;
+    const placedEpisodeMappings: FileMappingEntry[] = [];
 
     if (torrent.category === 'MOVIE') {
       // ── MOVIE path ──
@@ -190,15 +195,33 @@ export async function processTorrentPostprocess(
       mediaItemId = mediaItem.id;
 
       const files = torrentData.files as unknown as TorrentFile[];
+      const seasons = [...new Set(fileMapping.map((mapping) => mapping.season))];
+      const episodeMetaBySeason = new Map(
+        await Promise.all(
+          seasons.map(async (season) => [
+            season,
+            await getTmdbSeasonEpisodes(torrent.matchedTmdbId!, season),
+          ] as const),
+        ),
+      );
 
       // Process each file mapping entry
       for (const mapping of fileMapping) {
+        if (mapping.season <= 0 || mapping.episode <= 0) {
+          job.log(`Skipping invalid episode mapping: S${mapping.season} E${mapping.episode} (${mapping.path})`);
+          continue;
+        }
+
         const matchedFile = files.find((f) => f.path === mapping.path);
 
         if (!matchedFile) {
           job.log(`File not found in torrent engine: ${mapping.path}`);
           continue;
         }
+
+        const episodeMeta = episodeMetaBySeason
+          .get(mapping.season)
+          ?.find((episode) => episode.episodeNumber === mapping.episode);
 
         const placement = episodePlacement(
           tmdbDetail.title,
@@ -224,12 +247,19 @@ export async function processTorrentPostprocess(
             mediaItemId: mediaItem.id,
             season: mapping.season,
             episode: mapping.episode,
+            title: episodeMeta?.name ?? null,
+            overview: episodeMeta?.overview ?? null,
+            runtime: episodeMeta?.runtime ?? null,
             filePath: placement.file,
           },
           update: {
+            title: episodeMeta?.name ?? null,
+            overview: episodeMeta?.overview ?? null,
+            runtime: episodeMeta?.runtime ?? null,
             filePath: placement.file,
           },
         });
+        placedEpisodeMappings.push(mapping);
       }
     }
 
@@ -277,30 +307,43 @@ export async function processTorrentPostprocess(
       }
     }
 
-    // 11. Fulfill matching Requests
-    const requests = await prisma.request.findMany({
-      where: {
-        tmdbId: torrent.matchedTmdbId!,
-        mediaType: torrent.category,
-        status: { in: ['PENDING', 'APPROVED', 'DOWNLOADING'] },
-      },
-    });
+    // 11. Fulfill matching Requests. Episode-targeted requests should only be
+    // fulfilled when this torrent actually placed that season/episode.
+    const fulfillableStatuses: RequestStatus[] = ['PENDING', 'APPROVED', 'DOWNLOADING'];
+    const fulfilledRequestWhere: Prisma.RequestWhereInput =
+      torrent.category === 'SHOW'
+        ? {
+            tmdbId: torrent.matchedTmdbId!,
+            mediaType: torrent.category,
+            status: { in: fulfillableStatuses },
+            OR: [
+              { season: null },
+              ...placedEpisodeMappings.map((mapping) => ({
+                season: mapping.season,
+                OR: [{ episode: null }, { episode: mapping.episode }],
+              })),
+            ],
+          }
+        : {
+            tmdbId: torrent.matchedTmdbId!,
+            mediaType: torrent.category,
+            status: { in: fulfillableStatuses },
+          };
+
+    const requests = torrent.category === 'SHOW' && placedEpisodeMappings.length === 0
+      ? []
+      : await prisma.request.findMany({ where: fulfilledRequestWhere });
 
     if (requests.length > 0) {
-      await prisma.request.updateMany({
-        where: {
-          tmdbId: torrent.matchedTmdbId!,
-          mediaType: torrent.category,
-          status: { in: ['PENDING', 'APPROVED', 'DOWNLOADING'] },
-        },
-        data: {
-          status: 'FULFILLED',
-          torrentId,
-        },
-      });
-
-      // Best-effort notifications
       for (const req of requests) {
+        await prisma.request.update({
+          where: { id: req.id },
+          data: {
+            status: 'FULFILLED',
+            torrentId,
+          },
+        });
+
         try {
           await notifyRequestFulfilled(req.id);
         } catch (err) {

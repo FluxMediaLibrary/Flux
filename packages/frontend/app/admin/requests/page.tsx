@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import type { RequestDTO, RequestStatus } from '@flux/shared';
+import { useSearchParams } from 'next/navigation';
+import type { RequestDTO, RequestStatus, TorrentStatus } from '@flux/shared';
 import { api, FluxApiError } from '@/lib/api';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -12,6 +13,15 @@ const STATUS_LABEL: Record<RequestStatus, string> = {
   DOWNLOADING: 'Downloading',
   FULFILLED: 'Fulfilled',
   REJECTED: 'Rejected',
+};
+
+const TORRENT_STATUS_LABEL: Record<TorrentStatus, string> = {
+  PENDING_CONFIRM: 'Pending confirm',
+  DOWNLOADING: 'Downloading',
+  PROCESSING: 'Processing',
+  SEEDING: 'Seeding',
+  STOPPED: 'Stopped',
+  ERROR: 'Error',
 };
 
 const FILTER_OPTIONS = [
@@ -64,13 +74,69 @@ function pillStyle(status: RequestStatus): React.CSSProperties | undefined {
   }
 }
 
+function formatPercent(value: number): string {
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+}
+
+function requestTargetLabel(request: RequestDTO): string | null {
+  if (request.mediaType !== 'SHOW' || !request.season) return null;
+  return `S${request.season}${request.episode ? ` E${request.episode}` : ''}`;
+}
+
+function libraryFocusHref(request: RequestDTO): string {
+  const params = new URLSearchParams({
+    tmdbId: String(request.tmdbId),
+    type: request.mediaType,
+    issue: 'ALL',
+  });
+  return `/admin/library?${params.toString()}`;
+}
+
+function torrentFulfillHref(request: RequestDTO): string {
+  const params = new URLSearchParams({
+    request: request.id,
+    tmdbId: String(request.tmdbId),
+    type: request.mediaType,
+    title: request.title,
+  });
+  if (request.mediaType === 'SHOW' && request.season) {
+    params.set('season', String(request.season));
+  }
+  if (request.mediaType === 'SHOW' && request.season && request.episode) {
+    params.set('episode', String(request.episode));
+  }
+  return `/admin/torrents?${params.toString()}`;
+}
+
+function torrentPillClass(status: TorrentStatus): string {
+  switch (status) {
+    case 'SEEDING':
+      return 'pill ok';
+    case 'ERROR':
+      return 'pill err';
+    case 'DOWNLOADING':
+    case 'PROCESSING':
+      return 'pill active';
+    default:
+      return 'pill used';
+  }
+}
+
+function parseFilter(value: string | null): Filter {
+  return FILTER_OPTIONS.includes(value as Filter) ? (value as Filter) : 'ALL';
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminRequestsPage() {
+  const searchParams = useSearchParams();
+  const queryFilter = parseFilter(searchParams.get('status'));
   const [requests, setRequests] = useState<RequestDTO[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>('ALL');
+  const [filter, setFilter] = useState<Filter>(queryFilter);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [syncingFulfilled, setSyncingFulfilled] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -91,12 +157,17 @@ export default function AdminRequestsPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    setFilter(queryFilter);
+  }, [queryFilter]);
+
   async function approve(id: string) {
     setBusyId(id);
+    setNotice(null);
     try {
       const updated = await api.approveRequest(id);
       setRequests((prev) =>
-        (prev ?? []).map((r) => (r.id === updated.id ? updated : r)),
+        (prev ?? []).map((r) => (r.id === updated.id ? { ...r, ...updated } : r)),
       );
     } catch (err) {
       setError(
@@ -111,10 +182,11 @@ export default function AdminRequestsPage() {
 
   async function reject(id: string) {
     setBusyId(id);
+    setNotice(null);
     try {
       const updated = await api.rejectRequest(id);
       setRequests((prev) =>
-        (prev ?? []).map((r) => (r.id === updated.id ? updated : r)),
+        (prev ?? []).map((r) => (r.id === updated.id ? { ...r, ...updated } : r)),
       );
     } catch (err) {
       setError(
@@ -127,6 +199,27 @@ export default function AdminRequestsPage() {
     }
   }
 
+  async function syncFulfilled() {
+    setSyncingFulfilled(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const result = await api.syncFulfilledRequests();
+      setNotice(
+        `Checked ${result.scanned.toLocaleString()} active request${result.scanned === 1 ? '' : 's'} and marked ${result.fulfilled.toLocaleString()} fulfilled.`,
+      );
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof FluxApiError
+          ? err.message
+          : 'Failed to sync fulfilled requests.',
+      );
+    } finally {
+      setSyncingFulfilled(false);
+    }
+  }
+
   const filtered =
     requests?.filter((r) => filter === 'ALL' || r.status === filter) ?? [];
 
@@ -135,7 +228,20 @@ export default function AdminRequestsPage() {
   return (
     <div>
       <div className="section-head">
-        <h1>Member Requests</h1>
+        <div>
+          <h1>Member Requests</h1>
+          <p className="muted" style={{ margin: 0 }}>
+            Approvals, acquisition handoff, and stale fulfillment repair.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => void syncFulfilled()}
+          disabled={syncingFulfilled}
+        >
+          {syncingFulfilled ? 'Checking...' : 'Sync fulfilled'}
+        </button>
       </div>
 
       {/* Filter tabs */}
@@ -153,6 +259,7 @@ export default function AdminRequestsPage() {
       </div>
 
       {error && <div className="form-error">{error}</div>}
+      {notice && <div className="admin-notice">{notice}</div>}
 
       {requests === null ? (
         <div className="empty">
@@ -178,6 +285,7 @@ export default function AdminRequestsPage() {
                 <th>Type</th>
                 <th>Status</th>
                 <th>Requested by</th>
+                <th>Acquisition</th>
                 <th>Date</th>
                 <th>Action</th>
               </tr>
@@ -187,6 +295,16 @@ export default function AdminRequestsPage() {
                 <tr key={r.id}>
                   <td>
                     <span style={{ fontWeight: 600 }}>{r.title}</span>
+                    {requestTargetLabel(r) && (
+                      <span className="dim" style={{ marginLeft: 8 }}>
+                        {requestTargetLabel(r)}
+                      </span>
+                    )}
+                    <div style={{ marginTop: 6 }}>
+                      <a className="inline-link" href={libraryFocusHref(r)}>
+                        Library health
+                      </a>
+                    </div>
                   </td>
                   <td>
                     <span className="pill cat">
@@ -213,6 +331,28 @@ export default function AdminRequestsPage() {
                       </>
                     ) : (
                       <span className="dim">—</span>
+                    )}
+                  </td>
+                  <td>
+                    {r.torrent ? (
+                      <div className="request-acq">
+                        <span className={torrentPillClass(r.torrent.status)}>
+                          {TORRENT_STATUS_LABEL[r.torrent.status]}
+                        </span>
+                        <span className="request-acq-title" title={r.torrent.name}>
+                          {r.torrent.name}
+                        </span>
+                        {r.torrent.status === 'DOWNLOADING' && (
+                          <span className="dim">{formatPercent(r.torrent.progress)}</span>
+                        )}
+                        {r.torrent.status === 'ERROR' && r.torrent.errorMessage && (
+                          <span className="request-acq-error" title={r.torrent.errorMessage}>
+                            {r.torrent.errorMessage}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="dim">-</span>
                     )}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
@@ -247,7 +387,7 @@ export default function AdminRequestsPage() {
                     )}
                     {r.status === 'APPROVED' && (
                       <a
-                        href="/admin/torrents"
+                        href={torrentFulfillHref(r)}
                         className="btn btn-primary btn-sm"
                       >
                         Fulfill via Torrents

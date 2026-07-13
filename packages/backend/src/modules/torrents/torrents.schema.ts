@@ -11,8 +11,8 @@ export const confirmBodySchema = z.object({
     .array(
       z.object({
         path: z.string().min(1),
-        season: z.number().int(),
-        episode: z.number().int(),
+        season: z.number().int().positive('season must be greater than 0'),
+        episode: z.number().int().positive('episode must be greater than 0'),
       }),
     )
     .optional(),

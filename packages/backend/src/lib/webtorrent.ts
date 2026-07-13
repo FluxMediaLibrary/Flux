@@ -140,12 +140,16 @@ export async function addTorrent(
     'download-dir': config.DOWNLOAD_ROOT,
     metainfo: b64,
     paused: false,
-  })) as { 'torrent-added'?: { id: number; name: string; hashString: string } };
+  })) as {
+    'torrent-added'?: { id: number; name: string; hashString: string };
+    'torrent-duplicate'?: { id: number; name: string; hashString: string };
+  };
 
-  const added = result['torrent-added'];
+  const added = result['torrent-added'] ?? result['torrent-duplicate'];
   if (!added) throw new Error('Transmission: torrent-add returned no torrent');
 
-  // Explicitly start the torrent (paused: false doesn't always work)
+  // Explicitly start the torrent (paused: false doesn't always work), including
+  // duplicate/existing torrents during admin retry.
   await rpc('torrent-start', { ids: [added.hashString] });
 
   // Persist .torrent bytes for seed-resume on boot
