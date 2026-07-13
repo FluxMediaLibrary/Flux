@@ -23,6 +23,14 @@ const STATUS_LABEL: Record<TorrentStatus, string> = {
   ERROR: 'Error',
 };
 
+const REQUEST_STATUS_LABEL = {
+  PENDING: 'Pending',
+  APPROVED: 'Approved',
+  DOWNLOADING: 'Request downloading',
+  FULFILLED: 'Request fulfilled',
+  REJECTED: 'Rejected',
+} as const;
+
 function statusPillClass(status: TorrentStatus): string {
   switch (status) {
     case 'SEEDING':
@@ -107,8 +115,25 @@ export function TorrentDashboard({
     }
   }
 
+  async function retry(t: TorrentDTO) {
+    setBusyId(t.id);
+    try {
+      const updated = await api.retryTorrent(t.id);
+      setTorrents((prev) =>
+        (prev ?? []).map((x) => (x.id === updated.id ? updated : x)),
+      );
+    } catch (err) {
+      setError(err instanceof FluxApiError ? err.message : 'Failed to retry torrent.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function remove(t: TorrentDTO) {
-    if (!window.confirm(`Remove "${t.name}"? This stops seeding and deletes the torrent.`)) {
+    const requestNote = t.linkedRequest && t.linkedRequest.status !== 'FULFILLED'
+      ? ' The linked request will return to approved.'
+      : '';
+    if (!window.confirm(`Remove "${t.name}"? This stops seeding and removes the torrent.${requestNote}`)) {
       return;
     }
     setBusyId(t.id);
@@ -150,6 +175,7 @@ export function TorrentDashboard({
               torrent={t}
               busy={busyId === t.id}
               onStop={() => void stop(t)}
+              onRetry={() => void retry(t)}
               onRemove={() => void remove(t)}
             />
           ))}
@@ -163,15 +189,18 @@ function TorrentCard({
   torrent: t,
   busy,
   onStop,
+  onRetry,
   onRemove,
 }: {
   torrent: TorrentDTO;
   busy: boolean;
   onStop: () => void;
+  onRetry: () => void;
   onRemove: () => void;
 }) {
   const isDownloading = t.status === 'DOWNLOADING' || t.status === 'PROCESSING';
   const isSeeding = t.status === 'SEEDING';
+  const canRetry = t.status === 'ERROR' || t.status === 'PENDING_CONFIRM';
   const remaining = Math.max(0, t.totalBytes * (1 - t.progress));
 
   return (
@@ -195,6 +224,16 @@ function TorrentCard({
               Stop
             </button>
           )}
+          {canRetry && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={onRetry}
+              disabled={busy}
+            >
+              {busy ? 'Retrying...' : 'Retry'}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-ghost btn-sm danger"
@@ -208,6 +247,21 @@ function TorrentCard({
 
       {t.status === 'ERROR' && t.errorMessage && (
         <p className="torrent-error">{t.errorMessage}</p>
+      )}
+
+      {t.linkedRequest && (
+        <div className="torrent-request">
+          <span className="pill active">{REQUEST_STATUS_LABEL[t.linkedRequest.status]}</span>
+          <span className="torrent-request-title">{t.linkedRequest.title}</span>
+          {t.linkedRequest.requestedBy && (
+            <span className="dim">
+              {t.linkedRequest.requestedBy.profileName}
+              {t.linkedRequest.requestedBy.accountEmail
+                ? ` - ${t.linkedRequest.requestedBy.accountEmail}`
+                : ''}
+            </span>
+          )}
+        </div>
       )}
 
       {isDownloading && (

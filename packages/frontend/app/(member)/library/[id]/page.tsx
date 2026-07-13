@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { api, FluxApiError } from '@/lib/api';
 import type {
   EpisodeDTO,
   MediaItemDetailDTO,
+  RequestDTO,
+  RequestStatus,
   TmdbDetail,
   TmdbEpisode,
 } from '@flux/shared';
@@ -23,6 +25,25 @@ interface DisplayEpisode extends EpisodeDTO {
   displayTitle: string;
   displayOverview: string | null;
   displayRuntime: number | null;
+}
+
+function episodeRequestKey(season: number, episode: number): string {
+  return `${season}:${episode}`;
+}
+
+function requestStatusLabel(status: RequestStatus): string {
+  switch (status) {
+    case 'PENDING':
+      return 'Requested';
+    case 'APPROVED':
+      return 'Approved';
+    case 'DOWNLOADING':
+      return 'Downloading';
+    case 'FULFILLED':
+      return 'Available';
+    case 'REJECTED':
+      return 'Rejected';
+  }
 }
 
 function formatRuntime(minutes: number): string {
@@ -58,6 +79,9 @@ export default function LibraryDetailPage() {
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
   // Per-season TMDb episode metadata (stills, synopses), fetched lazily and cached.
   const [seasonMeta, setSeasonMeta] = useState<Record<number, TmdbEpisode[]>>({});
+  const [episodeRequests, setEpisodeRequests] = useState<Map<string, RequestStatus>>(new Map());
+  const [requestingEpisodes, setRequestingEpisodes] = useState<Set<string>>(new Set());
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +112,38 @@ export default function LibraryDetailPage() {
       .catch(() => {
         /* best-effort */
       });
+    return () => controller.abort();
+  }, [item]);
+
+  useEffect(() => {
+    if (!item || item.type !== 'SHOW') {
+      setEpisodeRequests(new Map());
+      return;
+    }
+
+    const controller = new AbortController();
+    api.listMyRequests(controller.signal).then(
+      (requests: RequestDTO[]) => {
+        if (controller.signal.aborted) return;
+        const next = new Map<string, RequestStatus>();
+        for (const request of requests) {
+          if (
+            request.tmdbId === item.tmdbId &&
+            request.mediaType === 'SHOW' &&
+            request.season &&
+            request.episode &&
+            request.status !== 'REJECTED'
+          ) {
+            next.set(episodeRequestKey(request.season, request.episode), request.status);
+          }
+        }
+        setEpisodeRequests(next);
+      },
+      () => {
+        if (!controller.signal.aborted) setEpisodeRequests(new Map());
+      },
+    );
+
     return () => controller.abort();
   }, [item]);
 
@@ -125,6 +181,36 @@ export default function LibraryDetailPage() {
       });
     return () => controller.abort();
   }, [item, selectedSeason, seasonMeta]);
+
+  const requestEpisode = useCallback(
+    async (episode: Pick<EpisodeDTO, 'season' | 'episode' | 'available'>) => {
+      if (!item || item.type !== 'SHOW' || episode.available) return;
+      const key = episodeRequestKey(episode.season, episode.episode);
+      setRequestingEpisodes((prev) => new Set(prev).add(key));
+      setRequestError(null);
+      try {
+        const request = await api.createRequest({
+          tmdbId: item.tmdbId,
+          mediaType: 'SHOW',
+          title: item.title,
+          season: episode.season,
+          episode: episode.episode,
+        });
+        setEpisodeRequests((prev) => new Map(prev).set(key, request.status));
+      } catch (err) {
+        setRequestError(
+          err instanceof FluxApiError ? err.message : 'Failed to request episode.',
+        );
+      } finally {
+        setRequestingEpisodes((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [item],
+  );
 
   if (loading) {
     return (
@@ -188,6 +274,7 @@ export default function LibraryDetailPage() {
   const firstAvailableEpisode = isShow
     ? (item.episodes ?? []).find((e) => e.available) ?? null
     : null;
+  const canPlayTitle = isShow ? firstAvailableEpisode !== null : true;
 
   // Unified hero play/resume target.
   let playHref = `/watch/${item.id}`;
@@ -199,6 +286,9 @@ export default function LibraryDetailPage() {
       playLabel = `Resume S${resumeEpisode.season} · E${resumeEpisode.episode}`;
     } else if (firstAvailableEpisode) {
       playHref = `/watch/${item.id}?episode=${firstAvailableEpisode.id}`;
+    } else {
+      playLabel = 'Unavailable';
+      resumeNote = 'No episode files have been added yet';
     }
   } else if (hasProgress) {
     playLabel = `Resume${progressPct > 0 ? ` · ${progressPct}%` : ''}`;
@@ -261,10 +351,17 @@ export default function LibraryDetailPage() {
           </div>
 
           <div className="nfx-actions">
-            <Link href={playHref} className="nfx-btn nfx-btn--play">
-              <PlayIcon />
-              {playLabel}
-            </Link>
+            {canPlayTitle ? (
+              <Link href={playHref} className="nfx-btn nfx-btn--play">
+                <PlayIcon />
+                {playLabel}
+              </Link>
+            ) : (
+              <span className="nfx-btn nfx-btn--disabled" aria-disabled="true">
+                <PlayIcon />
+                {playLabel}
+              </span>
+            )}
             {resumeNote && (
               <span className="nfx-resume-note">{resumeNote}</span>
             )}
@@ -330,12 +427,16 @@ export default function LibraryDetailPage() {
                 <span className="nfx-season-static">Season {seasons[0][0]}</span>
               )}
             </div>
+            {requestError && <div className="form-error">{requestError}</div>}
 
             <div className="nfx-eps">
               {activeEpisodes.map((ep) => {
                 const still = ep.stillPath
                   ? `${STILL_BASE}${ep.stillPath}`
                   : fallbackStill;
+                const requestKey = episodeRequestKey(ep.season, ep.episode);
+                const requestStatus = episodeRequests.get(requestKey) ?? null;
+                const requesting = requestingEpisodes.has(requestKey);
                 const inner = (
                   <>
                     <div className="nfx-ep-thumb">
@@ -398,6 +499,24 @@ export default function LibraryDetailPage() {
                       </div>
                       {ep.displayOverview && (
                         <p className="nfx-ep-overview">{ep.displayOverview}</p>
+                      )}
+                      {!ep.available && (
+                        <div className="nfx-ep-request">
+                          {requestStatus ? (
+                            <span className={`nfx-ep-request-status status-${requestStatus.toLowerCase()}`}>
+                              {requestStatusLabel(requestStatus)}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="nfx-ep-request-btn"
+                              onClick={() => void requestEpisode(ep)}
+                              disabled={requesting}
+                            >
+                              {requesting ? 'Requesting...' : 'Request episode'}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </>

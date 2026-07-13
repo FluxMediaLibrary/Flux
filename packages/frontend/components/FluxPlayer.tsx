@@ -62,6 +62,7 @@ export function FluxPlayer(props: FluxPlayerProps) {
   const [qualityLabel, setQualityLabel] = useState<PlaybackInfoDTO['qualities'][number]['label']>('Auto');
   const [audioStreamIndex, setAudioStreamIndex] = useState<number | null>(null);
   const [hlsStartTime, setHlsStartTime] = useState(() => Math.max(0, startPositionSeconds));
+  const [hlsReloadNonce, setHlsReloadNonce] = useState(0);
   const loadSource = useCallback(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -81,7 +82,7 @@ export function FluxPlayer(props: FluxPlayerProps) {
         setSource({
           src: direct
             ? api.getStreamUrl(mediaItemId, episodeId)
-            : api.getHlsUrl(mediaItemId, episodeId, validAudioStreamIndex, timelineOffset),
+            : api.getHlsUrl(mediaItemId, episodeId, validAudioStreamIndex, timelineOffset, hlsReloadNonce),
           method: direct ? 'direct' : 'hls',
           info,
           qualityLabel,
@@ -98,7 +99,7 @@ export function FluxPlayer(props: FluxPlayerProps) {
     );
 
     return () => controller.abort();
-  }, [audioStreamIndex, episodeId, hlsStartTime, mediaItemId, qualityLabel]);
+  }, [audioStreamIndex, episodeId, hlsReloadNonce, hlsStartTime, mediaItemId, qualityLabel]);
 
   useEffect(() => loadSource(), [loadSource]);
 
@@ -138,7 +139,10 @@ export function FluxPlayer(props: FluxPlayerProps) {
         setAudioStreamIndex(streamIndex);
         if (streamIndex !== null && qualityLabel === 'Original') setQualityLabel('Auto');
       }}
-      onTranscodeSeek={(time) => setHlsStartTime(Math.max(0, Math.round(time * 1000) / 1000))}
+      onTranscodeSeek={(time) => {
+        setHlsStartTime(Math.max(0, Math.round(time * 1000) / 1000));
+        setHlsReloadNonce((nonce) => nonce + 1);
+      }}
       onFatalError={handleFatalError}
     />
   );
@@ -169,31 +173,94 @@ function FluxMediaPlayer({
   const playerRef = useRef<MediaPlayerInstance>(null);
   const [debugOpen, setDebugOpen] = useState(false);
   const [playbackReady, setPlaybackReady] = useState(false);
+  const pausedByUserRef = useRef(false);
+  const playbackStartedRef = useRef(false);
+  const playRequestedRef = useRef(true);
+  const hiddenRef = useRef(false);
+  const lastHiddenAtRef = useRef(0);
+  const lastPausedAtRef = useRef(0);
+  const lastPlaybackStateRef = useRef({ paused: true, started: false });
+  const recoverableErrorRef = useRef(false);
+  const hlsRecoveryRef = useRef({ time: 0, at: 0 });
 
   useEffect(() => {
-    if (playbackReady) return;
+    setPlaybackReady(false);
+    pausedByUserRef.current = false;
+    playbackStartedRef.current = false;
+    playRequestedRef.current = true;
+    lastPausedAtRef.current = 0;
+    lastPlaybackStateRef.current = { paused: true, started: false };
+    recoverableErrorRef.current = false;
+    hlsRecoveryRef.current = { time: 0, at: 0 };
+  }, [source.src]);
 
-    let timeoutId: number | null = null;
-    const clearWatchdog = () => {
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
-      timeoutId = null;
-    };
-    const armWatchdog = () => {
-      clearWatchdog();
-      if (!document.hidden) timeoutId = window.setTimeout(onFatalError, 30_000);
-    };
-    const handleVisibilityChange = () => {
-      if (document.hidden) clearWatchdog();
-      else armWatchdog();
+  const handlePlayerError = useCallback(() => {
+    const player = playerRef.current;
+    const now = Date.now();
+    const wasStarted = playbackStartedRef.current || lastPlaybackStateRef.current.started;
+    const canTrustPausedState = wasStarted || playbackReady;
+    const actualPaused = canTrustPausedState && (
+      player?.paused === true || lastPlaybackStateRef.current.paused
+    );
+    const paused =
+      actualPaused ||
+      pausedByUserRef.current ||
+      (wasStarted && !playRequestedRef.current);
+    const hidden = hiddenRef.current || document.hidden;
+    const recentlyHidden = now - lastHiddenAtRef.current < 10000;
+    const idlePipeline = hidden || paused || recentlyHidden || recoverableErrorRef.current;
+
+    if (source.method === 'hls') {
+      const localTime = Number.isFinite(player?.currentTime) ? player?.currentTime ?? 0 : 0;
+      const absoluteTime = Math.max(0, source.timelineOffset + localTime);
+
+      if (idlePipeline) {
+        recoverableErrorRef.current = true;
+        return;
+      }
+
+      const lastRecovery = hlsRecoveryRef.current;
+      const repeatedRecovery =
+        now - lastRecovery.at < 12000 && Math.abs(absoluteTime - lastRecovery.time) < 3;
+      if (!repeatedRecovery) {
+        hlsRecoveryRef.current = { time: absoluteTime, at: now };
+        recoverableErrorRef.current = false;
+        onTranscodeSeek(absoluteTime);
+        return;
+      }
+    }
+
+    if (idlePipeline) {
+      recoverableErrorRef.current = false;
+      return;
+    }
+
+    onFatalError();
+  }, [onFatalError, onTranscodeSeek, playbackReady, source.method, source.timelineOffset]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      hiddenRef.current = document.hidden;
+      if (document.hidden) {
+        lastHiddenAtRef.current = Date.now();
+        if (source.method === 'hls') recoverableErrorRef.current = true;
+      } else if (
+        source.method === 'hls' &&
+        recoverableErrorRef.current &&
+        playRequestedRef.current &&
+        !pausedByUserRef.current
+      ) {
+        const player = playerRef.current;
+        const currentTime = Number.isFinite(player?.currentTime) ? player?.currentTime ?? 0 : 0;
+        recoverableErrorRef.current = false;
+        onTranscodeSeek(source.timelineOffset + currentTime);
+      }
     };
 
-    armWatchdog();
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      clearWatchdog();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [onFatalError, playbackReady, source.src]);
+    handleVisibility();
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [onTranscodeSeek, source.method, source.timelineOffset]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -228,7 +295,25 @@ function FluxMediaPlayer({
       controlsDelay={2600}
       googleCast={{}}
       onCanPlay={() => setPlaybackReady(true)}
-      onError={onFatalError}
+      onPlay={() => {
+        playbackStartedRef.current = true;
+        lastPlaybackStateRef.current = { paused: false, started: true };
+        playRequestedRef.current = true;
+        pausedByUserRef.current = false;
+        lastPausedAtRef.current = 0;
+      }}
+      onPause={() => {
+        lastPlaybackStateRef.current = {
+          paused: true,
+          started: playbackStartedRef.current || lastPlaybackStateRef.current.started,
+        };
+        if (playbackReady || playbackStartedRef.current || lastPlaybackStateRef.current.started) {
+          playRequestedRef.current = false;
+          pausedByUserRef.current = true;
+          lastPausedAtRef.current = Date.now();
+        }
+      }}
+      onError={handlePlayerError}
     >
       <MediaProvider />
       <FluxPlayerChrome
@@ -255,6 +340,32 @@ function FluxMediaPlayer({
         playbackMethod={source.method}
         timelineOffset={source.timelineOffset}
         onTranscodeSeek={onTranscodeSeek}
+        onPlaybackIntent={(wantsPlayback) => {
+          playRequestedRef.current = wantsPlayback;
+          if (wantsPlayback) {
+            pausedByUserRef.current = false;
+            lastPausedAtRef.current = 0;
+            if (recoverableErrorRef.current && source.method === 'hls') {
+              const player = playerRef.current;
+              const currentTime = Number.isFinite(player?.currentTime) ? player?.currentTime ?? 0 : 0;
+              recoverableErrorRef.current = false;
+              onTranscodeSeek(source.timelineOffset + currentTime);
+            }
+          } else {
+            pausedByUserRef.current = true;
+            lastPausedAtRef.current = Date.now();
+          }
+        }}
+        onPlaybackStateChange={(state) => {
+          lastPlaybackStateRef.current = state;
+          if (!state.started) return;
+          playbackStartedRef.current = true;
+          if (state.paused) {
+            playRequestedRef.current = false;
+            pausedByUserRef.current = true;
+            lastPausedAtRef.current = Date.now();
+          }
+        }}
       />
     </MediaPlayer>
   );
@@ -284,6 +395,8 @@ function FluxPlayerChrome({
   playbackMethod,
   timelineOffset,
   onTranscodeSeek,
+  onPlaybackIntent,
+  onPlaybackStateChange,
 }: Pick<
   FluxPlayerProps,
   | 'mediaItemId'
@@ -310,6 +423,8 @@ function FluxPlayerChrome({
   playbackMethod: PlayerSource['method'];
   timelineOffset: number;
   onTranscodeSeek: (time: number) => void;
+  onPlaybackIntent: (wantsPlayback: boolean) => void;
+  onPlaybackStateChange: (state: { paused: boolean; started: boolean }) => void;
 }) {
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
@@ -335,6 +450,10 @@ function FluxPlayerChrome({
       ? duration
       : 0;
   const absoluteCurrentTime = timelineOffset + (Number.isFinite(currentTime) ? currentTime : 0);
+
+  useEffect(() => {
+    onPlaybackStateChange({ paused, started });
+  }, [onPlaybackStateChange, paused, started]);
 
   const seekTo = useCallback(
     (time: number, trigger?: Event, commit = true) => {
@@ -376,10 +495,11 @@ function FluxPlayerChrome({
 
   const togglePlayback = useCallback(
     (trigger?: Event) => {
+      onPlaybackIntent(paused);
       if (paused) remote.play(trigger);
       else remote.pause(trigger);
     },
-    [paused, remote],
+    [onPlaybackIntent, paused, remote],
   );
 
   useEffect(() => {

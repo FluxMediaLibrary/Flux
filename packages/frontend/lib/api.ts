@@ -1,6 +1,13 @@
 import type {
   ActivateProfileResponse,
+  AdminRequestFulfillmentSyncResultDTO,
+  AdminBulkEpisodeSyncResultDTO,
+  AdminBulkMediaAnalyzeResultDTO,
+  AdminEpisodeSyncResultDTO,
   AdminInfoDTO,
+  AdminLibraryHealthDTO,
+  AdminLibraryRepairResultDTO,
+  AdminMediaAnalyzeResultDTO,
   ApiError,
   AuthResponse,
   ConfirmTorrentRequest,
@@ -353,6 +360,12 @@ export const api = {
       { method: 'POST' },
     );
   },
+  retryTorrent(id: string) {
+    return request<TorrentDTO>(
+      `/api/torrents/${encodeURIComponent(id)}/retry`,
+      { method: 'POST' },
+    );
+  },
   /** Remove a torrent entirely. */
   removeTorrent(id: string) {
     return request<void>(`/api/torrents/${encodeURIComponent(id)}`, {
@@ -373,6 +386,12 @@ export const api = {
   rejectRequest(id: string) {
     return request<RequestDTO>(
       `/api/requests/${encodeURIComponent(id)}/reject`,
+      { method: 'POST' },
+    );
+  },
+  syncFulfilledRequests() {
+    return request<AdminRequestFulfillmentSyncResultDTO>(
+      '/api/requests/admin/sync-fulfilled',
       { method: 'POST' },
     );
   },
@@ -418,12 +437,14 @@ export const api = {
     episodeId?: string,
     audioStreamIndex?: number | null,
     startTimeSeconds = 0,
+    reloadNonce = 0,
   ): string {
     if (typeof window === 'undefined') return '';
     const qs = new URLSearchParams();
     if (episodeId) qs.set('episodeId', episodeId);
     if (typeof audioStreamIndex === 'number') qs.set('audioStream', String(audioStreamIndex));
     if (startTimeSeconds > 0) qs.set('startTime', startTimeSeconds.toFixed(3));
+    if (reloadNonce > 0) qs.set('reload', String(reloadNonce));
     const token = getToken();
     if (token) qs.set('token', token);
     const q = qs.toString();
@@ -465,6 +486,46 @@ export const api = {
   // Admin dashboard
   getAdminInfo() {
     return request<AdminInfoDTO>('/api/admin/info');
+  },
+  getAdminLibrary() {
+    return request<AdminLibraryHealthDTO>('/api/admin/library');
+  },
+  syncAllAdminShowEpisodes() {
+    return request<AdminBulkEpisodeSyncResultDTO>('/api/admin/library/sync-episodes', {
+      method: 'POST',
+    });
+  },
+  analyzeMissingAdminMedia() {
+    return request<AdminBulkMediaAnalyzeResultDTO>('/api/admin/library/analyze-missing', {
+      method: 'POST',
+    });
+  },
+  syncAdminShowEpisodes(mediaItemId: string, season?: number) {
+    const path = season && season > 0
+      ? `/api/admin/library/${encodeURIComponent(mediaItemId)}/seasons/${encodeURIComponent(String(season))}/sync-episodes`
+      : `/api/admin/library/${encodeURIComponent(mediaItemId)}/sync-episodes`;
+    return request<AdminEpisodeSyncResultDTO>(
+      path,
+      { method: 'POST' },
+    );
+  },
+  analyzeAdminMedia(mediaItemId: string) {
+    return request<AdminMediaAnalyzeResultDTO>(
+      `/api/admin/library/${encodeURIComponent(mediaItemId)}/analyze`,
+      { method: 'POST' },
+    );
+  },
+  clearMissingAdminMovieFile(mediaItemId: string) {
+    return request<AdminLibraryRepairResultDTO>(
+      `/api/admin/library/${encodeURIComponent(mediaItemId)}/clear-missing-file`,
+      { method: 'POST' },
+    );
+  },
+  clearMissingAdminEpisodeFile(episodeId: string) {
+    return request<AdminLibraryRepairResultDTO>(
+      `/api/admin/library/episodes/${encodeURIComponent(episodeId)}/clear-missing-file`,
+      { method: 'POST' },
+    );
   },
 };
 

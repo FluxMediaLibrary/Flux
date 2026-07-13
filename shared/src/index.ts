@@ -468,17 +468,34 @@ export interface RequestDTO {
   tmdbId: number;
   mediaType: MediaType;
   title: string;
+  season: number | null;
+  episode: number | null;
   status: RequestStatus;
   createdAt: string;
   updatedAt: string;
   /** Admin view only: which profile/account requested. */
   requestedBy?: { profileId: string; profileName: string; accountEmail: string };
+  /** Admin view only: acquisition row fulfilling this request, when linked. */
+  torrent?: {
+    id: string;
+    name: string;
+    status: TorrentStatus;
+    progress: number;
+    errorMessage: string | null;
+  } | null;
+}
+
+export interface AdminRequestFulfillmentSyncResultDTO {
+  scanned: number;
+  fulfilled: number;
 }
 
 export interface CreateRequestRequest {
   tmdbId: number;
   mediaType: MediaType;
   title: string;
+  season?: number | null;
+  episode?: number | null;
 }
 
 // ─── Torrents (admin) ─────────────────────────────────────────────────────────
@@ -518,6 +535,12 @@ export interface TorrentDTO {
   name: string;
   category: MediaType;
   matchedTmdbId: number | null;
+  linkedRequest?: {
+    id: string;
+    title: string;
+    status: RequestStatus;
+    requestedBy?: { profileId: string; profileName: string; accountEmail: string };
+  } | null;
   status: TorrentStatus;
   progress: number;       // 0..1
   downloadSpeed: number;  // bytes/s
@@ -624,4 +647,125 @@ export interface StorageRootDTO {
   totalBytes: number | null;
   freeBytes: number | null;
   usedBytes: number | null;
+}
+
+export interface AdminLibraryEpisodeDTO {
+  id: string;
+  season: number;
+  episode: number;
+  title: string | null;
+  overview: string | null;
+  filePath: string | null;
+  available: boolean;
+  fileExists: boolean | null;
+  analyzed: boolean;
+  runtime: number | null;
+}
+
+export interface AdminLibrarySeasonDTO {
+  season: number;
+  expectedEpisodes: number | null;
+  syncedEpisodes: number;
+  availableEpisodes: number;
+  missingEpisodes: number;
+  brokenEpisodes: number;
+  unanalyzedEpisodes: number;
+  missingEpisodeNumbers: number[];
+  brokenEpisodeNumbers: number[];
+}
+
+export interface AdminLibraryRequestDTO {
+  id: string;
+  status: RequestStatus;
+  season: number | null;
+  episode: number | null;
+  requestedBy?: { profileId: string; profileName: string; accountEmail: string };
+}
+
+export interface AdminLibraryAcquisitionTargetDTO {
+  key: string;
+  reason: 'MISSING_FILE' | 'BROKEN_FILE' | 'MISSING_METADATA' | 'UNSYNCED_EPISODES';
+  season: number | null;
+  episode: number | null;
+  requestId: string | null;
+  label: string;
+  detail: string;
+  tone: 'bad' | 'warn';
+  syncSeason: number | null;
+  priority: number;
+}
+
+export interface AdminLibraryItemDTO {
+  id: string;
+  tmdbId: number;
+  type: MediaType;
+  title: string;
+  year: number | null;
+  posterPath: string | null;
+  addedAt: string;
+  available: boolean;
+  fileExists: boolean | null;
+  analyzed: boolean;
+  episodeCount: number;
+  expectedEpisodes: number | null;
+  availableEpisodes: number;
+  missingEpisodes: number;
+  brokenEpisodes: number;
+  unanalyzedEpisodes: number;
+  issues: string[];
+  seasons?: AdminLibrarySeasonDTO[];
+  episodes?: AdminLibraryEpisodeDTO[];
+  requests: AdminLibraryRequestDTO[];
+  acquisitionTargets: AdminLibraryAcquisitionTargetDTO[];
+}
+
+export interface AdminLibraryHealthDTO {
+  summary: {
+    items: number;
+    movies: number;
+    shows: number;
+    availableItems: number;
+    missingFiles: number;
+    missingAnalysis: number;
+    brokenFiles: number;
+    unavailableEpisodes: number;
+  };
+  items: AdminLibraryItemDTO[];
+}
+
+export interface AdminEpisodeSyncResultDTO {
+  mediaItemId: string;
+  seasons: number;
+  episodes: number;
+  created: number;
+  updated: number;
+}
+
+export interface AdminBulkEpisodeSyncResultDTO {
+  shows: number;
+  seasons: number;
+  episodes: number;
+  created: number;
+  updated: number;
+  failed: number;
+}
+
+export interface AdminMediaAnalyzeResultDTO {
+  mediaItemId: string;
+  analyzed: number;
+  skipped: number;
+  failed: number;
+}
+
+export interface AdminLibraryRepairResultDTO {
+  mediaItemId: string;
+  episodeId: string | null;
+  cleared: boolean;
+}
+
+export interface AdminBulkMediaAnalyzeResultDTO {
+  items: number;
+  analyzed: number;
+  skipped: number;
+  failed: number;
 }

@@ -91,6 +91,12 @@ export default function AdminInfoPage() {
     info.requests.downloading +
     info.requests.fulfilled +
     info.requests.rejected;
+  const acquisitionGaps =
+    info.library.unavailableMovies +
+    info.library.unavailableEpisodes +
+    info.library.brokenFiles;
+  const metadataGaps = info.library.missingMetadata;
+  const analysisGaps = info.library.missingAnalysis;
 
   const dbMax = Math.max(
     info.database.users,
@@ -191,6 +197,14 @@ export default function AdminInfoPage() {
           color="#22c55e"
         />
       </div>
+
+      <AdminPriorities
+        acquisitionGaps={acquisitionGaps}
+        metadataGaps={metadataGaps}
+        analysisGaps={analysisGaps}
+        torrentErrors={info.torrents.error}
+        approvedRequests={info.requests.approved}
+      />
 
       {/* ── System health + Storage ──────────────────────────────────────── */}
       <div
@@ -669,6 +683,76 @@ export default function AdminInfoPage() {
 }
 
 // ─── Components ───────────────────────────────────────────────────────────────
+
+function AdminPriorities({
+  acquisitionGaps,
+  metadataGaps,
+  analysisGaps,
+  torrentErrors,
+  approvedRequests,
+}: {
+  acquisitionGaps: number;
+  metadataGaps: number;
+  analysisGaps: number;
+  torrentErrors: number;
+  approvedRequests: number;
+}) {
+  const priorities = [
+    {
+      label: 'Acquire missing media',
+      count: acquisitionGaps,
+      href: '/admin/library?issue=MISSING_FILES',
+      tone: acquisitionGaps > 0 ? 'bad' : 'ok',
+    },
+    {
+      label: 'Sync episode metadata',
+      count: metadataGaps,
+      href: '/admin/library?type=SHOW&issue=ISSUES',
+      tone: metadataGaps > 0 ? 'warn' : 'ok',
+    },
+    {
+      label: 'Analyze media',
+      count: analysisGaps,
+      href: '/admin/library?issue=MISSING_ANALYSIS',
+      tone: analysisGaps > 0 ? 'warn' : 'ok',
+    },
+    {
+      label: 'Retry torrent errors',
+      count: torrentErrors,
+      href: '/admin/torrents',
+      tone: torrentErrors > 0 ? 'bad' : 'ok',
+    },
+    {
+      label: 'Fulfill approved requests',
+      count: approvedRequests,
+      href: '/admin/requests?status=APPROVED',
+      tone: approvedRequests > 0 ? 'warn' : 'ok',
+    },
+  ] as const;
+
+  return (
+    <section className="card" style={{ padding: '16px 18px', marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <IconAlert />
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 600, margin: 0 }}>
+          Admin priorities
+        </h3>
+      </div>
+      <div className="admin-priority-grid">
+        {priorities.map((priority) => (
+          <a
+            key={priority.label}
+            className={`admin-priority-link tone-${priority.tone}`}
+            href={priority.href}
+          >
+            <span>{priority.label}</span>
+            <strong>{priority.count.toLocaleString()}</strong>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function KpiCard({
   icon,

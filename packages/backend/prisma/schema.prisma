@@ -245,13 +245,15 @@ model Request {
   tmdbId    Int
   mediaType MediaType
   title     String
+  season    Int?
+  episode   Int?
   status    RequestStatus @default(PENDING)
   torrentId String?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
   profile Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  torrent Torrent? @relation(fields: [torrentId], references: [id])
+  torrent Torrent? @relation(fields: [torrentId], references: [id], onDelete: SetNull)
 
   @@index([profileId])
   @@index([tmdbId])
