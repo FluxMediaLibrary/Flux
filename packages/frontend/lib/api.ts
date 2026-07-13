@@ -413,11 +413,17 @@ export const api = {
     const qs = episodeId ? `?episodeId=${encodeURIComponent(episodeId)}` : '';
     return request<PlaybackInfoDTO>(`/api/stream/${encodeURIComponent(mediaItemId)}/info${qs}`, { signal });
   },
-  getHlsUrl(mediaItemId: string, episodeId?: string, audioStreamIndex?: number | null): string {
+  getHlsUrl(
+    mediaItemId: string,
+    episodeId?: string,
+    audioStreamIndex?: number | null,
+    startTimeSeconds = 0,
+  ): string {
     if (typeof window === 'undefined') return '';
     const qs = new URLSearchParams();
     if (episodeId) qs.set('episodeId', episodeId);
     if (typeof audioStreamIndex === 'number') qs.set('audioStream', String(audioStreamIndex));
+    if (startTimeSeconds > 0) qs.set('startTime', startTimeSeconds.toFixed(3));
     const token = getToken();
     if (token) qs.set('token', token);
     const q = qs.toString();

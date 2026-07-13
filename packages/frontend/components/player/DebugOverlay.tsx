@@ -9,6 +9,7 @@ interface DebugOverlayProps {
   videoCodec?: string | null;
   audioCodec?: string | null;
   durationSeconds?: number | null;
+  positionOffset?: number;
 }
 
 function formatTime(value: number | null | undefined): string {
@@ -37,6 +38,7 @@ export function DebugOverlay({
   videoCodec,
   audioCodec,
   durationSeconds,
+  positionOffset = 0,
 }: DebugOverlayProps) {
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
@@ -91,7 +93,7 @@ export function DebugOverlay({
       <div className="fx-debug-row"><span>Dropped</span><span>{frames.dropped}</span></div>
       <div className="fx-debug-row"><span>FPS</span><span>{frames.fps || '-'}</span></div>
       <div className="fx-debug-row"><span>Speed</span><span>{playbackRate}x</span></div>
-      <div className="fx-debug-row"><span>Time</span><span>{formatTime(currentTime)} / {formatTime(duration || durationSeconds)}</span></div>
+      <div className="fx-debug-row"><span>Time</span><span>{formatTime(positionOffset + currentTime)} / {formatTime(durationSeconds || (positionOffset + duration))}</span></div>
     </div>
   );
 }

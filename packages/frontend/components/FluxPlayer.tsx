@@ -35,6 +35,7 @@ interface PlayerSource {
   info: PlaybackInfoDTO | null;
   qualityLabel: PlaybackInfoDTO['qualities'][number]['label'];
   audioStreamIndex: number | null;
+  timelineOffset: number;
 }
 
 function getStreamLabel(streams: MediaStreamDTO[], type: MediaStreamDTO['type']) {
@@ -60,6 +61,7 @@ export function FluxPlayer(props: FluxPlayerProps) {
   const [error, setError] = useState<string | null>(null);
   const [qualityLabel, setQualityLabel] = useState<PlaybackInfoDTO['qualities'][number]['label']>('Auto');
   const [audioStreamIndex, setAudioStreamIndex] = useState<number | null>(null);
+  const [hlsStartTime, setHlsStartTime] = useState(() => Math.max(0, startPositionSeconds));
   const loadSource = useCallback(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -75,14 +77,16 @@ export function FluxPlayer(props: FluxPlayerProps) {
           : null;
         if (validAudioStreamIndex !== audioStreamIndex) setAudioStreamIndex(null);
         const direct = qualityLabel === 'Original' && info.directPlay && validAudioStreamIndex === null;
+        const timelineOffset = direct ? 0 : Math.max(0, hlsStartTime);
         setSource({
           src: direct
             ? api.getStreamUrl(mediaItemId, episodeId)
-            : api.getHlsUrl(mediaItemId, episodeId, validAudioStreamIndex),
+            : api.getHlsUrl(mediaItemId, episodeId, validAudioStreamIndex, timelineOffset),
           method: direct ? 'direct' : 'hls',
           info,
           qualityLabel,
           audioStreamIndex: validAudioStreamIndex,
+          timelineOffset,
         });
         setLoading(false);
       },
@@ -94,7 +98,7 @@ export function FluxPlayer(props: FluxPlayerProps) {
     );
 
     return () => controller.abort();
-  }, [audioStreamIndex, episodeId, mediaItemId, qualityLabel]);
+  }, [audioStreamIndex, episodeId, hlsStartTime, mediaItemId, qualityLabel]);
 
   useEffect(() => loadSource(), [loadSource]);
 
@@ -130,6 +134,7 @@ export function FluxPlayer(props: FluxPlayerProps) {
         setAudioStreamIndex(streamIndex);
         if (streamIndex !== null && qualityLabel === 'Original') setQualityLabel('Auto');
       }}
+      onTranscodeSeek={(time) => setHlsStartTime(Math.max(0, Math.round(time * 1000) / 1000))}
       onFatalError={() => setError('Playback failed. Try again or choose another title.')}
     />
   );
@@ -148,11 +153,13 @@ function FluxMediaPlayer({
   source,
   onQualityChange,
   onAudioStreamChange,
+  onTranscodeSeek,
   onFatalError,
 }: FluxPlayerProps & {
   source: PlayerSource;
   onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label']) => void;
   onAudioStreamChange: (streamIndex: number | null) => void;
+  onTranscodeSeek: (time: number) => void;
   onFatalError: () => void;
 }) {
   const playerRef = useRef<MediaPlayerInstance>(null);
@@ -232,6 +239,8 @@ function FluxMediaPlayer({
         selectedAudioStreamIndex={source.audioStreamIndex}
         onAudioStreamChange={onAudioStreamChange}
         playbackMethod={source.method}
+        timelineOffset={source.timelineOffset}
+        onTranscodeSeek={onTranscodeSeek}
       />
     </MediaPlayer>
   );
@@ -259,6 +268,8 @@ function FluxPlayerChrome({
   selectedAudioStreamIndex,
   onAudioStreamChange,
   playbackMethod,
+  timelineOffset,
+  onTranscodeSeek,
 }: Pick<
   FluxPlayerProps,
   | 'mediaItemId'
@@ -283,6 +294,8 @@ function FluxPlayerChrome({
   selectedAudioStreamIndex: number | null;
   onAudioStreamChange: (streamIndex: number | null) => void;
   playbackMethod: PlayerSource['method'];
+  timelineOffset: number;
+  onTranscodeSeek: (time: number) => void;
 }) {
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
@@ -292,8 +305,10 @@ function FluxPlayerChrome({
   const waiting = useMediaState('waiting');
   const playing = useMediaState('playing');
   const qualities = useMediaState('qualities');
+  const seekableStart = useMediaState('seekableStart');
+  const seekableEnd = useMediaState('seekableEnd');
   const remote = useMediaRemote();
-  const resumeTargetRef = useRef(startPositionSeconds ?? 0);
+  const resumeTargetRef = useRef(playbackMethod === 'direct' ? (startPositionSeconds ?? 0) : 0);
   const nearEndFiredRef = useRef(false);
   const autoplayAttemptedRef = useRef(false);
   const chromeRef = useRef<HTMLDivElement>(null);
@@ -305,6 +320,7 @@ function FluxPlayerChrome({
     : typeof duration === 'number' && Number.isFinite(duration) && duration > 0
       ? duration
       : 0;
+  const absoluteCurrentTime = timelineOffset + (Number.isFinite(currentTime) ? currentTime : 0);
 
   const seekTo = useCallback(
     (time: number, trigger?: Event, commit = true) => {
@@ -313,20 +329,42 @@ function FluxPlayerChrome({
       const hardMax = stableDuration > 0 ? stableDuration : Number.POSITIVE_INFINITY;
       const target = Math.max(0, Math.min(time, hardMax));
       const player = playerRef.current;
+      const localTarget = playbackMethod === 'hls' ? target - timelineOffset : target;
+      const localSeekStart = Number.isFinite(seekableStart) ? seekableStart : 0;
+      const localSeekEnd = Number.isFinite(seekableEnd) ? seekableEnd : 0;
+      const outsideGeneratedWindow = playbackMethod === 'hls' && (
+        localSeekEnd <= localSeekStart ||
+        localTarget < localSeekStart - 0.5 ||
+        localTarget > localSeekEnd + 0.5
+      );
+
+      if (outsideGeneratedWindow) {
+        if (commit) onTranscodeSeek(target);
+        return;
+      }
 
       if (commit) {
         if (player) {
-          player.currentTime = target;
+          player.currentTime = localTarget;
         }
-        remote.seek(target, trigger);
+        remote.seek(localTarget, trigger);
       } else {
         if (player) {
-          player.currentTime = target;
+          player.currentTime = localTarget;
         }
-        remote.seeking(target, trigger);
+        remote.seeking(localTarget, trigger);
       }
     },
-    [playerRef, remote, stableDuration],
+    [
+      onTranscodeSeek,
+      playbackMethod,
+      playerRef,
+      remote,
+      seekableEnd,
+      seekableStart,
+      stableDuration,
+      timelineOffset,
+    ],
   );
 
   const togglePlayback = useCallback(
@@ -354,7 +392,7 @@ function FluxPlayerChrome({
     const player = playerRef.current;
     if (!player) return;
 
-    const position = player.currentTime;
+    const position = timelineOffset + player.currentTime;
     const totalDuration = stableDuration > 0
       ? stableDuration
       : Number.isFinite(player.duration) ? player.duration : 0;
@@ -368,7 +406,7 @@ function FluxPlayerChrome({
       durationSeconds: totalDuration > 0 ? totalDuration : undefined,
     }).catch(() => {});
     onProgress?.(position, totalDuration);
-  }, [episodeId, mediaItemId, onProgress, playerRef, stableDuration]);
+  }, [episodeId, mediaItemId, onProgress, playerRef, stableDuration, timelineOffset]);
 
   useEffect(() => {
     const interval = window.setInterval(reportProgress, 5000);
@@ -390,11 +428,11 @@ function FluxPlayerChrome({
 
   useEffect(() => {
     if (!onNearEnd || nearEndFiredRef.current) return;
-    if (stableDuration > 0 && currentTime / stableDuration >= 0.85) {
+    if (stableDuration > 0 && absoluteCurrentTime / stableDuration >= 0.85) {
       nearEndFiredRef.current = true;
       onNearEnd();
     }
-  }, [currentTime, onNearEnd, stableDuration]);
+  }, [absoluteCurrentTime, onNearEnd, stableDuration]);
 
   useEffect(() => {
     const target = resumeTargetRef.current;
@@ -474,11 +512,11 @@ function FluxPlayerChrome({
       } else if (event.key === 'ArrowLeft') {
         event.preventDefault();
         setIdle(false);
-        seekTo(currentTime - 10, event);
+        seekTo(absoluteCurrentTime - 10, event);
       } else if (event.key === 'ArrowRight') {
         event.preventDefault();
         setIdle(false);
-        seekTo(currentTime + 10, event);
+        seekTo(absoluteCurrentTime + 10, event);
       } else if (event.key.toLowerCase() === 'f') {
         event.preventDefault();
         setIdle(false);
@@ -492,7 +530,7 @@ function FluxPlayerChrome({
 
     window.addEventListener('keydown', handleKey, { capture: true });
     return () => window.removeEventListener('keydown', handleKey, { capture: true });
-  }, [currentTime, remote, seekTo, togglePlayback]);
+  }, [absoluteCurrentTime, remote, seekTo, togglePlayback]);
 
   return (
     <div ref={chromeRef} className={idle ? 'fx-chrome is-idle' : 'fx-chrome'}>
@@ -514,10 +552,12 @@ function FluxPlayerChrome({
         mediaItemId={mediaItemId}
         episodeId={episodeId}
         durationSeconds={stableDuration || null}
+        positionOffset={timelineOffset}
         onSeek={seekTo}
       />
       <ControlBar
         durationSeconds={stableDuration || null}
+        positionOffset={timelineOffset}
         onSeek={seekTo}
         qualityOptions={qualityOptions}
         selectedQuality={selectedQuality}
@@ -533,6 +573,7 @@ function FluxPlayerChrome({
         videoCodec={videoCodec}
         audioCodec={audioCodec}
         durationSeconds={durationSeconds}
+        positionOffset={timelineOffset}
       />
     </div>
   );

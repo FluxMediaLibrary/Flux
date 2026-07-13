@@ -319,6 +319,7 @@ export function buildHlsFfmpegArgs(
   sourceFile: string,
   sessionDir: string,
   audioStreamIndex?: number,
+  startTimeSeconds = 0,
 ): string[] {
   const audioCopyable =
     probe.audioCodec != null && COPYABLE_AUDIO.has(probe.audioCodec);
@@ -351,6 +352,7 @@ export function buildHlsFfmpegArgs(
 
   return [
     '-fflags', '+genpts', // synthesize sane PTS when the source lacks them
+    ...(startTimeSeconds > 0 ? ['-ss', startTimeSeconds.toFixed(3)] : []),
     '-i', sourceFile,
     '-map', probe.videoStreamIndex !== null ? `0:${probe.videoStreamIndex}` : '0:v:0',
     ...(hasAudio
