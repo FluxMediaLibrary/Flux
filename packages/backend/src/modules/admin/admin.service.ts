@@ -3,10 +3,63 @@
  * request stats for the admin dashboard. Admin-only at the route layer.
  */
 import * as os from 'node:os';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { prisma } from '../../lib/db.js';
 import { config } from '../../config.js';
+import { safeJoin } from '../../lib/media-paths.js';
 import type { AdminInfoDTO } from '@flux/shared';
 import type { TorrentStatus, RequestStatus } from '@flux/shared';
+
+async function getStorageRoot(path: string): Promise<AdminInfoDTO['storage']['mediaRoot']> {
+  try {
+    const stats = await fs.statfs(path);
+    const totalBytes = stats.blocks * stats.bsize;
+    const freeBytes = stats.bavail * stats.bsize;
+    return {
+      path,
+      exists: true,
+      totalBytes,
+      freeBytes,
+      usedBytes: Math.max(0, totalBytes - freeBytes),
+    };
+  } catch {
+    return {
+      path,
+      exists: false,
+      totalBytes: null,
+      freeBytes: null,
+      usedBytes: null,
+    };
+  }
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function directorySize(dir: string): Promise<number> {
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    const sizes = await Promise.all(
+      entries.map(async (entry) => {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) return directorySize(fullPath);
+        if (!entry.isFile()) return 0;
+        const stat = await fs.stat(fullPath).catch(() => null);
+        return stat?.size ?? 0;
+      }),
+    );
+    return sizes.reduce((sum, value) => sum + value, 0);
+  } catch {
+    return 0;
+  }
+}
 
 export async function getAdminInfo(): Promise<AdminInfoDTO> {
   // ── System ──────────────────────────────────────────────────────────────
@@ -26,10 +79,16 @@ export async function getAdminInfo(): Promise<AdminInfoDTO> {
   };
 
   // ── Storage roots (paths only; disk usage via df in container) ─────────
+  const [mediaRoot, downloadRoot, transcodeRoot] = await Promise.all([
+    getStorageRoot(config.MEDIA_ROOT),
+    getStorageRoot(config.DOWNLOAD_ROOT),
+    getStorageRoot(config.TRANSCODE_ROOT),
+  ]);
+
   const storage: AdminInfoDTO['storage'] = {
-    mediaRoot: config.MEDIA_ROOT,
-    downloadRoot: config.DOWNLOAD_ROOT,
-    transcodeRoot: config.TRANSCODE_ROOT,
+    mediaRoot,
+    downloadRoot,
+    transcodeRoot,
   };
 
   // ── Database counts ────────────────────────────────────────────────────
@@ -59,6 +118,74 @@ export async function getAdminInfo(): Promise<AdminInfoDTO> {
     torrents: torrentCount,
     requests: requestCount,
     invites: inviteCount,
+  };
+
+  const [
+    movies,
+    shows,
+    availableMovies,
+    availableEpisodes,
+    mediaForHealth,
+    episodesForHealth,
+    orphanProgress,
+    transcodeEntries,
+    transcodeBytes,
+  ] = await Promise.all([
+    prisma.mediaItem.count({ where: { type: 'MOVIE' } }),
+    prisma.mediaItem.count({ where: { type: 'SHOW' } }),
+    prisma.mediaItem.count({ where: { type: 'MOVIE', filePath: { not: null } } }),
+    prisma.episode.count({ where: { filePath: { not: null } } }),
+    prisma.mediaItem.findMany({
+      select: {
+        filePath: true,
+        metadata: true,
+        mediaInfo: { select: { id: true } },
+      },
+    }),
+    prisma.episode.findMany({
+      select: {
+        filePath: true,
+        mediaInfo: { select: { id: true } },
+      },
+    }),
+    prisma.watchProgress.count({
+      where: {
+        mediaItemId: null,
+        episodeId: null,
+      },
+    }),
+    fs.readdir(config.TRANSCODE_ROOT, { withFileTypes: true }).catch(() => []),
+    directorySize(config.TRANSCODE_ROOT),
+  ]);
+
+  const fileChecks = await Promise.all([
+    ...mediaForHealth
+      .filter((item) => item.filePath)
+      .map((item) => pathExists(safeJoin(config.MEDIA_ROOT, item.filePath!))),
+    ...episodesForHealth
+      .filter((episode) => episode.filePath)
+      .map((episode) => pathExists(safeJoin(config.MEDIA_ROOT, episode.filePath!))),
+  ]);
+  const brokenFiles = fileChecks.filter((exists) => !exists).length;
+  const missingMetadata = mediaForHealth.filter((item) => item.metadata == null).length;
+  const missingAnalysis =
+    mediaForHealth.filter((item) => item.filePath && !item.mediaInfo).length +
+    episodesForHealth.filter((episode) => episode.filePath && !episode.mediaInfo).length;
+  const transcodeSessions = transcodeEntries.filter((entry) => entry.isDirectory()).length;
+
+  const library: AdminInfoDTO['library'] = {
+    movies,
+    shows,
+    availableMovies,
+    availableEpisodes,
+    unavailableMovies: Math.max(0, movies - availableMovies),
+    unavailableEpisodes: episodesForHealth.filter((episode) => !episode.filePath).length,
+    missingMetadata,
+    missingAnalysis,
+    brokenFiles,
+    orphanProgress,
+    transcodeSessions,
+    transcodeBytes,
   };
 
   // ── Torrent breakdown by status ────────────────────────────────────────
@@ -125,6 +252,7 @@ export async function getAdminInfo(): Promise<AdminInfoDTO> {
     system,
     storage,
     database,
+    library,
     torrents,
     requests,
     errors,

@@ -12,6 +12,9 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { QUALITY_TIERS, applicableTiers } from '../../lib/adaptive-hls.js';
+import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
+import type { MediaStream } from '@prisma/client';
 
 /** Map a file extension to its MIME type for direct-play streaming. */
 function mimeTypeFromExt(ext: string): string {
@@ -62,11 +65,14 @@ const COPYABLE_AUDIO = new Set(['aac']);
  * frontend can display an accurate seek bar even for HLS event playlists
  * where video.duration reports Infinity.
  */
-export function probeMedia(filePath: string): Promise<MediaProbe> {
+export function probeMedia(
+  filePath: string,
+  audioStreamIndex?: number,
+): Promise<MediaProbe> {
   return new Promise((resolve) => {
     const proc = spawn('ffprobe', [
       '-v', 'error',
-      '-show_entries', 'stream=codec_type,codec_name:format=duration',
+      '-show_entries', 'stream=index,codec_type,codec_name:format=duration',
       '-of', 'json',
       filePath,
     ]);
@@ -77,11 +83,14 @@ export function probeMedia(filePath: string): Promise<MediaProbe> {
       try {
         const json = JSON.parse(out) as {
           format?: { duration?: string };
-          streams?: { codec_type?: string; codec_name?: string }[];
+          streams?: { index?: number; codec_type?: string; codec_name?: string }[];
         };
         const streams = json.streams ?? [];
         const video = streams.find((s) => s.codec_type === 'video');
-        const audio = streams.find((s) => s.codec_type === 'audio');
+        const audio =
+          typeof audioStreamIndex === 'number'
+            ? streams.find((s) => s.codec_type === 'audio' && (s as { index?: number }).index === audioStreamIndex)
+            : streams.find((s) => s.codec_type === 'audio');
         const durRaw = json.format?.duration;
         const durationSeconds = durRaw ? parseFloat(durRaw) : null;
         resolve({
@@ -110,6 +119,66 @@ export interface PlaybackDecision {
   audioCodec: string | null;
   /** Source file duration in seconds (from ffprobe). Null if probe failed. */
   durationSeconds: number | null;
+}
+
+function mapMediaStream(row: MediaStream): MediaStreamDTO {
+  return {
+    id: row.id,
+    type: row.type as MediaStreamDTO['type'],
+    index: row.index,
+    codec: row.codec,
+    profile: row.profile,
+    level: row.level,
+    width: row.width,
+    height: row.height,
+    bitrate: row.bitrate,
+    framerate: row.framerate,
+    hdr: row.hdr,
+    channels: row.channels,
+    language: row.language,
+    title: row.title,
+    isDefault: row.isDefault,
+    isForced: row.isForced,
+  };
+}
+
+function buildQualityOptions(
+  directPlay: boolean,
+  videoStream: MediaStream | undefined,
+): PlaybackInfoDTO['qualities'] {
+  const sourceWidth = videoStream?.width ?? null;
+  const sourceHeight = videoStream?.height ?? null;
+  const sourceBitrate = videoStream?.bitrate ?? null;
+  const hlsTiers = sourceWidth && sourceHeight
+    ? applicableTiers(sourceWidth, sourceHeight)
+    : QUALITY_TIERS.filter((tier) => tier.height <= 1080);
+
+  return [
+    {
+      label: 'Auto',
+      width: null,
+      height: null,
+      bitrate: null,
+      available: hlsTiers.length > 0,
+      source: 'hls',
+    },
+    {
+      label: 'Original',
+      width: sourceWidth,
+      height: sourceHeight,
+      bitrate: sourceBitrate,
+      available: directPlay,
+      source: 'direct',
+    },
+    ...QUALITY_TIERS.map((tier) => ({
+      label: tier.label as PlaybackInfoDTO['qualities'][number]['label'],
+      width: tier.width,
+      height: tier.height,
+      bitrate: tier.videoBitrate * 1000,
+      available: hlsTiers.some((available) => available.label === tier.label),
+      source: 'hls' as const,
+    })),
+  ];
 }
 
 /**
@@ -169,6 +238,30 @@ export async function decidePlayback(
   };
 }
 
+export async function getPlaybackInfo(
+  filePath: string,
+  mediaItemId: string,
+  episodeId?: string,
+): Promise<PlaybackInfoDTO> {
+  const decision = await decidePlayback(filePath, mediaItemId, episodeId);
+  const where = episodeId ? { episodeId } : { mediaItemId };
+  const streams = await prisma.mediaStream.findMany({
+    where,
+    orderBy: { index: 'asc' },
+  });
+  const videoStream = streams.find((stream) => stream.type === 'video');
+
+  return {
+    directPlay: decision.directPlay,
+    hlsAvailable: true,
+    videoCodec: decision.videoCodec,
+    audioCodec: decision.audioCodec,
+    durationSeconds: decision.durationSeconds,
+    streams: streams.map(mapMediaStream),
+    qualities: buildQualityOptions(decision.directPlay, videoStream),
+  };
+}
+
 /**
  * Build codec-aware FFmpeg args for an HLS session (Plex-style):
  *   - video already H.264  → stream-copy (remux, no re-encode → near-instant)
@@ -180,6 +273,7 @@ export function buildHlsFfmpegArgs(
   probe: MediaProbe,
   sourceFile: string,
   sessionDir: string,
+  audioStreamIndex?: number,
 ): string[] {
   const audioCopyable =
     probe.audioCodec != null && COPYABLE_AUDIO.has(probe.audioCodec);
@@ -211,7 +305,7 @@ export function buildHlsFfmpegArgs(
     '-fflags', '+genpts', // synthesize sane PTS when the source lacks them
     '-i', sourceFile,
     '-map', '0:v:0',
-    '-map', '0:a:0?',
+    '-map', typeof audioStreamIndex === 'number' ? `0:${audioStreamIndex}?` : '0:a:0?',
     '-sn', '-dn',
     ...videoArgs,
     ...audioArgs,

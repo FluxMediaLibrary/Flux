@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { useAmbient } from '@/components/AmbientBackdrop';
@@ -73,16 +72,46 @@ function Rail({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+function MediaRail({ title, items }: { title: string; items: MediaItemDTO[] }) {
+  if (items.length === 0) return null;
+  return (
+    <Rail title={title}>
+      {items.map((item) => (
+        <Link key={item.id} href={`/library/${item.id}`} className="poster-card">
+          <div className="poster-img-wrap">
+            {item.posterPath ? (
+              <img
+                src={`${POSTER_BASE}${item.posterPath}`}
+                alt={item.title}
+                className="poster-img"
+                loading="lazy"
+              />
+            ) : (
+              <div className="poster-img poster-img--placeholder" />
+            )}
+          </div>
+          <p className="poster-title">{item.title}</p>
+          <p className="poster-sub">
+            {[item.year, item.type === 'SHOW' ? 'Series' : 'Movie']
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        </Link>
+      ))}
+    </Rail>
+  );
+}
+
 /**
  * /home now redirects to /library — the library is the app's landing surface.
  * The original home experience (featured hero + rails) is preserved below as
  * {@link LegacyHomePage} so it can be re-wired if we want it back.
  */
 export default function HomePage() {
-  const router = useRouter();
-  useEffect(() => {
-    router.replace('/library');
-  }, [router]);
+  return <LegacyHomePage />;
+}
+
+function RedirectedHomePage() {
   return (
     <div className="centered-viewport">
       <div className="spinner" aria-hidden />
@@ -156,8 +185,23 @@ function LegacyHomePage() {
 
   if (!data) return null;
 
-  const { continueWatching, recentlyAdded, byGenre } = data;
-  const hasContent = continueWatching.length > 0 || recentlyAdded.length > 0 || byGenre.length > 0;
+  const {
+    continueWatching,
+    recentlyAdded,
+    newReleases,
+    topRated,
+    recommended,
+    randomPicks,
+    byGenre,
+  } = data;
+  const hasContent =
+    continueWatching.length > 0 ||
+    recentlyAdded.length > 0 ||
+    newReleases.length > 0 ||
+    topRated.length > 0 ||
+    recommended.length > 0 ||
+    randomPicks.length > 0 ||
+    byGenre.length > 0;
 
   // Featured hero — first item with a backdrop, preferring recently added.
   const featured: MediaItemDTO | null =
@@ -219,8 +263,12 @@ function LegacyHomePage() {
         <Rail title="Continue Watching">
           {continueWatching.map((item) => (
             <Link
-              key={item.mediaItem.id}
-              href={`/watch/${item.mediaItem.id}`}
+              key={`${item.mediaItem.id}:${item.episode?.id ?? 'movie'}`}
+              href={
+                item.episode
+                  ? `/watch/${item.mediaItem.id}?episode=${item.episode.id}`
+                  : `/watch/${item.mediaItem.id}`
+              }
               className="poster-card"
             >
               <div className="poster-img-wrap">
@@ -260,28 +308,11 @@ function LegacyHomePage() {
         </Rail>
       )}
 
-      {recentlyAdded.length > 0 && (
-        <Rail title="Recently Added">
-          {recentlyAdded.map((item) => (
-            <Link key={item.id} href={`/library/${item.id}`} className="poster-card">
-              <div className="poster-img-wrap">
-                {item.posterPath ? (
-                  <img
-                    src={`${POSTER_BASE}${item.posterPath}`}
-                    alt={item.title}
-                    className="poster-img"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="poster-img poster-img--placeholder" />
-                )}
-              </div>
-              <p className="poster-title">{item.title}</p>
-              {item.year && <p className="poster-sub">{item.year}</p>}
-            </Link>
-          ))}
-        </Rail>
-      )}
+      <MediaRail title="Recently Added" items={recentlyAdded} />
+      <MediaRail title="New Releases" items={newReleases} />
+      <MediaRail title="Top Rated" items={topRated} />
+      <MediaRail title="Because You Watched" items={recommended} />
+      <MediaRail title="Random Picks" items={randomPicks} />
 
       {byGenre.map(({ genre, items }) => (
         <Rail title={genre} key={genre}>

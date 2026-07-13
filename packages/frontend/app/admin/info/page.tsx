@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import type { AdminInfoDTO } from '@flux/shared';
+import type { AdminInfoDTO, StorageRootDTO } from '@flux/shared';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -335,22 +335,43 @@ export default function AdminInfoPage() {
             <StorageRow
               icon={<IconFolder />}
               label="Media"
-              path={info.storage.mediaRoot}
-              pct={45}
+              root={info.storage.mediaRoot}
             />
             <StorageRow
               icon={<IconFolder />}
               label="Downloads"
-              path={info.storage.downloadRoot}
-              pct={22}
+              root={info.storage.downloadRoot}
             />
             <StorageRow
               icon={<IconFolder />}
               label="Transcode"
-              path={info.storage.transcodeRoot}
-              pct={8}
+              root={info.storage.transcodeRoot}
             />
           </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: '22px 24px', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+          <IconFilm />
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 600, margin: 0, letterSpacing: '-0.01em' }}>
+            Library Health
+          </h3>
+          <span style={{ marginLeft: 'auto', color: 'var(--text-dim)', fontSize: '0.82rem' }}>
+            {info.library.movies} movies · {info.library.shows} shows
+          </span>
+        </div>
+
+        <div className="stat-grid">
+          <Stat label="Playable movies" value={info.library.availableMovies.toLocaleString()} />
+          <Stat label="Playable episodes" value={info.library.availableEpisodes.toLocaleString()} />
+          <Stat label="Missing files" value={info.library.brokenFiles.toLocaleString()} tone={info.library.brokenFiles > 0 ? 'bad' : 'ok'} />
+          <Stat label="Missing metadata" value={info.library.missingMetadata.toLocaleString()} tone={info.library.missingMetadata > 0 ? 'warn' : 'ok'} />
+          <Stat label="Missing analysis" value={info.library.missingAnalysis.toLocaleString()} tone={info.library.missingAnalysis > 0 ? 'warn' : 'ok'} />
+          <Stat label="Unavailable movies" value={info.library.unavailableMovies.toLocaleString()} />
+          <Stat label="Unavailable episodes" value={info.library.unavailableEpisodes.toLocaleString()} />
+          <Stat label="Transcode temp" value={fmtBytes(info.library.transcodeBytes)} />
+          <Stat label="Transcode sessions" value={info.library.transcodeSessions.toLocaleString()} />
         </div>
       </div>
 
@@ -814,14 +835,15 @@ function CpuRing({ load, cores }: { load: number; cores: number }) {
 function StorageRow({
   icon,
   label,
-  path,
-  pct,
+  root,
 }: {
   icon: React.ReactNode;
   label: string;
-  path: string;
-  pct: number;
+  root: StorageRootDTO;
 }) {
+  const pct = root.totalBytes && root.usedBytes !== null
+    ? Math.min(100, (root.usedBytes / root.totalBytes) * 100)
+    : 0;
   return (
     <div>
       <div
@@ -847,7 +869,7 @@ function StorageRow({
             maxWidth: 220,
           }}
         >
-          {path}
+          {root.path}
         </span>
       </div>
       <div
@@ -874,6 +896,16 @@ function StorageRow({
             transition: 'width 0.6s var(--ease)',
           }}
         />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+        <span style={{ fontSize: '0.72rem', color: root.exists ? 'var(--text-dim)' : 'var(--danger)' }}>
+          {root.exists ? `${pct.toFixed(1)}% used` : 'Missing'}
+        </span>
+        {root.exists && root.usedBytes !== null && root.totalBytes !== null && (
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
+            {fmtBytes(root.usedBytes)} / {fmtBytes(root.totalBytes)}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -1016,6 +1048,33 @@ function PipelineArrow() {
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: 'ok' | 'warn' | 'bad';
+}) {
+  const color =
+    tone === 'ok'
+      ? 'var(--ok)'
+      : tone === 'warn'
+        ? 'var(--warn)'
+        : tone === 'bad'
+          ? 'var(--danger)'
+          : undefined;
+  return (
+    <div className="stat">
+      <span className="stat-label">{label}</span>
+      <span className="stat-value" style={{ color }}>
+        {value}
+      </span>
+    </div>
+  );
+}
 
 const ico = {
   width: 17,

@@ -19,6 +19,35 @@ import type {
 } from '@flux/shared';
 import type { MediaItem, Episode, WatchProgress } from '@prisma/client';
 
+function metadataNumber(metadata: unknown, key: string): number | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function uniqueItems(
+  items: MediaItem[],
+  limit: number,
+  excludeIds = new Set<string>(),
+): MediaItemDTO[] {
+  const seen = new Set(excludeIds);
+  const result: MediaItemDTO[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    result.push(mapMediaItemToDTO(item));
+    if (result.length >= limit) break;
+  }
+  return result;
+}
+
+function shuffleItems<T>(items: T[]): T[] {
+  return items
+    .map((item) => ({ item, sort: Math.random() }))
+    .sort((a, b) => a.sort - b.sort)
+    .map(({ item }) => item);
+}
+
 // ─── DTO mappers ─────────────────────────────────────────────────────────────
 
 /** Map a Prisma MediaItem row to the MediaItemDTO wire shape. */
@@ -110,10 +139,48 @@ export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
 
   const recentlyAdded: MediaItemDTO[] = recentRows.map(mapMediaItemToDTO);
 
+  const newReleaseRows = await prisma.mediaItem.findMany({
+    where: { year: { not: null } },
+    orderBy: [{ year: 'desc' }, { addedAt: 'desc' }],
+    take: 24,
+  });
+  const newReleases = uniqueItems(newReleaseRows, 16);
+
   // 3. By Genre — aggregate genres from all library items, pick top 6 by count
   const allItems = await prisma.mediaItem.findMany({
     where: { genres: { isEmpty: false } },
   });
+
+  const topRated = uniqueItems(
+    [...allItems]
+      .filter((item) => metadataNumber(item.metadata, 'vote_average') !== null)
+      .sort(
+        (a, b) =>
+          (metadataNumber(b.metadata, 'vote_average') ?? 0) -
+          (metadataNumber(a.metadata, 'vote_average') ?? 0),
+      ),
+    16,
+  );
+
+  const watchedGenres = new Set(
+    progressRows.flatMap((progress) => {
+      const mediaItem = progress.mediaItem ?? progress.episode?.mediaItem;
+      return mediaItem?.genres ?? [];
+    }),
+  );
+  const watchedIds = new Set(
+    progressRows
+      .map((progress) => progress.mediaItem?.id ?? progress.episode?.mediaItem.id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const recommended = uniqueItems(
+    allItems
+      .filter((item) => item.genres.some((genre) => watchedGenres.has(genre)))
+      .sort((a, b) => b.addedAt.getTime() - a.addedAt.getTime()),
+    16,
+    watchedIds,
+  );
+  const randomPicks = uniqueItems(shuffleItems(allItems), 16);
 
   const genreMap = new Map<string, MediaItem[]>();
   for (const item of allItems) {
@@ -141,7 +208,15 @@ export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
       items: items.slice(0, 10).map(mapMediaItemToDTO),
     }));
 
-  return { continueWatching, recentlyAdded, byGenre };
+  return {
+    continueWatching,
+    recentlyAdded,
+    newReleases,
+    topRated,
+    recommended,
+    randomPicks,
+    byGenre,
+  };
 }
 
 /**

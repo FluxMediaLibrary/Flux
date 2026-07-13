@@ -251,10 +251,32 @@ export interface TmdbSearchResult {
   mediaItemId?: string;
 }
 
+export interface TmdbPersonResult {
+  tmdbId: number;
+  name: string;
+  profilePath: string | null;
+  knownForDepartment: string | null;
+  knownFor: TmdbSearchResult[];
+}
+
 export interface TmdbCastMember {
   name: string;
   character: string;
   profilePath: string | null;
+}
+
+export interface TmdbCrewMember {
+  name: string;
+  job: string;
+  department: string;
+  profilePath: string | null;
+}
+
+export interface TmdbReviewDTO {
+  author: string;
+  rating: number | null;
+  content: string;
+  url: string | null;
 }
 
 /** A TMDb genre (id + display name), used for discover filters. */
@@ -273,8 +295,21 @@ export interface TmdbDetail extends TmdbSearchResult {
   genres: string[];
   runtime: number | null;
   cast: TmdbCastMember[];
+  crew: TmdbCrewMember[];
+  reviews: TmdbReviewDTO[];
+  similar: TmdbSearchResult[];
   /** YouTube key for trailer embed, if available. */
   trailerYoutubeKey: string | null;
+  imdbId: string | null;
+  ageRating: string | null;
+  status: string | null;
+  tagline: string | null;
+  originalLanguage: string | null;
+  spokenLanguages: string[];
+  countries: string[];
+  studios: string[];
+  budget: number | null;
+  revenue: number | null;
   seasons?: { season: number; episodeCount: number; name: string }[];
 }
 
@@ -346,6 +381,10 @@ export interface LibraryItemDTO extends MediaItemDTO {
 export interface HomeRowsDTO {
   continueWatching: ContinueWatchingItemDTO[];
   recentlyAdded: MediaItemDTO[];
+  newReleases: MediaItemDTO[];
+  topRated: MediaItemDTO[];
+  recommended: MediaItemDTO[];
+  randomPicks: MediaItemDTO[];
   byGenre: { genre: string; items: MediaItemDTO[] }[];
 }
 
@@ -407,10 +446,19 @@ export interface MediaInfoDTO {
 
 export interface PlaybackInfoDTO {
   directPlay: boolean;
+  hlsAvailable: boolean;
   videoCodec: string | null;
   audioCodec: string | null;
   durationSeconds: number | null;
   streams: MediaStreamDTO[];
+  qualities: {
+    label: 'Auto' | 'Original' | '4K' | '1440p' | '1080p' | '720p' | '480p' | '360p';
+    width: number | null;
+    height: number | null;
+    bitrate: number | null;
+    available: boolean;
+    source: 'direct' | 'hls';
+  }[];
 }
 
 // ─── Requests (per-profile) ───────────────────────────────────────────────────
@@ -526,9 +574,9 @@ export interface AdminInfoDTO {
     cpuLoad: number[];
   };
   storage: {
-    mediaRoot: string;
-    downloadRoot: string;
-    transcodeRoot: string;
+    mediaRoot: StorageRootDTO;
+    downloadRoot: StorageRootDTO;
+    transcodeRoot: StorageRootDTO;
   };
   database: {
     users: number;
@@ -538,6 +586,20 @@ export interface AdminInfoDTO {
     torrents: number;
     requests: number;
     invites: number;
+  };
+  library: {
+    movies: number;
+    shows: number;
+    availableMovies: number;
+    availableEpisodes: number;
+    unavailableMovies: number;
+    unavailableEpisodes: number;
+    missingMetadata: number;
+    missingAnalysis: number;
+    brokenFiles: number;
+    orphanProgress: number;
+    transcodeSessions: number;
+    transcodeBytes: number;
   };
   torrents: {
     downloading: number;
@@ -554,4 +616,12 @@ export interface AdminInfoDTO {
     downloading: number;
   };
   errors: { name: string; message: string; since: string }[];
+}
+
+export interface StorageRootDTO {
+  path: string;
+  exists: boolean;
+  totalBytes: number | null;
+  freeBytes: number | null;
+  usedBytes: number | null;
 }
