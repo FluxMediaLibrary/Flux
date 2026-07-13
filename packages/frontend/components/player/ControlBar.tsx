@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useMediaRemote, useMediaState } from '@vidstack/react';
 import {
   CastIcon,
@@ -13,7 +13,6 @@ import {
   SettingsIcon,
   SkipBackIcon,
   SkipForwardIcon,
-  SubtitlesIcon,
   VolumeIcon,
 } from './icons';
 import { SettingsPanel } from './SettingsPanel';
@@ -60,28 +59,12 @@ export function ControlBar({
   const fullscreen = useMediaState('fullscreen');
   const canPictureInPicture = useMediaState('canPictureInPicture');
   const pictureInPicture = useMediaState('pictureInPicture');
-  const textTracks = useMediaState('textTracks');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const displayDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
     ? durationSeconds
     : typeof duration === 'number' && Number.isFinite(duration) && duration > 0
       ? duration
       : 0;
-
-  const subtitleActive = useMemo(() => {
-    const tracks = textTracks ? Array.from({ length: textTracks.length }, (_, index) => textTracks[index]) : [];
-    return tracks.some((track) => track?.mode === 'showing');
-  }, [textTracks]);
-
-  const toggleSubtitles = useCallback(() => {
-    const tracks = textTracks ? Array.from({ length: textTracks.length }, (_, index) => textTracks[index]) : [];
-    const activeIndex = tracks.findIndex((track) => track?.mode === 'showing');
-    if (activeIndex >= 0) {
-      remote.changeTextTrackMode(activeIndex, 'disabled');
-      return;
-    }
-    if (tracks.length > 0) remote.changeTextTrackMode(0, 'showing');
-  }, [remote, textTracks]);
 
   const seekBy = useCallback(
     (delta: number, trigger: Event) => {
@@ -146,15 +129,6 @@ export function ControlBar({
         </div>
 
         <div className="fx-spacer" />
-
-        <button
-          className={subtitleActive ? 'fx-btn active' : 'fx-btn'}
-          type="button"
-          onClick={toggleSubtitles}
-          aria-label={subtitleActive ? 'Disable subtitles' : 'Enable subtitles'}
-        >
-          <SubtitlesIcon />
-        </button>
 
         <button className="fx-btn" type="button" onClick={() => remote.requestGoogleCast()} aria-label="Cast">
           <CastIcon connected={false} />

@@ -423,15 +423,6 @@ export const api = {
     const q = qs.toString();
     return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/hls/index.m3u8${q ? `?${q}` : ''}`;
   },
-  getSubtitleUrl(mediaItemId: string, streamIndex: number, episodeId?: string): string {
-    if (typeof window === 'undefined') return '';
-    const qs = new URLSearchParams();
-    if (episodeId) qs.set('episodeId', episodeId);
-    const token = getToken();
-    if (token) qs.set('token', token);
-    const q = qs.toString();
-    return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/subtitles/${streamIndex}.vtt${q ? `?${q}` : ''}`;
-  },
   /** Build a thumbnail frame URL for the seek-bar preview. */
   getThumbUrl(mediaItemId: string, timeSeconds: number, episodeId?: string): string {
     if (typeof window === 'undefined') return '';

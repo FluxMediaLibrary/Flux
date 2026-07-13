@@ -16,15 +16,6 @@ export interface ChapterMarker {
   title: string;
 }
 
-function formatTime(value: number): string {
-  if (!Number.isFinite(value) || value < 0) return '0:00';
-  const hours = Math.floor(value / 3600);
-  const minutes = Math.floor((value % 3600) / 60);
-  const seconds = Math.floor(value % 60);
-  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-}
-
 export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: TimelineProps) {
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
@@ -57,8 +48,12 @@ export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: Ti
       const rect = root.getBoundingClientRect();
       const left = Math.max(0, Math.min(clientX - rect.left, rect.width));
       const ratio = rect.width > 0 ? left / rect.width : 0;
+      const previewHalfWidth = 88;
+      const previewLeft = rect.width > previewHalfWidth * 2
+        ? Math.max(previewHalfWidth, Math.min(left, rect.width - previewHalfWidth))
+        : rect.width / 2;
       return {
-        left,
+        left: previewLeft,
         ratio,
         time: range.start + ratio * range.length,
       };
@@ -133,7 +128,7 @@ export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: Ti
         episodeId={episodeId}
         time={preview.time}
         left={preview.left}
-        visible={preview.visible}
+        visible={preview.visible && !disabled}
       />
       <div className="fx-seek" aria-hidden="true">
         <div className="fx-seek-track">
@@ -142,11 +137,6 @@ export function Timeline({ mediaItemId, episodeId, durationSeconds, onSeek }: Ti
           <div className="fx-seek-thumb" style={{ left: `${playedPercent}%` }} />
         </div>
       </div>
-      {preview.visible && !disabled && (
-        <div className="fx-seek-preview" style={{ left: `${preview.left}px`, opacity: 1 }}>
-          <span className="fx-seek-preview-time">{formatTime(preview.time)}</span>
-        </div>
-      )}
     </div>
   );
 }

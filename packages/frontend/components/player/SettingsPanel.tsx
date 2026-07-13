@@ -56,7 +56,6 @@ export function SettingsPanel({
   const panelRef = useRef<HTMLDivElement>(null);
   const qualities = useMediaState('qualities');
   const audioTracks = useMediaState('audioTracks');
-  const textTracks = useMediaState('textTracks');
   const audioTrack = useMediaState('audioTrack');
   const playbackRate = useMediaState('playbackRate');
 
@@ -67,10 +66,6 @@ export function SettingsPanel({
   const audioTrackList = useMemo(
     () => (audioTracks ? Array.from({ length: audioTracks.length }, (_, index) => audioTracks[index]) : []),
     [audioTracks],
-  );
-  const subtitleList = useMemo(
-    () => (textTracks ? Array.from({ length: textTracks.length }, (_, index) => textTracks[index]) : []),
-    [textTracks],
   );
 
   useEffect(() => {
@@ -106,7 +101,6 @@ export function SettingsPanel({
 
   if (!open) return null;
 
-  const subtitleActive = subtitleList.findIndex((track) => track?.mode === 'showing');
   const availableQualityOptions = qualityOptions.filter((quality) => quality.available);
 
   return (
@@ -215,42 +209,6 @@ export function SettingsPanel({
           })}
         </section>
       )}
-
-      <section className="fx-settings-section">
-        <div className="fx-settings-label">Subtitles</div>
-        <button
-          className={subtitleActive < 0 ? 'fx-settings-item sel' : 'fx-settings-item'}
-          type="button"
-          role="menuitemradio"
-          aria-checked={subtitleActive < 0}
-          onClick={() =>
-            runAndClose(() => {
-              subtitleList.forEach((_, index) => remote.changeTextTrackMode(index, 'disabled'));
-            })
-          }
-        >
-          <span>Off</span>
-          {subtitleActive < 0 && <span className="fx-settings-check">Selected</span>}
-        </button>
-        {subtitleList.map((track, index) => {
-          const selected = track?.mode === 'showing';
-          const label = track?.label || track?.language || `Track ${index + 1}`;
-          return (
-            <button
-              key={`${label}-${index}`}
-              className={selected ? 'fx-settings-item sel' : 'fx-settings-item'}
-              type="button"
-              role="menuitemradio"
-              aria-checked={selected}
-              onClick={() => runAndClose(() => remote.changeTextTrackMode(index, 'showing'))}
-            >
-              <span>{label}</span>
-              {track?.language && <span className="fx-settings-sub">{track.language}</span>}
-              {selected && <span className="fx-settings-check">Selected</span>}
-            </button>
-          );
-        })}
-      </section>
 
       <section className="fx-settings-section">
         <div className="fx-settings-label">Playback Speed</div>
