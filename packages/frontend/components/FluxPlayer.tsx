@@ -79,25 +79,27 @@ export function FluxPlayer(props: FluxPlayerProps) {
 
     api.getPlaybackInfo(mediaItemId, episodeId, controller.signal).then(
       (info) => {
-        const direct = qualityLabel === 'Original' && info.directPlay && audioStreamIndex === null;
+        const validAudioStreamIndex = audioStreamIndex !== null && info.streams.some(
+          (stream) => stream.type === 'audio' && stream.index === audioStreamIndex,
+        )
+          ? audioStreamIndex
+          : null;
+        if (validAudioStreamIndex !== audioStreamIndex) setAudioStreamIndex(null);
+        const direct = qualityLabel === 'Original' && info.directPlay && validAudioStreamIndex === null;
         setSource({
-          src: direct ? api.getStreamUrl(mediaItemId, episodeId) : api.getHlsUrl(mediaItemId, episodeId, audioStreamIndex),
+          src: direct
+            ? api.getStreamUrl(mediaItemId, episodeId)
+            : api.getHlsUrl(mediaItemId, episodeId, validAudioStreamIndex),
           method: direct ? 'direct' : 'hls',
           info,
           qualityLabel,
-          audioStreamIndex,
+          audioStreamIndex: validAudioStreamIndex,
         });
         setLoading(false);
       },
       () => {
         if (controller.signal.aborted) return;
-        setSource({
-          src: api.getStreamUrl(mediaItemId, episodeId),
-          method: 'direct',
-          info: null,
-          qualityLabel: 'Original',
-          audioStreamIndex: null,
-        });
+        setError('Unable to prepare this file for playback. Retry after checking the server connection.');
         setLoading(false);
       },
     );

@@ -17,7 +17,6 @@ import { buildAdaptiveHlsArgs } from '../../lib/adaptive-hls.js';
 import { safeJoin } from '../../lib/media-paths.js';
 import { config } from '../../config.js';
 import { ApiError } from '../../lib/errors.js';
-import { prisma } from '../../lib/db.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -30,6 +29,14 @@ import { randomUUID } from 'node:crypto';
 interface HlsSession {
   dir: string;
   manifest: 'index.m3u8' | 'master.m3u8';
+  transcode: TranscodeState;
+}
+
+interface TranscodeState {
+  proc: ReturnType<typeof spawn>;
+  exited: boolean;
+  failure: string | null;
+  stderrTail: string;
 }
 
 const hlsSessions = new Map<string, HlsSession>();
@@ -104,24 +111,33 @@ function parseRange(
   return { start, end };
 }
 
-/**
- * Look up the source video resolution from the DB-stored media analysis.
- * Returns null if no analysis exists yet (e.g. legacy files imported before
- * this feature, or a probe that failed).
- */
-async function getSourceResolution(
-  mediaItemId: string,
-  episodeId?: string,
-): Promise<{ width: number; height: number } | null> {
-  const where = episodeId ? { episodeId } : { mediaItemId };
-  const stream = await prisma.mediaStream.findFirst({
-    where: { ...where, type: 'video' },
-    select: { width: true, height: true },
+/** Start FFmpeg and retain enough process state to fail requests immediately. */
+function spawnTrackedTranscode(args: string[]): TranscodeState {
+  const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  const state: TranscodeState = {
+    proc,
+    exited: false,
+    failure: null,
+    stderrTail: '',
+  };
+
+  proc.stderr?.on('data', (chunk: Buffer) => {
+    state.stderrTail = (state.stderrTail + chunk.toString()).slice(-8000);
   });
-  if (stream?.width && stream?.height) {
-    return { width: stream.width, height: stream.height };
-  }
-  return null;
+  proc.on('error', (error) => {
+    state.exited = true;
+    state.failure = error.message;
+    console.error('[Transcode] FFmpeg spawn error:', error);
+  });
+  proc.on('exit', (code, signal) => {
+    state.exited = true;
+    if (code !== 0 && signal !== 'SIGKILL' && signal !== 'SIGTERM') {
+      state.failure = `FFmpeg exited code=${code} signal=${signal ?? ''}`;
+      console.error(`${state.failure}\n${state.stderrTail}`);
+    }
+  });
+
+  return state;
 }
 
 /**
@@ -138,50 +154,34 @@ async function getSourceResolution(
  *   transcoding is needed. Produces `sessionDir/master.m3u8` with quality
  *   variants in `sessionDir/stream_N/`.
  *
- * Returns the manifest filename the client should request
- * (\"index.m3u8\" or \"master.m3u8\").
+ * Returns the manifest type together with the tracked FFmpeg process.
  */
 async function spawnTranscode(
   sourceFile: string,
   sessionDir: string,
-  mediaItemId: string,
-  episodeId?: string,
   audioStreamIndex?: number,
-): Promise<'index.m3u8' | 'master.m3u8'> {
+): Promise<{ manifest: 'index.m3u8' | 'master.m3u8'; transcode: TranscodeState }> {
   const probe = await probeMedia(sourceFile, audioStreamIndex);
-  const resolution = await getSourceResolution(mediaItemId, episodeId);
 
   // Use adaptive when we have resolution info AND the source needs a transcode
   // (not a pure copy/remux). Remuxing a single stream is faster and simpler.
   const needsTranscode =
-    probe.videoCodec !== 'h264' || probe.audioCodec !== 'aac';
+    probe.videoCodec !== 'h264' ||
+    (probe.audioCodec !== null && probe.audioCodec !== 'aac');
 
-  if (needsTranscode && resolution) {
+  if (needsTranscode && probe.width && probe.height) {
     const args = buildAdaptiveHlsArgs(
       sourceFile, sessionDir,
       probe.videoCodec, probe.audioCodec,
-      resolution.width, resolution.height, audioStreamIndex,
+      probe.width, probe.height,
+      probe.videoStreamIndex ?? undefined,
+      probe.audioStreamIndex ?? undefined,
     );
     console.log(
       `[Transcode] adaptive video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} ` +
-      `${resolution.width}x${resolution.height} → ${args.join(' ').includes('copy') ? 'remux' : 'multi-quality transcode'}`,
+      `${probe.width}x${probe.height} -> multi-quality transcode`,
     );
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderrTail = '';
-    proc.stderr?.on('data', (c) => {
-      stderrTail = (stderrTail + c.toString()).slice(-4000);
-    });
-    proc.on('error', (err) => {
-      console.error('[Transcode] FFmpeg spawn error:', err);
-    });
-    proc.on('exit', (code, signal) => {
-      if (code !== 0 && code !== 255 && signal !== 'SIGKILL' && signal !== 'SIGTERM') {
-        console.error(
-          `[Transcode] FFmpeg exited code=${code} signal=${signal ?? ''}\n${stderrTail}`,
-        );
-      }
-    });
-    return 'master.m3u8';
+    return { manifest: 'master.m3u8', transcode: spawnTrackedTranscode(args) };
   }
 
   // Fall back to single-quality (existing behavior)
@@ -189,22 +189,7 @@ async function spawnTranscode(
   console.log(
     `[Transcode] single video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} → ${args.includes('copy') ? 'remux/partial-copy' : 'transcode'}`,
   );
-  const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-  let stderrTail = '';
-  proc.stderr?.on('data', (c) => {
-    stderrTail = (stderrTail + c.toString()).slice(-4000);
-  });
-  proc.on('error', (err) => {
-    console.error('[Transcode] FFmpeg spawn error:', err);
-  });
-  proc.on('exit', (code, signal) => {
-    if (code !== 0 && code !== 255 && signal !== 'SIGKILL' && signal !== 'SIGTERM') {
-      console.error(
-        `[Transcode] FFmpeg exited code=${code} signal=${signal ?? ''}\n${stderrTail}`,
-      );
-    }
-  });
-  return 'index.m3u8';
+  return { manifest: 'index.m3u8', transcode: spawnTrackedTranscode(args) };
 }
 
 /**
@@ -221,6 +206,26 @@ async function pollForFile(
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   return fs.existsSync(filePath);
+}
+
+async function pollForSessionFile(
+  session: HlsSession,
+  filePath: string,
+  retries: number,
+  intervalMs: number,
+): Promise<boolean> {
+  for (let i = 0; i < retries; i++) {
+    if (fs.existsSync(filePath)) return true;
+    if (session.transcode.failure) return false;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return fs.existsSync(filePath);
+}
+
+async function discardSession(key: string, session: HlsSession): Promise<void> {
+  if (!session.transcode.exited) session.transcode.proc.kill('SIGTERM');
+  hlsSessions.delete(key);
+  await fs.promises.rm(session.dir, { recursive: true, force: true }).catch(() => {});
 }
 
 // ── Routes ──────────────────────────────────────────────────────────────────
@@ -322,8 +327,9 @@ export const streamingRoutes: FastifyPluginAsync = async (
         if (!session) {
           const sessionDir = safeJoin(config.TRANSCODE_ROOT, randomUUID());
           await fs.promises.mkdir(sessionDir, { recursive: true });
-          manifestType = await spawnTranscode(sourceFile, sessionDir, mediaItemId, episodeId, audioStreamIndex);
-          session = { dir: sessionDir, manifest: manifestType };
+          const started = await spawnTranscode(sourceFile, sessionDir, audioStreamIndex);
+          manifestType = started.manifest;
+          session = { dir: sessionDir, manifest: manifestType, transcode: started.transcode };
           hlsSessions.set(key, session);
         }
       } else {
@@ -333,20 +339,24 @@ export const streamingRoutes: FastifyPluginAsync = async (
       // Poll for the manifest (up to 40 attempts × 500 ms = 20 s).
       // Try master.m3u8 first (adaptive), then index.m3u8 (single-tier/remux).
       let manifestPath = path.join(session.dir, manifestType);
-      let ready = await pollForFile(manifestPath, 40, 500);
+      let ready = await pollForSessionFile(session, manifestPath, 40, 500);
       if (!ready && manifestType === 'master.m3u8') {
         // Adaptive transcode may have been downgraded — fall back to single-tier.
         manifestPath = path.join(session.dir, 'index.m3u8');
-        ready = await pollForFile(manifestPath, 8, 500);
+        ready = await pollForSessionFile(session, manifestPath, 8, 500);
         if (ready) {
           session.manifest = 'index.m3u8';
           manifestType = 'index.m3u8';
         }
       }
       if (!ready) {
+        const failed = session.transcode.failure !== null;
+        await discardSession(key, session);
         throw ApiError.badRequest(
-          'HLS transcode timed out — try again shortly',
-          'TRANSCODE_TIMEOUT',
+          failed
+            ? 'This file could not be transcoded. The failed session was reset; retry will start cleanly.'
+            : 'The transcode did not become ready in time. The session was reset; please retry.',
+          failed ? 'TRANSCODE_FAILED' : 'TRANSCODE_TIMEOUT',
         );
       }
 
@@ -355,7 +365,14 @@ export const streamingRoutes: FastifyPluginAsync = async (
       // cause of a hard stop ~one segment in. Harmless for short clips.
       // For adaptive streams, segments are nested under stream_0/.
       const segDir = manifestType === 'master.m3u8' ? 'stream_0' : '.';
-      await pollForFile(path.join(session.dir, segDir, 'segment_00002.ts'), 16, 500);
+      await pollForSessionFile(session, path.join(session.dir, segDir, 'segment_00002.ts'), 16, 500);
+      if (session.transcode.failure) {
+        await discardSession(key, session);
+        throw ApiError.badRequest(
+          'The transcode stopped before playback was ready. Retry to start a clean session.',
+          'TRANSCODE_FAILED',
+        );
+      }
 
       return sendManifest(fs.readFileSync(manifestPath, 'utf-8'));
     },
@@ -375,9 +392,17 @@ export const streamingRoutes: FastifyPluginAsync = async (
           ? Number(audioStream)
           : undefined;
 
-      const session = hlsSessions.get(sessionKey(mediaItemId, episodeId, audioStreamIndex));
+      const key = sessionKey(mediaItemId, episodeId, audioStreamIndex);
+      const session = hlsSessions.get(key);
       if (!session) {
         throw ApiError.notFound('No active HLS session for this media item');
+      }
+      if (session.transcode.failure) {
+        await discardSession(key, session);
+        throw ApiError.badRequest(
+          'The transcode stopped unexpectedly. Retry to start a clean session.',
+          'TRANSCODE_FAILED',
+        );
       }
 
       const filePath = safeJoin(session.dir, relPath);

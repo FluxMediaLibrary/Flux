@@ -28,12 +28,19 @@ export const QUALITY_TIERS: QualityTier[] = [
   { label: '360p',  width: 640,  height: 360,  videoBitrate: 800,   audioBitrate: 96,  maxrate: 880,   bufsize: 1600  },
 ];
 
+const MAX_SOFTWARE_TRANSCODE_HEIGHT = 1080;
+const MAX_ADAPTIVE_VARIANTS = 2;
+
 /**
  * Filter quality tiers to those not exceeding source resolution.
  * Always includes at least the lowest tier (360p).
  */
 export function applicableTiers(sourceWidth: number, sourceHeight: number): QualityTier[] {
-  return QUALITY_TIERS.filter((t, i) => i === QUALITY_TIERS.length - 1 || (t.width <= sourceWidth && t.height <= sourceHeight));
+  const tiers = QUALITY_TIERS.filter(
+    (tier) => tier.height <= sourceHeight && tier.height <= MAX_SOFTWARE_TRANSCODE_HEIGHT,
+  ).slice(0, MAX_ADAPTIVE_VARIANTS);
+
+  return tiers.length > 0 ? tiers : [QUALITY_TIERS[QUALITY_TIERS.length - 1]!];
 }
 
 /**
@@ -59,19 +66,23 @@ export function buildAdaptiveHlsArgs(
   audioCodec: string | null,
   sourceWidth: number | null,
   sourceHeight: number | null,
+  videoStreamIndex?: number,
   audioStreamIndex?: number,
 ): string[] {
   const tiers = applicableTiers(sourceWidth ?? 1920, sourceHeight ?? 1080);
   const canCopy = sourceCodec === 'h264' && audioCodec === 'aac';
-  const audioMap = typeof audioStreamIndex === 'number' ? `0:${audioStreamIndex}?` : '0:a:0?';
+  const videoMap = typeof videoStreamIndex === 'number' ? `0:${videoStreamIndex}` : '0:v:0';
+  const hasAudio = typeof audioStreamIndex === 'number' && audioCodec !== null;
+  const audioMap = hasAudio ? `0:${audioStreamIndex}` : null;
 
   if (canCopy && tiers.length <= 1) {
     // Single-quality remux — simple case, no filter_complex needed.
     return [
       '-fflags', '+genpts',
       '-i', sourceFile,
-      '-map', '0:v:0', '-map', audioMap,
-      '-c:v', 'copy', '-c:a', 'copy',
+      '-map', videoMap,
+      ...(audioMap ? ['-map', audioMap, '-c:a', 'copy'] : []),
+      '-c:v', 'copy',
       '-sn', '-dn',
       '-avoid_negative_ts', 'make_zero',
       '-muxdelay', '0', '-muxpreload', '0',
@@ -94,12 +105,12 @@ export function buildAdaptiveHlsArgs(
   const filterParts: string[] = [];
   if (tiers.length === 1) {
     // Single tier — just copy, no split needed
-    filterParts.push(`[0:v]scale=w=${tiers[0]!.width}:h=${tiers[0]!.height}:force_original_aspect_ratio=decrease[v0out]`);
+    filterParts.push(`[${videoMap}]scale=w=${tiers[0]!.width}:h=${tiers[0]!.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[v0out]`);
   } else {
-    filterParts.push(`[0:v]split=${tiers.length}${tiers.map((_, i) => `[v${i}]`).join('')}`);
+    filterParts.push(`[${videoMap}]split=${tiers.length}${tiers.map((_, i) => `[v${i}]`).join('')}`);
     for (let i = 0; i < tiers.length; i++) {
       const t = tiers[i]!;
-      filterParts.push(`[v${i}]scale=w=${t.width}:h=${t.height}:force_original_aspect_ratio=decrease[v${i}out]`);
+      filterParts.push(`[v${i}]scale=w=${t.width}:h=${t.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[v${i}out]`);
     }
   }
 
@@ -115,19 +126,22 @@ export function buildAdaptiveHlsArgs(
     args.push(
       '-map', `[v${i}out]`,
       '-c:v:' + i, 'libx264',
-      '-preset', 'veryfast',
+      '-preset:v:' + i, 'veryfast',
       '-crf', '23',
       '-pix_fmt', 'yuv420p',
       '-b:v:' + i, String(t.videoBitrate) + 'k',
       '-maxrate:v:' + i, String(t.maxrate) + 'k',
       '-bufsize:v:' + i, String(t.bufsize) + 'k',
-      '-force_key_frames', 'expr:gte(t,n_forced*4)',
+      '-force_key_frames:v:' + i, 'expr:gte(t,n_forced*4)',
     );
   }
 
   // Audio maps (one per video tier — same audio track replicated)
   for (let i = 0; i < tiers.length; i++) {
     const t = tiers[i]!;
+    if (!audioMap) {
+      continue;
+    }
     if (canCopy) {
       args.push(
         '-map', audioMap,
@@ -139,13 +153,13 @@ export function buildAdaptiveHlsArgs(
         '-c:a:' + i, 'aac',
         '-b:a:' + i, String(t.audioBitrate) + 'k',
         '-ac', '2',
-        '-af', 'aresample=async=1',
+        '-af:a:' + i, 'aresample=async=1:first_pts=0',
       );
     }
   }
 
   // var_stream_map: pair each video stream with its matching audio
-  const pairings = tiers.map((_, i) => `v:${i},a:${i}`).join(' ');
+  const pairings = tiers.map((_, i) => hasAudio ? `v:${i},a:${i}` : `v:${i}`).join(' ');
 
   args.push(
     '-sn', '-dn',
@@ -180,10 +194,11 @@ export function spawnAdaptiveTranscode(
   audioCodec: string | null,
   sourceWidth: number | null,
   sourceHeight: number | null,
+  videoStreamIndex?: number,
   audioStreamIndex?: number,
 ): { proc: ReturnType<typeof spawn>; args: string[] } {
   const args = buildAdaptiveHlsArgs(
-    sourceFile, sessionDir, sourceCodec, audioCodec, sourceWidth, sourceHeight, audioStreamIndex,
+    sourceFile, sessionDir, sourceCodec, audioCodec, sourceWidth, sourceHeight, videoStreamIndex, audioStreamIndex,
   );
   console.log(
     `[AdaptiveTranscode] source=${path.basename(sourceFile)} ` +
