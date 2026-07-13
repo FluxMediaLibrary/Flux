@@ -505,40 +505,6 @@ export const streamingRoutes: FastifyPluginAsync = async (
   // ── GET /:mediaItemId/trickplay/:file — serve sprite sheets and VTT ─────────
 
   app.get(
-    '/:mediaItemId/subtitles/:streamIndex.vtt',
-    { preHandler: [app.requireProfileStream] },
-    async (request, reply) => {
-      const { mediaItemId, streamIndex } = request.params as {
-        mediaItemId: string;
-        streamIndex: string;
-      };
-      const { episodeId } = request.query as { episodeId?: string };
-      const parsedIndex = Number(streamIndex);
-      if (!Number.isInteger(parsedIndex) || parsedIndex < 0) {
-        throw ApiError.badRequest('Invalid subtitle stream', 'INVALID_SUBTITLE_STREAM');
-      }
-
-      const { filePath } = await getMediaFilePath(mediaItemId, episodeId);
-      const proc = spawn('ffmpeg', [
-        '-v', 'error',
-        '-i', filePath,
-        '-map', `0:${parsedIndex}`,
-        '-f', 'webvtt',
-        '-',
-      ], { stdio: ['ignore', 'pipe', 'ignore'] });
-
-      proc.on('error', () => {
-        if (!reply.sent) reply.status(500).send();
-      });
-
-      return reply
-        .header('Content-Type', 'text/vtt; charset=utf-8')
-        .header('Cache-Control', 'public, max-age=86400')
-        .send(proc.stdout);
-    },
-  );
-
-  app.get(
     '/:mediaItemId/trickplay/:file',
     { preHandler: [app.requireProfileStream] },
     async (request, reply) => {

@@ -81,6 +81,8 @@ export function ThumbnailPreview({
   visible,
 }: ThumbnailPreviewProps) {
   const [entries, setEntries] = useState<VttEntry[]>([]);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [spriteReady, setSpriteReady] = useState(false);
   const spriteUrl = useMemo(
     () => api.getTrickplayUrl(mediaItemId, 'trickplay-sprite.jpg', episodeId),
     [episodeId, mediaItemId],
@@ -93,39 +95,66 @@ export function ThumbnailPreview({
 
     const controller = new AbortController();
     setEntries([]);
+    setStatus('loading');
+    setSpriteReady(false);
 
     fetch(vttUrl, { signal: controller.signal })
       .then((r) => {
+        if (r.status === 204) return '';
         if (!r.ok) throw new Error('VTT not found');
         return r.text();
       })
       .then((text) => {
-        setEntries(parseTrickplayVtt(text));
+        const parsed = parseTrickplayVtt(text);
+        setEntries(parsed);
+        setStatus(parsed.length > 0 ? 'ready' : 'unavailable');
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
         setEntries([]); // trickplay not available for this media
+        setStatus('unavailable');
       });
 
     return () => controller.abort();
   }, [mediaItemId, episodeId]);
 
-  if (!visible || entries.length === 0) return null;
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const image = new Image();
+    image.onload = () => setSpriteReady(true);
+    image.onerror = () => setStatus('unavailable');
+    image.src = spriteUrl;
+    return () => {
+      image.onload = null;
+      image.onerror = null;
+    };
+  }, [spriteUrl, status]);
+
+  if (!visible) return null;
 
   // Find the matching entry for the current time
-  const entry = entries.find((e) => time >= e.start && time < e.end);
-  if (!entry) return null;
+  const entry = entries.find((e) => time >= e.start && time < e.end)
+    ?? (entries.length > 0 && time >= entries[entries.length - 1]!.end
+      ? entries[entries.length - 1]
+      : undefined);
+  const showImage = status === 'ready' && spriteReady && entry;
 
   return (
-    <div className="fx-scrub-preview" style={{ left: `${left}px` }}>
-      <div
-        className="fx-scrub-thumb"
-        style={{
-          backgroundImage: `url(${spriteUrl})`,
-          backgroundPosition: `-${entry.x}px -${entry.y}px`,
-          width: `${entry.w}px`,
-          height: `${entry.h}px`,
-        }}
-      />
+    <div
+      className={status === 'unavailable' ? 'fx-scrub-preview is-time-only' : 'fx-scrub-preview'}
+      style={{ left: `${left}px` }}
+    >
+      {status !== 'unavailable' && (
+        <div
+          className={showImage ? 'fx-scrub-thumb' : 'fx-scrub-thumb is-loading'}
+          style={showImage ? {
+            backgroundImage: `url(${spriteUrl})`,
+            backgroundPosition: `-${entry.x}px -${entry.y}px`,
+            width: `${entry.w}px`,
+            height: `${entry.h}px`,
+          } : undefined}
+        />
+      )}
       <span className="fx-scrub-time">{fmt(time)}</span>
     </div>
   );

@@ -44,7 +44,6 @@ export function DebugOverlay({
   const streamType = useMediaState('streamType');
   const qualities = useMediaState('qualities');
   const audioTrack = useMediaState('audioTrack');
-  const textTracks = useMediaState('textTracks');
   const buffered = useMediaState('buffered');
   const [frames, setFrames] = useState({ dropped: 0, fps: 0 });
 
@@ -74,8 +73,6 @@ export function DebugOverlay({
 
   const qualityList = qualities ? Array.from({ length: qualities.length }, (_, index) => qualities[index]) : [];
   const selectedQuality = qualityList.find((quality) => quality?.selected);
-  const subtitleList = textTracks ? Array.from({ length: textTracks.length }, (_, index) => textTracks[index]) : [];
-  const subtitle = subtitleList.find((track) => track?.mode === 'showing');
   const bufferEnd = getBufferedEnd(buffered);
 
   const audioLabel =
@@ -93,7 +90,6 @@ export function DebugOverlay({
       <div className="fx-debug-row"><span>Buffer</span><span>{bufferEnd != null ? `${Math.max(0, bufferEnd - currentTime).toFixed(1)}s` : '-'}</span></div>
       <div className="fx-debug-row"><span>Dropped</span><span>{frames.dropped}</span></div>
       <div className="fx-debug-row"><span>FPS</span><span>{frames.fps || '-'}</span></div>
-      <div className="fx-debug-row"><span>Subtitle</span><span>{subtitle?.label || subtitle?.language || 'Off'}</span></div>
       <div className="fx-debug-row"><span>Speed</span><span>{playbackRate}x</span></div>
       <div className="fx-debug-row"><span>Time</span><span>{formatTime(currentTime)} / {formatTime(duration || durationSeconds)}</span></div>
     </div>

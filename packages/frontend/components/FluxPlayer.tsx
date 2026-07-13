@@ -45,17 +45,6 @@ function getStreamLabel(streams: MediaStreamDTO[], type: MediaStreamDTO['type'])
   return parts.join(' / ') || null;
 }
 
-function streamDisplayName(stream: MediaStreamDTO, fallback: string) {
-  const language = stream.language?.toUpperCase();
-  const parts = [
-    stream.title,
-    language,
-    stream.codec?.toUpperCase(),
-    stream.channels ? `${stream.channels}ch` : null,
-  ].filter(Boolean);
-  return parts.join(' · ') || fallback;
-}
-
 export function FluxPlayer(props: FluxPlayerProps) {
   const {
     mediaItemId,
@@ -220,20 +209,7 @@ function FluxMediaPlayer({
       googleCast={{}}
       onError={onFatalError}
     >
-      <MediaProvider>
-        {(source.info?.streams ?? [])
-          .filter((stream) => stream.type === 'subtitle')
-          .map((stream, index) => (
-            <track
-              key={stream.id}
-              kind={stream.isForced ? 'subtitles' : 'captions'}
-              src={api.getSubtitleUrl(mediaItemId, stream.index, episodeId)}
-              label={streamDisplayName(stream, `Subtitle ${index + 1}`)}
-              srcLang={stream.language ?? undefined}
-              default={stream.isDefault || stream.isForced}
-            />
-          ))}
-      </MediaProvider>
+      <MediaProvider />
       <FluxPlayerChrome
         mediaItemId={mediaItemId}
         episodeId={episodeId}
