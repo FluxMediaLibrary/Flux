@@ -49,6 +49,10 @@ export interface HlsPaths {
 export interface MediaProbe {
   videoCodec: string | null;
   audioCodec: string | null;
+  videoStreamIndex: number | null;
+  audioStreamIndex: number | null;
+  width: number | null;
+  height: number | null;
   /** Source file duration in seconds (from ffprobe format.duration). */
   durationSeconds: number | null;
 }
@@ -72,34 +76,67 @@ export function probeMedia(
   return new Promise((resolve) => {
     const proc = spawn('ffprobe', [
       '-v', 'error',
-      '-show_entries', 'stream=index,codec_type,codec_name:format=duration',
+      '-show_entries', 'stream=index,codec_type,codec_name,width,height,disposition:format=duration',
       '-of', 'json',
       filePath,
     ]);
     let out = '';
     proc.stdout.on('data', (c) => { out += c.toString(); });
-    proc.on('error', () => resolve({ videoCodec: null, audioCodec: null, durationSeconds: null }));
+    proc.on('error', () => resolve({
+      videoCodec: null,
+      audioCodec: null,
+      videoStreamIndex: null,
+      audioStreamIndex: null,
+      width: null,
+      height: null,
+      durationSeconds: null,
+    }));
     proc.on('close', () => {
       try {
         const json = JSON.parse(out) as {
           format?: { duration?: string };
-          streams?: { index?: number; codec_type?: string; codec_name?: string }[];
+          streams?: {
+            index?: number;
+            codec_type?: string;
+            codec_name?: string;
+            width?: number;
+            height?: number;
+            disposition?: { default?: number; attached_pic?: number };
+          }[];
         };
         const streams = json.streams ?? [];
-        const video = streams.find((s) => s.codec_type === 'video');
+        const videoStreams = streams.filter((s) => s.codec_type === 'video');
+        const playableVideoStreams = videoStreams.filter((s) => s.disposition?.attached_pic !== 1);
+        const video =
+          playableVideoStreams.find((s) => s.disposition?.default === 1) ??
+          playableVideoStreams[0] ??
+          videoStreams[0];
+        const audioStreams = streams.filter((s) => s.codec_type === 'audio');
         const audio =
           typeof audioStreamIndex === 'number'
-            ? streams.find((s) => s.codec_type === 'audio' && (s as { index?: number }).index === audioStreamIndex)
-            : streams.find((s) => s.codec_type === 'audio');
+            ? audioStreams.find((s) => s.index === audioStreamIndex)
+            : audioStreams.find((s) => s.disposition?.default === 1) ?? audioStreams[0];
         const durRaw = json.format?.duration;
         const durationSeconds = durRaw ? parseFloat(durRaw) : null;
         resolve({
           videoCodec: video?.codec_name ?? null,
           audioCodec: audio?.codec_name ?? null,
+          videoStreamIndex: video?.index ?? null,
+          audioStreamIndex: audio?.index ?? null,
+          width: video?.width ?? null,
+          height: video?.height ?? null,
           durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
         });
       } catch {
-        resolve({ videoCodec: null, audioCodec: null, durationSeconds: null });
+        resolve({
+          videoCodec: null,
+          audioCodec: null,
+          videoStreamIndex: null,
+          audioStreamIndex: null,
+          width: null,
+          height: null,
+          durationSeconds: null,
+        });
       }
     });
   });
@@ -140,6 +177,13 @@ function mapMediaStream(row: MediaStream): MediaStreamDTO {
     isDefault: row.isDefault,
     isForced: row.isForced,
   };
+}
+
+function primaryVideoStream(streams: MediaStream[]): MediaStream | undefined {
+  const videoStreams = streams.filter((stream) => stream.type === 'video');
+  return videoStreams.find((stream) => stream.isDefault) ?? videoStreams.sort(
+    (a, b) => ((b.width ?? 0) * (b.height ?? 0)) - ((a.width ?? 0) * (a.height ?? 0)),
+  )[0];
 }
 
 function buildQualityOptions(
@@ -208,8 +252,9 @@ export async function decidePlayback(
         orderBy: { index: 'asc' },
       });
 
-      const videoStream = streams.find(s => s.type === 'video');
-      const audioStream = streams.find(s => s.type === 'audio');
+      const videoStream = primaryVideoStream(streams);
+      const audioStreams = streams.filter(s => s.type === 'audio');
+      const audioStream = audioStreams.find(s => s.isDefault) ?? audioStreams[0];
       const ext = path.extname(filePath).toLowerCase();
       const containerOk = DIRECT_CONTAINERS.has(ext);
       const videoOk = videoStream?.codec != null && DIRECT_VIDEO.has(videoStream.codec);
@@ -249,7 +294,7 @@ export async function getPlaybackInfo(
     where,
     orderBy: { index: 'asc' },
   });
-  const videoStream = streams.find((stream) => stream.type === 'video');
+  const videoStream = primaryVideoStream(streams);
 
   return {
     directPlay: decision.directPlay,
@@ -297,15 +342,20 @@ export function buildHlsFfmpegArgs(
       ]
     : ['-c:v', 'copy'];
 
-  const audioArgs = audioCopyable
-    ? ['-c:a', 'copy']
-    : ['-c:a', 'aac', '-b:a', '160k', '-ac', '2', '-af', 'aresample=async=1'];
+  const hasAudio = probe.audioStreamIndex !== null;
+  const audioArgs = !hasAudio
+    ? []
+    : audioCopyable
+      ? ['-c:a', 'copy']
+      : ['-c:a', 'aac', '-b:a', '160k', '-ac', '2', '-af', 'aresample=async=1:first_pts=0'];
 
   return [
     '-fflags', '+genpts', // synthesize sane PTS when the source lacks them
     '-i', sourceFile,
-    '-map', '0:v:0',
-    '-map', typeof audioStreamIndex === 'number' ? `0:${audioStreamIndex}?` : '0:a:0?',
+    '-map', probe.videoStreamIndex !== null ? `0:${probe.videoStreamIndex}` : '0:v:0',
+    ...(hasAudio
+      ? ['-map', `0:${probe.audioStreamIndex ?? audioStreamIndex}?`]
+      : []),
     '-sn', '-dn',
     ...videoArgs,
     ...audioArgs,
