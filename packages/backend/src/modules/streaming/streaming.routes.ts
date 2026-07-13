@@ -14,6 +14,10 @@ import {
   getPlaybackInfo,
 } from './streaming.service.js';
 import { buildAdaptiveHlsArgs } from '../../lib/adaptive-hls.js';
+import {
+  ensureTrickplay,
+  trickplayAssetPath,
+} from '../../lib/trickplay-generator.js';
 import { safeJoin } from '../../lib/media-paths.js';
 import { config } from '../../config.js';
 import { ApiError } from '../../lib/errors.js';
@@ -542,11 +546,22 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const { episodeId } = request.query as { episodeId?: string };
 
       const { filePath: sourceFile } = await getMediaFilePath(mediaItemId, episodeId);
-      const trickplayDir = path.dirname(sourceFile);
+      const assetPath = trickplayAssetPath(sourceFile, file);
+      if (!assetPath) {
+        throw ApiError.badRequest('Invalid trickplay asset', 'INVALID_TRICKPLAY_ASSET');
+      }
 
-      const assetPath = safeJoin(trickplayDir, file);
       if (!fs.existsSync(assetPath)) {
-        throw ApiError.notFound('Trickplay asset not found');
+        const probe = await probeMedia(sourceFile);
+        if (probe.durationSeconds && probe.durationSeconds > 0) {
+          await ensureTrickplay(sourceFile, probe.durationSeconds);
+        }
+      }
+      if (!fs.existsSync(assetPath)) {
+        return reply
+          .status(204)
+          .header('Cache-Control', 'no-store')
+          .send();
       }
 
       const ext = path.extname(assetPath).toLowerCase();
