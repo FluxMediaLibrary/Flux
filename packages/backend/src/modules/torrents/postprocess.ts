@@ -6,7 +6,7 @@ import { prisma } from '../../lib/db.js';
 import { moviePlacement, episodePlacement } from '../../lib/media-paths.js';
 import { isVideoFile, fileExtension } from '../../lib/filename.js';
 import { analyzeAndStoreMedia } from '../../lib/media-analyzer.js';
-import { generateTrickplay } from '../../lib/trickplay-generator.js';
+import { ensureTrickplay } from '../../lib/trickplay-generator.js';
 import {
   type TorrentPostprocessJob,
 } from '../../jobs/queues.js';
@@ -30,6 +30,23 @@ interface TorrentFile {
   name: string;
   path: string;
   length: number;
+}
+
+async function analyzeMediaAssets(
+  filePath: string,
+  target: { mediaItemId: string } | { episodeId: string },
+): Promise<void> {
+  await analyzeAndStoreMedia(filePath, target);
+  const mediaInfo = 'mediaItemId' in target
+    ? await prisma.mediaInfo.findUnique({ where: { mediaItemId: target.mediaItemId } })
+    : await prisma.mediaInfo.findUnique({ where: { episodeId: target.episodeId } });
+
+  if (mediaInfo?.durationSec && mediaInfo.durationSec > 0) {
+    const generated = await ensureTrickplay(filePath, mediaInfo.durationSec);
+    if (generated) {
+      console.log(`[Trickplay] Generated assets for ${path.basename(filePath)}`);
+    }
+  }
 }
 
 export async function processTorrentPostprocess(
@@ -234,7 +251,7 @@ export async function processTorrentPostprocess(
       const videoFiles = files.filter((f) => isVideoFile(f.name));
       const largestVideo = videoFiles.reduce((a, b) => a.length > b.length ? a : b);
       const placement = moviePlacement(tmdbDetail.title, tmdbDetail.year, fileExtension(largestVideo.name));
-      analyzeAndStoreMedia(placement.file, { mediaItemId }).catch((err) => {
+      analyzeMediaAssets(placement.file, { mediaItemId }).catch((err) => {
         console.error(`[PostProcess] Media analysis failed for movie ${mediaItemId}:`, err);
       });
     } else {
@@ -252,69 +269,9 @@ export async function processTorrentPostprocess(
             },
           });
           if (ep?.filePath) {
-            analyzeAndStoreMedia(ep.filePath, { episodeId: ep.id }).catch((err) => {
+            analyzeMediaAssets(ep.filePath, { episodeId: ep.id }).catch((err) => {
               console.error(`[PostProcess] Media analysis failed for episode ${ep.id}:`, err);
             });
-          }
-        }
-      }
-    }
-
-    // Trigger trickplay generation (best-effort, non-blocking).
-    // Generates sprite sheets + VTT for seek-bar thumbnail previews.
-    if (torrent.category === 'MOVIE') {
-      const movieItem = await prisma.mediaItem.findUnique({
-        where: { id: mediaItemId },
-        select: { filePath: true },
-      });
-      if (movieItem?.filePath) {
-        const filePath = movieItem.filePath;
-        const mediaInfo = await prisma.mediaInfo.findUnique({
-          where: { mediaItemId },
-        });
-        if (mediaInfo?.durationSec) {
-          const trickplayDir = path.dirname(filePath);
-          generateTrickplay(filePath, trickplayDir, mediaInfo.durationSec)
-            .then((spritePath) => {
-              if (spritePath) {
-                console.log(`[Trickplay] Generated sprite sheet for ${path.basename(filePath)}`);
-              }
-            })
-            .catch((err) => {
-              console.error(`[Trickplay] Failed for ${filePath}:`, err);
-            });
-        }
-      }
-    } else {
-      const fileMapping = torrent.fileMapping as unknown as FileMappingEntry[] | null;
-      if (fileMapping) {
-        for (const mapping of fileMapping) {
-          const ep = await prisma.episode.findUnique({
-            where: {
-              mediaItemId_season_episode: {
-                mediaItemId,
-                season: mapping.season,
-                episode: mapping.episode,
-              },
-            },
-          });
-          if (ep?.filePath) {
-            const filePath = ep.filePath;
-            const mediaInfo = await prisma.mediaInfo.findUnique({
-              where: { episodeId: ep.id },
-            });
-            if (mediaInfo?.durationSec) {
-              const trickplayDir = path.dirname(filePath);
-              generateTrickplay(filePath, trickplayDir, mediaInfo.durationSec)
-                .then((spritePath) => {
-                  if (spritePath) {
-                    console.log(`[Trickplay] Generated sprite sheet for ${path.basename(filePath)}`);
-                  }
-                })
-                .catch((err) => {
-                  console.error(`[Trickplay] Failed for ${filePath}:`, err);
-                });
-            }
           }
         }
       }

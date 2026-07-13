@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 
 interface VttEntry {
@@ -81,7 +81,6 @@ export function ThumbnailPreview({
   visible,
 }: ThumbnailPreviewProps) {
   const [entries, setEntries] = useState<VttEntry[]>([]);
-  const lastMediaRef = useRef('');
   const spriteUrl = useMemo(
     () => api.getTrickplayUrl(mediaItemId, 'trickplay-sprite.jpg', episodeId),
     [episodeId, mediaItemId],
@@ -89,14 +88,11 @@ export function ThumbnailPreview({
 
   // Fetch VTT metadata when media changes
   useEffect(() => {
-    const key = `${mediaItemId}::${episodeId ?? ''}`;
-    if (key === lastMediaRef.current) return;
-    lastMediaRef.current = key;
-
     const vttUrl = api.getTrickplayUrl(mediaItemId, 'trickplay.vtt', episodeId);
     if (!vttUrl) return;
 
     const controller = new AbortController();
+    setEntries([]);
 
     fetch(vttUrl, { signal: controller.signal })
       .then((r) => {
