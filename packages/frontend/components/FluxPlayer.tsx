@@ -106,6 +106,10 @@ export function FluxPlayer(props: FluxPlayerProps) {
     loadSource();
   }, [loadSource]);
 
+  const handleFatalError = useCallback(() => {
+    setError('Playback failed. Try again or choose another title.');
+  }, []);
+
   if (loading) {
     return (
       <div className={fill ? 'fx-player-shell fx-player-shell--fill' : 'fx-player-shell'}>
@@ -135,7 +139,7 @@ export function FluxPlayer(props: FluxPlayerProps) {
         if (streamIndex !== null && qualityLabel === 'Original') setQualityLabel('Auto');
       }}
       onTranscodeSeek={(time) => setHlsStartTime(Math.max(0, Math.round(time * 1000) / 1000))}
-      onFatalError={() => setError('Playback failed. Try again or choose another title.')}
+      onFatalError={handleFatalError}
     />
   );
 }
@@ -164,23 +168,32 @@ function FluxMediaPlayer({
 }) {
   const playerRef = useRef<MediaPlayerInstance>(null);
   const [debugOpen, setDebugOpen] = useState(false);
-  // Safety net: if playback doesn't start within 30 s of setting the source,
-  // show an error so the user isn't stuck on an infinite spinner.
-  const [loadTimedOut, setLoadTimedOut] = useState(false);
+  const [playbackReady, setPlaybackReady] = useState(false);
 
   useEffect(() => {
-    // Reset on source change (including retry).
-    setLoadTimedOut(false);
-    if (!source) return;
-    const id = window.setTimeout(() => setLoadTimedOut(true), 30_000);
-    return () => window.clearTimeout(id);
-  }, [source]);
+    if (playbackReady) return;
 
-  // Surface the timeout as a fatal error so the parent FluxPlayer shows the
-  // ErrorOverlay with a retry button instead of an infinite spinner.
-  useEffect(() => {
-    if (loadTimedOut) onFatalError();
-  }, [loadTimedOut, onFatalError]);
+    let timeoutId: number | null = null;
+    const clearWatchdog = () => {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      timeoutId = null;
+    };
+    const armWatchdog = () => {
+      clearWatchdog();
+      if (!document.hidden) timeoutId = window.setTimeout(onFatalError, 30_000);
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) clearWatchdog();
+      else armWatchdog();
+    };
+
+    armWatchdog();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      clearWatchdog();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [onFatalError, playbackReady, source.src]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -214,6 +227,7 @@ function FluxMediaPlayer({
       streamType="on-demand"
       controlsDelay={2600}
       googleCast={{}}
+      onCanPlay={() => setPlaybackReady(true)}
       onError={onFatalError}
     >
       <MediaProvider />
