@@ -22,6 +22,7 @@ interface ControlBarProps {
   durationSeconds?: number | null;
   positionOffset?: number;
   onSeek: (time: number, trigger?: Event, commit?: boolean) => void;
+  onTogglePlayback: (trigger?: Event) => void;
   qualityOptions: PlaybackInfoDTO['qualities'];
   selectedQuality: PlaybackInfoDTO['qualities'][number]['label'];
   onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label']) => void;
@@ -44,6 +45,7 @@ export function ControlBar({
   durationSeconds,
   positionOffset = 0,
   onSeek,
+  onTogglePlayback,
   qualityOptions,
   selectedQuality,
   onQualityChange,
@@ -98,7 +100,15 @@ export function ControlBar({
   return (
     <div className="fx-controls">
       <div className="fx-row">
-        <button className="fx-btn fx-btn--primary" type="button" onClick={() => remote.togglePaused()} aria-label={paused ? 'Play' : 'Pause'}>
+        <button
+          className="fx-btn fx-btn--primary"
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onTogglePlayback(event.nativeEvent);
+          }}
+          aria-label={paused ? 'Play' : 'Pause'}
+        >
           {paused ? <PlayIcon /> : <PauseIcon />}
         </button>
 

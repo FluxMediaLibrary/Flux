@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { useMediaState } from '@vidstack/react';
 import { ThumbnailPreview } from './ThumbnailPreview';
 
@@ -29,9 +29,10 @@ export function Timeline({
   const bufferedEnd = useMediaState('bufferedEnd');
   const seekableStart = useMediaState('seekableStart');
   const seekableEnd = useMediaState('seekableEnd');
-  const canSeek = useMediaState('canSeek');
   const rootRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
   const [dragging, setDragging] = useState(false);
+  const [pendingSeekTime, setPendingSeekTime] = useState<number | null>(null);
   const [preview, setPreview] = useState({ visible: false, time: 0, left: 0 });
 
   const range = useMemo(() => {
@@ -79,19 +80,26 @@ export function Timeline({
     [getPosition],
   );
 
-  const seekFromPointer = useCallback(
-    (event: PointerEvent<HTMLDivElement>, commit: boolean) => {
-      if (!canSeek && range.length <= 0) return;
+  const updateFromPointer = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
       const position = getPosition(event.clientX);
-      if (!position) return;
+      if (!position) return null;
       setPreview({ visible: true, time: position.time, left: position.left });
-      onSeek(position.time, event.nativeEvent, commit);
+      return position;
     },
-    [canSeek, getPosition, onSeek, range.length],
+    [getPosition],
   );
 
   const absoluteCurrentTime = positionOffset + currentTime;
-  const displayTime = dragging ? preview.time : absoluteCurrentTime;
+
+  useEffect(() => {
+    if (pendingSeekTime === null) return;
+    if (Math.abs(absoluteCurrentTime - pendingSeekTime) <= 0.75) {
+      setPendingSeekTime(null);
+    }
+  }, [absoluteCurrentTime, pendingSeekTime]);
+
+  const displayTime = dragging ? preview.time : pendingSeekTime ?? absoluteCurrentTime;
   const playedPercent = range.length > 0
     ? Math.max(0, Math.min(100, ((displayTime - range.start) / range.length) * 100))
     : 0;
@@ -108,30 +116,48 @@ export function Timeline({
       ref={rootRef}
       className={disabled ? 'fx-timeline is-disabled' : 'fx-timeline'}
       onPointerMove={(event) => {
+        if (draggingRef.current) {
+          event.preventDefault();
+          event.stopPropagation();
+          updateFromPointer(event);
+          return;
+        }
         updatePreview(event.clientX, true);
-        if (dragging) seekFromPointer(event, false);
       }}
       onPointerDown={(event) => {
-        if (disabled) return;
+        if (disabled || event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
         event.currentTarget.setPointerCapture(event.pointerId);
+        draggingRef.current = true;
         setDragging(true);
-        seekFromPointer(event, false);
+        setPendingSeekTime(null);
+        updateFromPointer(event);
       }}
       onPointerUp={(event) => {
-        if (dragging) seekFromPointer(event, true);
+        if (!draggingRef.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const position = updateFromPointer(event);
+        draggingRef.current = false;
         setDragging(false);
+        if (position) {
+          setPendingSeekTime(position.time);
+          onSeek(position.time, event.nativeEvent, true);
+        }
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId);
         }
       }}
       onPointerCancel={(event) => {
+        draggingRef.current = false;
         setDragging(false);
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId);
         }
       }}
       onPointerLeave={() => {
-        if (!dragging) setPreview((state) => ({ ...state, visible: false }));
+        if (!draggingRef.current) setPreview((state) => ({ ...state, visible: false }));
       }}
       onBlur={() => setPreview((state) => ({ ...state, visible: false }))}
       role="presentation"
