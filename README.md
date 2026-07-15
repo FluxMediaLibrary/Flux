@@ -191,7 +191,7 @@ Navigate to your frontend URL, sign in with the bootstrap admin credentials, the
 | Transmission RPC | `linuxserver/transmission` | 9091 | loopback only |
 | Transmission peer | `linuxserver/transmission` | 51413 | TCP + UDP |
 
-Transmission uses `network_mode: host` for correct peer port binding.
+Transmission publishes `51413/tcp` and `51413/udp` for BitTorrent peers. On a VPS, the host firewall or cloud firewall must also allow both protocols, otherwise downloads can still start but may sit at 0 peers on weak tracker swarms. The admin torrent page reports whether Transmission's peer port test is open.
 
 ## Routes
 

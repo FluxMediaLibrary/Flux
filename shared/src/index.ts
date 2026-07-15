@@ -558,6 +558,10 @@ export interface TorrentClientHealthDTO {
   ok: boolean;
   url: string;
   version?: string;
+  peerPort?: number;
+  peerPortOpen?: boolean;
+  dhtEnabled?: boolean;
+  pexEnabled?: boolean;
   message?: string;
 }
 
