@@ -504,13 +504,22 @@ function FluxPlayerChrome({
     ],
   );
 
+  const enterFullscreenForPlay = useCallback((trigger?: Event) => {
+    if (document.fullscreenElement) return;
+    remote.enterFullscreen('prefer-media', trigger);
+  }, [remote]);
+
   const togglePlayback = useCallback(
     (trigger?: Event) => {
       onPlaybackIntent(paused);
-      if (paused) remote.play(trigger);
-      else remote.pause(trigger);
+      if (paused) {
+        enterFullscreenForPlay(trigger);
+        remote.play(trigger);
+      } else {
+        remote.pause(trigger);
+      }
     },
-    [onPlaybackIntent, paused, remote],
+    [enterFullscreenForPlay, onPlaybackIntent, paused, remote],
   );
 
   useEffect(() => {
