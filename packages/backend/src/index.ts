@@ -8,6 +8,7 @@ import { redisConnection } from './lib/redis.js';
 import { buildServer, seedBootstrapAdmin } from './server.js';
 import { startWorkers, stopWorkers } from './jobs/worker.js';
 import { startTorrentPoller, stopTorrentPoller } from './jobs/torrent-poller.js';
+import { checkTorrentClient } from './lib/webtorrent.js';
 
 async function main(): Promise<void> {
   const app = await buildServer();
@@ -15,6 +16,13 @@ async function main(): Promise<void> {
   await seedBootstrapAdmin(app);
   startWorkers();
   startTorrentPoller(app.log);
+
+  const torrentClient = await checkTorrentClient();
+  if (torrentClient.ok) {
+    app.log.info(`Transmission RPC ready at ${torrentClient.url}`);
+  } else {
+    app.log.warn(`Transmission RPC is not ready at ${torrentClient.url}: ${torrentClient.message}`);
+  }
 
   // Resume any torrents that were downloading/seeding when we last shut down.
   try {

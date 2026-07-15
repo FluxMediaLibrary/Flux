@@ -32,6 +32,12 @@ const envSchema = z.object({
     .int()
     .min(1000)
     .default(15000),
+  TRANSMISSION_RPC_URL: z
+    .string()
+    .url()
+    .default('http://localhost:9091/transmission/rpc'),
+  TRANSMISSION_USER: z.string().min(1).default('admin'),
+  TRANSMISSION_PASS: z.string().min(1).default('flux'),
 
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(8).optional(),

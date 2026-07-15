@@ -10,10 +10,6 @@ import { torrentDownloadDir, torrentFilePath } from './media-paths.js';
 import { writeFile, mkdir, readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-const TRANSMISSION_URL = 'http://localhost:9091/transmission/rpc';
-const TRANSMISSION_USER = process.env.TRANSMISSION_USER ?? 'admin';
-const TRANSMISSION_PASS = process.env.TRANSMISSION_PASS ?? 'flux';
-
 let _sessionId: string | null = null;
 
 /** Stats snapshot returned by {@link getLiveStats}. */
@@ -36,23 +32,33 @@ export interface TorrentLiveStats {
 // ---------------------------------------------------------------------------
 
 async function rpc(method: string, args: Record<string, unknown> = {}): Promise<unknown> {
-  const auth = Buffer.from(`${TRANSMISSION_USER}:${TRANSMISSION_PASS}`).toString('base64');
+  const auth = Buffer.from(`${config.TRANSMISSION_USER}:${config.TRANSMISSION_PASS}`).toString('base64');
 
-  let res = await fetch(TRANSMISSION_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Basic ${auth}`,
-      ...(_sessionId ? { 'X-Transmission-Session-Id': _sessionId } : {}),
-    },
-    body: JSON.stringify({ method, arguments: args }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(config.TRANSMISSION_RPC_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${auth}`,
+        ...(_sessionId ? { 'X-Transmission-Session-Id': _sessionId } : {}),
+      },
+      body: JSON.stringify({ method, arguments: args }),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Transmission RPC unavailable at ${config.TRANSMISSION_RPC_URL}: ${message}`);
+  }
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(`Transmission RPC authentication failed at ${config.TRANSMISSION_RPC_URL}`);
+  }
 
   if (res.status === 409) {
     _sessionId = res.headers.get('X-Transmission-Session-Id');
     if (!_sessionId) throw new Error('Transmission: no session ID in 409 response');
 
-    res = await fetch(TRANSMISSION_URL, {
+    res = await fetch(config.TRANSMISSION_RPC_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -126,6 +132,28 @@ let _initialized = false;
 export function getClient(): { initialized: boolean } {
   _initialized = true;
   return { initialized: true };
+}
+
+export async function checkTorrentClient(): Promise<{
+  ok: boolean;
+  url: string;
+  version?: string;
+  message?: string;
+}> {
+  try {
+    const session = (await rpc('session-get')) as { version?: string };
+    return {
+      ok: true,
+      url: config.TRANSMISSION_RPC_URL,
+      version: session.version,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      url: config.TRANSMISSION_RPC_URL,
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 /**

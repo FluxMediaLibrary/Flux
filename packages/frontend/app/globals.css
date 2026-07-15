@@ -1736,6 +1736,11 @@ table.data tr:last-child td {
   font-size: 0.85rem;
   margin: 0 0 12px;
 }
+.torrent-client-status {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: -4px 0 12px;
+}
 .torrent-request {
   display: flex;
   align-items: center;

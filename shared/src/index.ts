@@ -554,6 +554,13 @@ export interface TorrentDTO {
   createdAt: string;
 }
 
+export interface TorrentClientHealthDTO {
+  ok: boolean;
+  url: string;
+  version?: string;
+  message?: string;
+}
+
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 export interface NotificationSettingsDTO {

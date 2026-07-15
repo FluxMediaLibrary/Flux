@@ -15,6 +15,7 @@ import { confirmBodySchema } from './torrents.schema.js';
 import {
   parseUpload,
   confirmTorrent,
+  getTorrentClientHealth,
   listTorrents,
   getTorrent,
   markTorrentStartFailed,
@@ -36,6 +37,10 @@ export const torrentRoutes: FastifyPluginAsync = async (
   });
 
   app.addHook('preHandler', app.requireAdmin);
+
+  app.get('/health', async () => {
+    return getTorrentClientHealth();
+  });
 
   // ─── POST /upload — parse a .torrent file + persist for confirm ────────
   app.post('/upload', async (request) => {
