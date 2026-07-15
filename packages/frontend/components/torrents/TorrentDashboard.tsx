@@ -172,6 +172,8 @@ export function TorrentDashboard({
       {health?.ok && (
         <div className="torrent-client-status">
           Transmission connected{health.version ? ` - ${health.version}` : ''}.
+          {health.peerPort ? ` Peer port ${health.peerPort} is ${health.peerPortOpen === false ? 'closed' : health.peerPortOpen === true ? 'open' : 'untested'}.` : ''}
+          {health.dhtEnabled === false || health.pexEnabled === false ? ' DHT/PEX peer discovery is disabled.' : ''}
         </div>
       )}
 

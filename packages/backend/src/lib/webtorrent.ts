@@ -138,14 +138,34 @@ export async function checkTorrentClient(): Promise<{
   ok: boolean;
   url: string;
   version?: string;
+  peerPort?: number;
+  peerPortOpen?: boolean;
+  dhtEnabled?: boolean;
+  pexEnabled?: boolean;
   message?: string;
 }> {
   try {
-    const session = (await rpc('session-get')) as { version?: string };
+    const session = (await rpc('session-get')) as {
+      version?: string;
+      'peer-port'?: number;
+      'dht-enabled'?: boolean;
+      'pex-enabled'?: boolean;
+    };
+    let peerPortOpen: boolean | undefined;
+    try {
+      const portTest = (await rpc('port-test')) as { 'port-is-open'?: boolean };
+      peerPortOpen = portTest['port-is-open'];
+    } catch {
+      peerPortOpen = undefined;
+    }
     return {
       ok: true,
       url: config.TRANSMISSION_RPC_URL,
       version: session.version,
+      peerPort: session['peer-port'],
+      peerPortOpen,
+      dhtEnabled: session['dht-enabled'],
+      pexEnabled: session['pex-enabled'],
     };
   } catch (err) {
     return {
