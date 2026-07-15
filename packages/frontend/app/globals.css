@@ -3290,7 +3290,14 @@ table.data tr:last-child td {
   grid-auto-columns: 116px;
   gap: 12px;
   overflow-x: auto;
-  padding-bottom: 8px;
+  overscroll-behavior-inline: contain;
+  padding: 0 8px 8px 0;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.tmdb-cast::-webkit-scrollbar,
+.tmdb-similar::-webkit-scrollbar {
+  display: none;
 }
 .tmdb-cast__item,
 .tmdb-similar__item {
