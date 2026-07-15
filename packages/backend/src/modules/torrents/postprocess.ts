@@ -64,7 +64,7 @@ export async function processTorrentPostprocess(
       where: { id: torrentId },
     });
 
-    if (!torrent || torrent.status !== 'DOWNLOADING') {
+    if (!torrent || (torrent.status !== 'DOWNLOADING' && torrent.status !== 'PROCESSING')) {
       return;
     }
 
