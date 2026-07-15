@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { TorrentDTO, TorrentStatus } from '@flux/shared';
+import type { TorrentClientHealthDTO, TorrentDTO, TorrentStatus } from '@flux/shared';
 import { api, FluxApiError } from '@/lib/api';
 import {
   formatBytes,
@@ -12,7 +12,7 @@ import {
   formatSpeed,
 } from '@/lib/format';
 
-const POLL_MS = 500;
+const POLL_MS = 2500;
 
 const STATUS_LABEL: Record<TorrentStatus, string> = {
   PENDING_CONFIRM: 'Pending',
@@ -56,6 +56,7 @@ export function TorrentDashboard({
   registerRefresh?: (fn: () => void) => void;
 }) {
   const [torrents, setTorrents] = useState<TorrentDTO[] | null>(null);
+  const [health, setHealth] = useState<TorrentClientHealthDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -64,8 +65,12 @@ export function TorrentDashboard({
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const list = await api.listTorrents(signal);
+      const [clientHealth, list] = await Promise.all([
+        api.torrentHealth(signal),
+        api.listTorrents(signal),
+      ]);
       if (signal?.aborted) return;
+      setHealth(clientHealth);
       setTorrents(list);
       setError(null);
     } catch (err) {
@@ -159,6 +164,16 @@ export function TorrentDashboard({
       </div>
 
       {error && <div className="form-error">{error}</div>}
+      {health && !health.ok && (
+        <div className="form-error">
+          Transmission is not reachable at {health.url}. {health.message}
+        </div>
+      )}
+      {health?.ok && (
+        <div className="torrent-client-status">
+          Transmission connected{health.version ? ` - ${health.version}` : ''}.
+        </div>
+      )}
 
       {torrents === null ? (
         <div className="empty">

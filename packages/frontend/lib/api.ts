@@ -33,6 +33,7 @@ import type {
   TmdbPersonResult,
   TmdbSearchResult,
   TrendingWindow,
+  TorrentClientHealthDTO,
   TorrentDTO,
   TorrentParseResult,
   UpdateNotificationSettingsRequest,
@@ -349,6 +350,9 @@ export const api = {
   },
   listTorrents(signal?: AbortSignal) {
     return request<TorrentDTO[]>('/api/torrents', { signal });
+  },
+  torrentHealth(signal?: AbortSignal) {
+    return request<TorrentClientHealthDTO>('/api/torrents/health', { signal });
   },
   getTorrent(id: string) {
     return request<TorrentDTO>(`/api/torrents/${encodeURIComponent(id)}`);

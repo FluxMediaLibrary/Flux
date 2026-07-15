@@ -21,6 +21,7 @@ import {
 } from '../../lib/filename.js';
 import {
   addTorrent,
+  checkTorrentClient,
   getLiveStats,
   stopSeeding,
   removeTorrent,
@@ -161,6 +162,30 @@ export async function parseUpload(
     guessedType: guess.type,
     files,
   };
+}
+
+export async function getTorrentClientHealth(): Promise<{
+  ok: boolean;
+  url: string;
+  version?: string;
+  message?: string;
+}> {
+  return checkTorrentClient();
+}
+
+async function persistLiveStats(row: Torrent, live: TorrentLiveStats): Promise<void> {
+  await prisma.torrent.update({
+    where: { id: row.id },
+    data: {
+      progress: live.progress,
+      downloadSpeed: live.downloadSpeed,
+      uploadSpeed: live.uploadSpeed,
+      peers: live.numPeers,
+      totalBytes: live.length,
+      uploadedBytes: live.uploaded,
+      ratio: live.ratio,
+    },
+  });
 }
 
 async function parseSavedTorrentFiles(infoHash: string): Promise<{ path: string; video: boolean }[]> {
@@ -378,8 +403,26 @@ export async function listTorrents(): Promise<TorrentDTO[]> {
       const dto = mapTorrentToDTO(row);
       if (row.status !== 'DOWNLOADING' && row.status !== 'SEEDING') return dto;
 
-      const live = await getLiveStats(row.infoHash);
+      let live: TorrentLiveStats | null;
+      try {
+        live = await getLiveStats(row.infoHash);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await prisma.torrent.update({
+          where: { id: row.id },
+          data: {
+            status: 'ERROR',
+            errorMessage: message,
+          },
+        });
+        return {
+          ...dto,
+          status: 'ERROR' as const,
+          errorMessage: message,
+        };
+      }
       if (!live) return dto;
+      await persistLiveStats(row, live);
 
       const overlaid: TorrentDTO = {
         ...dto,
@@ -413,8 +456,29 @@ export async function reconcileCompletedTorrents(): Promise<void> {
     where: { status: 'DOWNLOADING' },
   });
   for (const row of rows) {
-    const live = await getLiveStats(row.infoHash);
-    if (live) enqueuePostprocessIfDone(row, live);
+    try {
+      const live = await getLiveStats(row.infoHash);
+      if (!live) {
+        await prisma.torrent.update({
+          where: { id: row.id },
+          data: {
+            status: 'ERROR',
+            errorMessage: 'Torrent is marked downloading, but Transmission no longer has it. Retry the torrent or upload it again.',
+          },
+        });
+        continue;
+      }
+      await persistLiveStats(row, live);
+      enqueuePostprocessIfDone(row, live);
+    } catch (err) {
+      await prisma.torrent.update({
+        where: { id: row.id },
+        data: {
+          status: 'ERROR',
+          errorMessage: err instanceof Error ? err.message : String(err),
+        },
+      });
+    }
   }
 }
 
@@ -496,7 +560,10 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
   }
 
   try {
-    await addTorrent(buffer);
+    const added = await addTorrent(buffer);
+    if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {
+      throw new Error(`Transmission returned infoHash ${added.infoHash}, expected ${row.infoHash}`);
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await prisma.torrent.update({
@@ -595,11 +662,25 @@ export async function startDownloading(
     throw ApiError.notFound(`Torrent ${torrentId} not found`);
   }
 
-  await addTorrent(buffer);
+  const added = await addTorrent(buffer);
+  if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {
+    throw new Error(`Transmission returned infoHash ${added.infoHash}, expected ${row.infoHash}`);
+  }
+  const live = await getLiveStats(row.infoHash);
 
   await prisma.torrent.update({
     where: { id: torrentId },
-    data: { status: 'DOWNLOADING' },
+    data: {
+      status: 'DOWNLOADING',
+      errorMessage: null,
+      progress: live?.progress ?? 0,
+      downloadSpeed: live?.downloadSpeed ?? 0,
+      uploadSpeed: live?.uploadSpeed ?? 0,
+      peers: live?.numPeers ?? 0,
+      totalBytes: live?.length ?? 0,
+      uploadedBytes: live?.uploaded ?? 0,
+      ratio: live?.ratio ?? 0,
+    },
   });
 
   await prisma.request.updateMany({
