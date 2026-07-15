@@ -14,7 +14,8 @@ interface TmdbTitleDetailsProps {
   mediaType: MediaType;
   requestStatus?: RequestStatus | null;
   requesting?: boolean;
-  onClose: () => void;
+  variant?: 'modal' | 'page';
+  onClose?: () => void;
   onRequest?: (detail: TmdbDetail) => void;
 }
 
@@ -60,6 +61,7 @@ export function TmdbTitleDetails({
   mediaType,
   requestStatus = null,
   requesting = false,
+  variant = 'modal',
   onClose,
   onRequest,
 }: TmdbTitleDetailsProps) {
@@ -93,12 +95,13 @@ export function TmdbTitleDetails({
   }, [mediaType, tmdbId]);
 
   useEffect(() => {
+    if (variant !== 'modal' || !onClose) return;
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  }, [onClose, variant]);
 
   const facts = useMemo(() => {
     if (!detail) return [];
@@ -113,12 +116,21 @@ export function TmdbTitleDetails({
   }, [detail]);
 
   return (
-    <div className="tmdb-modal" role="dialog" aria-modal="true" aria-label="Title details">
-      <button className="tmdb-modal__scrim" type="button" aria-label="Close details" onClick={onClose} />
+    <div
+      className={variant === 'page' ? 'tmdb-page' : 'tmdb-modal'}
+      role={variant === 'modal' ? 'dialog' : undefined}
+      aria-modal={variant === 'modal' ? true : undefined}
+      aria-label="Title details"
+    >
+      {variant === 'modal' && onClose && (
+        <button className="tmdb-modal__scrim" type="button" aria-label="Close details" onClick={onClose} />
+      )}
       <div className="tmdb-modal__panel">
-        <button className="tmdb-modal__close" type="button" onClick={onClose} aria-label="Close details">
+        {variant === 'modal' && onClose && (
+          <button className="tmdb-modal__close" type="button" onClick={onClose} aria-label="Close details">
           ×
-        </button>
+          </button>
+        )}
 
         {loading && (
           <div className="tmdb-modal__state">

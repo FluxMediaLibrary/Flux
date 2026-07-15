@@ -2,12 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { useAmbient } from '@/components/AmbientBackdrop';
-import { TmdbTitleDetails } from '@/components/TmdbTitleDetails';
 import type {
-  TmdbDetail,
   TmdbSearchResult,
   TmdbGenreDTO,
   MediaType,
@@ -20,6 +19,10 @@ const HERO_ROTATE_MS = 7000;
 
 function requestKey(tmdbId: number, mediaType: MediaType): string {
   return `${tmdbId}:${mediaType}`;
+}
+
+function titleDetailHref(tmdbId: number, mediaType: MediaType): string {
+  return `/browse/${mediaType === 'SHOW' ? 'tv' : 'movie'}/${tmdbId}`;
 }
 
 function statusLabel(status: RequestStatus): string {
@@ -53,6 +56,7 @@ function statusPillClass(status: RequestStatus): string {
 
 export default function BrowsePage() {
   const { activeProfile } = useAuth();
+  const router = useRouter();
 
   const [mediaType, setMediaType] = useState<MediaType>('MOVIE');
   const [genres, setGenres] = useState<TmdbGenreDTO[]>([]);
@@ -72,10 +76,6 @@ export default function BrowsePage() {
     new Map(),
   );
   const [requestingIds, setRequestingIds] = useState<Set<string>>(new Set());
-  const [detailTarget, setDetailTarget] = useState<{
-    tmdbId: number;
-    mediaType: MediaType;
-  } | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const gridAbortRef = useRef<AbortController>(undefined);
@@ -220,27 +220,6 @@ export default function BrowsePage() {
     }
   }, []);
 
-  const handleDetailRequest = useCallback(async (detail: TmdbDetail) => {
-    const key = requestKey(detail.tmdbId, detail.mediaType);
-    setRequestingIds((prev) => new Set(prev).add(key));
-    try {
-      await api.createRequest({
-        tmdbId: detail.tmdbId,
-        mediaType: detail.mediaType,
-        title: detail.title,
-      });
-      setRequests((prev) => new Map(prev).set(key, 'PENDING'));
-    } catch {
-      /* keep enabled so the user can retry */
-    } finally {
-      setRequestingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    }
-  }, []);
-
   // ── Cleanup ───────────────────────────────────────────────────────────────
   useEffect(
     () => () => {
@@ -290,12 +269,7 @@ export default function BrowsePage() {
             className="disc-hero-hit"
             type="button"
             aria-label={`Open details for ${heroItem.title}`}
-            onClick={() =>
-              setDetailTarget({
-                tmdbId: heroItem.tmdbId,
-                mediaType: heroItem.mediaType,
-              })
-            }
+            onClick={() => router.push(titleDetailHref(heroItem.tmdbId, heroItem.mediaType))}
           />
           <div className="disc-hero-bg">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -326,12 +300,7 @@ export default function BrowsePage() {
                 status={requests.get(requestKey(heroItem.tmdbId, heroItem.mediaType)) ?? null}
                 requesting={requestingIds.has(requestKey(heroItem.tmdbId, heroItem.mediaType))}
                 onRequest={() => handleRequest(heroItem)}
-                onDetails={() =>
-                  setDetailTarget({
-                    tmdbId: heroItem.tmdbId,
-                    mediaType: heroItem.mediaType,
-                  })
-                }
+                detailsHref={titleDetailHref(heroItem.tmdbId, heroItem.mediaType)}
               />
             </div>
           </div>
@@ -432,27 +401,11 @@ export default function BrowsePage() {
                 status={requests.get(key) ?? null}
                 requesting={requestingIds.has(key)}
                 onRequest={() => handleRequest(item)}
-                onDetails={() =>
-                  setDetailTarget({
-                    tmdbId: item.tmdbId,
-                    mediaType: item.mediaType,
-                  })
-                }
+                onDetails={() => router.push(titleDetailHref(item.tmdbId, item.mediaType))}
               />
             );
           })}
         </div>
-      )}
-
-      {detailTarget && (
-        <TmdbTitleDetails
-          tmdbId={detailTarget.tmdbId}
-          mediaType={detailTarget.mediaType}
-          requestStatus={requests.get(requestKey(detailTarget.tmdbId, detailTarget.mediaType)) ?? null}
-          requesting={requestingIds.has(requestKey(detailTarget.tmdbId, detailTarget.mediaType))}
-          onRequest={(detail) => void handleDetailRequest(detail)}
-          onClose={() => setDetailTarget(null)}
-        />
       )}
     </div>
   );
@@ -465,13 +418,13 @@ function HeroAction({
   status,
   requesting,
   onRequest,
-  onDetails,
+  detailsHref,
 }: {
   item: TmdbSearchResult;
   status: RequestStatus | null;
   requesting: boolean;
   onRequest: () => void;
-  onDetails: () => void;
+  detailsHref: string;
 }) {
   if (item.inLibrary && item.mediaItemId) {
     return (
@@ -484,9 +437,9 @@ function HeroAction({
     return (
       <>
         <span className={statusPillClass(status)}>{statusLabel(status)}</span>
-        <button className="btn btn-ghost" type="button" onClick={onDetails}>
+        <Link className="btn btn-ghost" href={detailsHref}>
           Details
-        </button>
+        </Link>
       </>
     );
   }
@@ -495,9 +448,9 @@ function HeroAction({
     <button className="btn btn-primary" onClick={onRequest} disabled={requesting}>
       {requesting ? 'Requesting…' : '+ Request'}
     </button>
-      <button className="btn btn-ghost" type="button" onClick={onDetails}>
+      <Link className="btn btn-ghost" href={detailsHref}>
         Details
-      </button>
+      </Link>
     </>
   );
 }

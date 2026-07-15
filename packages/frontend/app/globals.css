@@ -3074,6 +3074,19 @@ table.data tr:last-child td {
   place-items: center;
   padding: 28px;
 }
+.tmdb-page-shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 26px 24px 72px;
+}
+.tmdb-page {
+  margin-top: 14px;
+}
+.tmdb-page .tmdb-modal__panel {
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+}
 .tmdb-modal__scrim {
   position: absolute;
   inset: 0;
@@ -3431,6 +3444,18 @@ table.data tr:last-child td {
   }
   .tmdb-reviews {
     grid-template-columns: 1fr;
+  }
+  .tmdb-page-shell {
+    padding: 18px 0 42px;
+  }
+  .tmdb-page-shell .player-back {
+    margin-left: 18px;
+  }
+  .tmdb-page .tmdb-modal__panel {
+    height: auto;
+    min-height: 100dvh;
+    max-height: none;
+    border-radius: 0;
   }
 }
 
