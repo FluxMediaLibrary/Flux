@@ -42,23 +42,38 @@ const postprocessEnqueued = new Set<string>();
  * hair under 1.0, which would strand it in DOWNLOADING. Shared by the on-demand
  * dashboard listing and the background poller.
  */
-function enqueuePostprocessIfDone(row: Torrent, live: TorrentLiveStats): void {
+async function enqueuePostprocessIfDone(row: Torrent, live: TorrentLiveStats): Promise<boolean> {
   if (row.status !== 'DOWNLOADING' || !live.done || postprocessEnqueued.has(row.id)) {
-    return;
+    return false;
   }
   postprocessEnqueued.add(row.id);
   console.log(`[Torrent] Done! Triggering postprocess for ${row.name} (${row.infoHash})`);
-  torrentPostprocessQueue
-    .add('torrent-postprocess', {
+  try {
+    await torrentPostprocessQueue.add('torrent-postprocess', {
       torrentId: row.id,
       infoHash: row.infoHash,
-    })
-    .catch((err) => {
-      // Enqueue failed (e.g. a Redis blip). Drop the dedupe marker so the next
-      // sweep can retry instead of stranding the torrent forever.
-      postprocessEnqueued.delete(row.id);
-      console.error('[Torrent] Failed to enqueue postprocess:', err);
     });
+    await prisma.torrent.update({
+      where: { id: row.id },
+      data: {
+        status: 'PROCESSING',
+        progress: live.progress,
+        downloadSpeed: live.downloadSpeed,
+        uploadSpeed: live.uploadSpeed,
+        peers: live.numPeers,
+        totalBytes: live.length,
+        uploadedBytes: live.uploaded,
+        ratio: live.ratio,
+      },
+    });
+    return true;
+  } catch (err) {
+    // Enqueue failed (e.g. a Redis blip). Drop the dedupe marker so the next
+    // sweep can retry instead of stranding the torrent forever.
+    postprocessEnqueued.delete(row.id);
+    console.error('[Torrent] Failed to enqueue postprocess:', err);
+    return false;
+  }
 }
 
 // ─── DTO mapping ─────────────────────────────────────────────────────────────
@@ -423,9 +438,11 @@ export async function listTorrents(): Promise<TorrentDTO[]> {
       }
       if (!live) return dto;
       await persistLiveStats(row, live);
+      const movedToProcessing = await enqueuePostprocessIfDone(row, live);
 
       const overlaid: TorrentDTO = {
         ...dto,
+        status: movedToProcessing ? 'PROCESSING' : dto.status,
         progress: live.progress,
         downloadSpeed: live.downloadSpeed,
         uploadSpeed: live.uploadSpeed,
@@ -434,9 +451,6 @@ export async function listTorrents(): Promise<TorrentDTO[]> {
         uploadedBytes: live.uploaded,
         ratio: live.ratio,
       };
-
-      // Trigger post-processing the moment the download completes.
-      enqueuePostprocessIfDone(row, live);
 
       return overlaid;
     }),
@@ -469,7 +483,7 @@ export async function reconcileCompletedTorrents(): Promise<void> {
         continue;
       }
       await persistLiveStats(row, live);
-      enqueuePostprocessIfDone(row, live);
+      await enqueuePostprocessIfDone(row, live);
     } catch (err) {
       await prisma.torrent.update({
         where: { id: row.id },

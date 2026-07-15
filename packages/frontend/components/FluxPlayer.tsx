@@ -228,6 +228,10 @@ function FluxMediaPlayer({
         onTranscodeSeek(absoluteTime);
         return;
       }
+      if (now - lastRecovery.at < 45000) {
+        recoverableErrorRef.current = true;
+        return;
+      }
     }
 
     if (idlePipeline) {
@@ -243,7 +247,6 @@ function FluxMediaPlayer({
       hiddenRef.current = document.hidden;
       if (document.hidden) {
         lastHiddenAtRef.current = Date.now();
-        if (source.method === 'hls') recoverableErrorRef.current = true;
       } else if (
         source.method === 'hls' &&
         recoverableErrorRef.current &&
@@ -443,6 +446,7 @@ function FluxPlayerChrome({
   const chromeRef = useRef<HTMLDivElement>(null);
   const [idle, setIdle] = useState(false);
   const pausedRef = useRef(paused);
+  const progressSaveInFlightRef = useRef<AbortController | null>(null);
   pausedRef.current = paused;
   const stableDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
     ? durationSeconds
@@ -450,6 +454,13 @@ function FluxPlayerChrome({
       ? duration
       : 0;
   const absoluteCurrentTime = timelineOffset + (Number.isFinite(currentTime) ? currentTime : 0);
+
+  useEffect(() => {
+    return () => {
+      progressSaveInFlightRef.current?.abort();
+      progressSaveInFlightRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     onPlaybackStateChange({ paused, started });
@@ -526,12 +537,27 @@ function FluxPlayerChrome({
     if (!Number.isFinite(position) || position <= 0) return;
     if (totalDuration > 0 && position > totalDuration + 5) return;
 
+    if (progressSaveInFlightRef.current) {
+      onProgress?.(position, totalDuration);
+      return;
+    }
+
+    const controller = new AbortController();
+    progressSaveInFlightRef.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 4000);
     api.saveProgress({
       mediaItemId: episodeId ? undefined : mediaItemId,
       episodeId,
       positionSeconds: position,
       durationSeconds: totalDuration > 0 ? totalDuration : undefined,
-    }).catch(() => {});
+    }, controller.signal)
+      .catch(() => {})
+      .finally(() => {
+        window.clearTimeout(timeout);
+        if (progressSaveInFlightRef.current === controller) {
+          progressSaveInFlightRef.current = null;
+        }
+      });
     onProgress?.(position, totalDuration);
   }, [episodeId, mediaItemId, onProgress, playerRef, stableDuration, timelineOffset]);
 

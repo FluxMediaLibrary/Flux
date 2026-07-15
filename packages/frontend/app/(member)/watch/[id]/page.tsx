@@ -119,7 +119,6 @@ export default function WatchPage() {
         }
         startPositionSeconds={startPosition}
         fill
-        onProgress={handleProgress}
         onNearEnd={handleNearEnd}
         onBack={() => router.push(`/library/${id}`)}
       />

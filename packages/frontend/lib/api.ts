@@ -475,8 +475,8 @@ export const api = {
   },
 
   // Watch progress
-  saveProgress(body: SaveProgressRequest) {
-    return request<WatchProgressDTO>('/api/library/progress', { body });
+  saveProgress(body: SaveProgressRequest, signal?: AbortSignal) {
+    return request<WatchProgressDTO>('/api/library/progress', { body, signal });
   },
 
   // Notification settings (admin)
