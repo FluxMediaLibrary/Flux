@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { RequestDTO, RequestStatus, TorrentStatus } from '@flux/shared';
 import { api, FluxApiError } from '@/lib/api';
+import { TmdbTitleDetails } from '@/components/TmdbTitleDetails';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,7 @@ export default function AdminRequestsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [syncingFulfilled, setSyncingFulfilled] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [detailRequest, setDetailRequest] = useState<RequestDTO | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -294,7 +296,13 @@ export default function AdminRequestsPage() {
               {filtered.map((r) => (
                 <tr key={r.id}>
                   <td>
-                    <span style={{ fontWeight: 600 }}>{r.title}</span>
+                    <button
+                      type="button"
+                      className="request-title-button"
+                      onClick={() => setDetailRequest(r)}
+                    >
+                      {r.title}
+                    </button>
                     {requestTargetLabel(r) && (
                       <span className="dim" style={{ marginLeft: 8 }}>
                         {requestTargetLabel(r)}
@@ -402,6 +410,14 @@ export default function AdminRequestsPage() {
             </tbody>
           </table>
         </div>
+      )}
+      {detailRequest && (
+        <TmdbTitleDetails
+          tmdbId={detailRequest.tmdbId}
+          mediaType={detailRequest.mediaType}
+          requestStatus={detailRequest.status}
+          onClose={() => setDetailRequest(null)}
+        />
       )}
     </div>
   );

@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { useAmbient } from '@/components/AmbientBackdrop';
+import { TmdbTitleDetails } from '@/components/TmdbTitleDetails';
 import type {
+  TmdbDetail,
   TmdbSearchResult,
   TmdbGenreDTO,
   MediaType,
@@ -70,6 +72,10 @@ export default function BrowsePage() {
     new Map(),
   );
   const [requestingIds, setRequestingIds] = useState<Set<string>>(new Set());
+  const [detailTarget, setDetailTarget] = useState<{
+    tmdbId: number;
+    mediaType: MediaType;
+  } | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const gridAbortRef = useRef<AbortController>(undefined);
@@ -214,6 +220,27 @@ export default function BrowsePage() {
     }
   }, []);
 
+  const handleDetailRequest = useCallback(async (detail: TmdbDetail) => {
+    const key = requestKey(detail.tmdbId, detail.mediaType);
+    setRequestingIds((prev) => new Set(prev).add(key));
+    try {
+      await api.createRequest({
+        tmdbId: detail.tmdbId,
+        mediaType: detail.mediaType,
+        title: detail.title,
+      });
+      setRequests((prev) => new Map(prev).set(key, 'PENDING'));
+    } catch {
+      /* keep enabled so the user can retry */
+    } finally {
+      setRequestingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  }, []);
+
   // ── Cleanup ───────────────────────────────────────────────────────────────
   useEffect(
     () => () => {
@@ -259,6 +286,17 @@ export default function BrowsePage() {
       {/* Hero carousel — hidden while searching */}
       {!searching && heroItem && (
         <div className="disc-hero" style={{ marginTop: 22 }}>
+          <button
+            className="disc-hero-hit"
+            type="button"
+            aria-label={`Open details for ${heroItem.title}`}
+            onClick={() =>
+              setDetailTarget({
+                tmdbId: heroItem.tmdbId,
+                mediaType: heroItem.mediaType,
+              })
+            }
+          />
           <div className="disc-hero-bg">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -288,6 +326,12 @@ export default function BrowsePage() {
                 status={requests.get(requestKey(heroItem.tmdbId, heroItem.mediaType)) ?? null}
                 requesting={requestingIds.has(requestKey(heroItem.tmdbId, heroItem.mediaType))}
                 onRequest={() => handleRequest(heroItem)}
+                onDetails={() =>
+                  setDetailTarget({
+                    tmdbId: heroItem.tmdbId,
+                    mediaType: heroItem.mediaType,
+                  })
+                }
               />
             </div>
           </div>
@@ -388,10 +432,27 @@ export default function BrowsePage() {
                 status={requests.get(key) ?? null}
                 requesting={requestingIds.has(key)}
                 onRequest={() => handleRequest(item)}
+                onDetails={() =>
+                  setDetailTarget({
+                    tmdbId: item.tmdbId,
+                    mediaType: item.mediaType,
+                  })
+                }
               />
             );
           })}
         </div>
+      )}
+
+      {detailTarget && (
+        <TmdbTitleDetails
+          tmdbId={detailTarget.tmdbId}
+          mediaType={detailTarget.mediaType}
+          requestStatus={requests.get(requestKey(detailTarget.tmdbId, detailTarget.mediaType)) ?? null}
+          requesting={requestingIds.has(requestKey(detailTarget.tmdbId, detailTarget.mediaType))}
+          onRequest={(detail) => void handleDetailRequest(detail)}
+          onClose={() => setDetailTarget(null)}
+        />
       )}
     </div>
   );
@@ -404,11 +465,13 @@ function HeroAction({
   status,
   requesting,
   onRequest,
+  onDetails,
 }: {
   item: TmdbSearchResult;
   status: RequestStatus | null;
   requesting: boolean;
   onRequest: () => void;
+  onDetails: () => void;
 }) {
   if (item.inLibrary && item.mediaItemId) {
     return (
@@ -418,12 +481,24 @@ function HeroAction({
     );
   }
   if (status) {
-    return <span className={statusPillClass(status)}>{statusLabel(status)}</span>;
+    return (
+      <>
+        <span className={statusPillClass(status)}>{statusLabel(status)}</span>
+        <button className="btn btn-ghost" type="button" onClick={onDetails}>
+          Details
+        </button>
+      </>
+    );
   }
   return (
+    <>
     <button className="btn btn-primary" onClick={onRequest} disabled={requesting}>
       {requesting ? 'Requesting…' : '+ Request'}
     </button>
+      <button className="btn btn-ghost" type="button" onClick={onDetails}>
+        Details
+      </button>
+    </>
   );
 }
 
@@ -434,16 +509,29 @@ function MediaCard({
   status,
   requesting,
   onRequest,
+  onDetails,
 }: {
   item: TmdbSearchResult;
   status: RequestStatus | null;
   requesting: boolean;
   onRequest: () => void;
+  onDetails: () => void;
 }) {
   const inLibrary = item.inLibrary && item.mediaItemId;
 
   return (
-    <div className="media-card">
+    <div
+      className="media-card"
+      role="button"
+      tabIndex={0}
+      onClick={onDetails}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onDetails();
+        }
+      }}
+    >
       <div className="media-poster">
         {item.posterPath ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -475,6 +563,7 @@ function MediaCard({
               href={`/library/${item.mediaItemId}`}
               className="btn btn-sm btn-primary"
               style={{ width: '100%' }}
+              onClick={(event) => event.stopPropagation()}
             >
               ▶ Play
             </Link>
@@ -484,7 +573,10 @@ function MediaCard({
             <button
               className="btn btn-sm"
               style={{ width: '100%' }}
-              onClick={onRequest}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRequest();
+              }}
               disabled={requesting}
             >
               {requesting ? 'Requesting…' : '+ Request'}
