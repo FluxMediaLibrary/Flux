@@ -1,0 +1,15 @@
+﻿{
+    "versionCode":  5,
+    "versionName":  "1.1.0",
+    "minimumSupportedVersionCode":  4,
+    "mandatory":  false,
+    "releaseDate":  "2026-07-17T12:56:18.4685306Z",
+    "releaseNotes":  [
+                         "Rebuilt native TV casting",
+                         "Added verified in-app APK updates",
+                         "Improved receiver playback security"
+                     ],
+    "apkUrl":  "/api/app/android/download/Flux-Android-v1.1.0.apk",
+    "sha256":  "1d45812f95ee7700639c52f10cc9d7ad1dd77c8b984760449d3e64138b0192a1",
+    "fileSize":  4788595
+}
