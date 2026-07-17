@@ -289,6 +289,88 @@ async function discardOtherSessions(baseKey: string, keepKey: string): Promise<v
   await Promise.all(stale.map(([key, session]) => discardSession(key, session)));
 }
 
+async function ensureHlsSessionReady(
+  mediaItemId: string,
+  episodeId: string | undefined,
+  audioStreamIndex: number | undefined,
+  startTimeSeconds: number,
+  log: Pick<FastifyInstance['log'], 'info' | 'error'>,
+  waitForRunway: boolean,
+): Promise<HlsSession> {
+  const baseKey = sessionBaseKey(mediaItemId, episodeId, audioStreamIndex);
+  const key = sessionKey(mediaItemId, episodeId, audioStreamIndex, startTimeSeconds);
+
+  let session = hlsSessions.get(key);
+  if (!session) {
+    const { filePath: sourceFile } = await getMediaFilePath(mediaItemId, episodeId);
+    session = hlsSessions.get(key);
+    if (!session) {
+      await discardOtherSessions(baseKey, key);
+      const sessionDir = safeJoin(config.TRANSCODE_ROOT, randomUUID());
+      await fs.promises.mkdir(sessionDir, { recursive: true });
+      const started = await spawnTranscode(
+        sourceFile,
+        sessionDir,
+        audioStreamIndex,
+        startTimeSeconds,
+      );
+      session = { dir: sessionDir, manifest: started.manifest, transcode: started.transcode };
+      hlsSessions.set(key, session);
+      log.info({
+        mediaItemId,
+        episodeId,
+        audioStreamIndex,
+        startTimeSeconds,
+        manifestType: started.manifest,
+      }, '[Cast/HLS] started transcode session');
+    }
+  }
+
+  let manifestPath = path.join(session.dir, session.manifest);
+  let ready = await pollForSessionFile(session, manifestPath, 40, 500);
+  if (!ready && session.manifest === 'master.m3u8') {
+    manifestPath = path.join(session.dir, 'index.m3u8');
+    ready = await pollForSessionFile(session, manifestPath, 8, 500);
+    if (ready) session.manifest = 'index.m3u8';
+  }
+  if (!ready) {
+    const failed = session.transcode.failure !== null;
+    log.error({
+      mediaItemId,
+      episodeId,
+      manifestType: session.manifest,
+      failed,
+      failure: session.transcode.failure,
+    }, '[Cast/HLS] manifest did not become ready');
+    await discardSession(key, session);
+    throw ApiError.badRequest(
+      failed
+        ? 'This file could not be transcoded. The failed session was reset; retry will start cleanly.'
+        : 'The transcode did not become ready in time. The session was reset; please retry.',
+      failed ? 'TRANSCODE_FAILED' : 'TRANSCODE_TIMEOUT',
+    );
+  }
+
+  if (waitForRunway) {
+    const segDir = session.manifest === 'master.m3u8' ? 'stream_0' : '.';
+    await pollForSessionFile(session, path.join(session.dir, segDir, 'segment_00002.ts'), 16, 500);
+    if (session.transcode.failure) {
+      log.error({
+        mediaItemId,
+        episodeId,
+        failure: session.transcode.failure,
+      }, '[Cast/HLS] transcode stopped before playback runway was ready');
+      await discardSession(key, session);
+      throw ApiError.badRequest(
+        'The transcode stopped before playback was ready. Retry to start a clean session.',
+        'TRANSCODE_FAILED',
+      );
+    }
+  }
+
+  return session;
+}
+
 // ── Routes ──────────────────────────────────────────────────────────────────
 
 export const streamingRoutes: FastifyPluginAsync = async (
@@ -382,6 +464,21 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const startTimeSeconds = parseStartTime(currentTime);
       if (decision.method === 'hls' && startTimeSeconds > 0) {
         qs.set('startTime', startTimeSeconds.toFixed(3));
+      }
+      if (decision.method === 'hls') {
+        request.log.info({
+          mediaItemId,
+          episodeId,
+          startTimeSeconds,
+        }, '[Cast/HLS] prewarming receiver session before media load');
+        await ensureHlsSessionReady(
+          mediaItemId,
+          episodeId,
+          undefined,
+          startTimeSeconds,
+          request.log,
+          true,
+        );
       }
 
       const pathPart = decision.method === 'direct'
