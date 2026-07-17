@@ -12,8 +12,6 @@ import {
   probeMedia,
   buildHlsFfmpegArgs,
   getPlaybackInfo,
-  decideCastPlayback,
-  getCastMediaMetadata,
 } from './streaming.service.js';
 import { buildAdaptiveHlsArgs } from '../../lib/adaptive-hls.js';
 import {
@@ -27,8 +25,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { signStreamToken } from '../../lib/jwt.js';
-import type { CastPlaybackInfoDTO } from '@flux/shared';
+import { isValidCastSession } from '../../lib/cast-sessions.js';
 
 // ── In-memory session tracking ──────────────────────────────────────────────
 // Maps a (mediaItemId, episodeId) pair → sessionDir so segment routes know
@@ -184,6 +181,29 @@ function spawnTrackedTranscode(args: string[]): TranscodeState {
   });
 
   return state;
+}
+
+function assertCastPlaybackAccess(
+  request: { castPlayback?: { castSessionId: string; mediaItemId: string; episodeId?: string; sub: string; activeProfileId?: string } },
+  mediaItemId: string,
+  episodeId?: string,
+): void {
+  const grant = request.castPlayback;
+  if (!grant) return;
+  if (!grant.activeProfileId || !isValidCastSession({
+    id: grant.castSessionId,
+    accountId: grant.sub,
+    profileId: grant.activeProfileId,
+    mediaItemId,
+    episodeId,
+  })) {
+    throw ApiError.forbidden('This Cast playback link is no longer valid', 'CAST_SESSION_INVALID');
+  }
+}
+
+function receiverCors(reply: { header: (name: string, value: string) => unknown }): void {
+  reply.header('Access-Control-Allow-Origin', '*');
+  reply.header('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
 }
 
 /**
@@ -384,6 +404,8 @@ export const streamingRoutes: FastifyPluginAsync = async (
     async (request, reply) => {
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { episodeId } = request.query as { episodeId?: string };
+      assertCastPlaybackAccess(request, mediaItemId, episodeId);
+      receiverCors(reply);
       const { filePath, mimeType, size } = await getMediaFilePath(mediaItemId, episodeId);
 
       const rangeHeader = request.headers.range;
@@ -440,78 +462,6 @@ export const streamingRoutes: FastifyPluginAsync = async (
 
   // ── GET /:mediaItemId/cast-info — receiver-safe URL + media metadata ─────
 
-  app.get(
-    '/:mediaItemId/cast-info',
-    { preHandler: [app.requireProfile] },
-    async (request): Promise<CastPlaybackInfoDTO> => {
-      const { mediaItemId } = request.params as { mediaItemId: string };
-      const { episodeId, currentTime } = request.query as {
-        episodeId?: string;
-        currentTime?: string;
-      };
-      const { filePath } = await getMediaFilePath(mediaItemId, episodeId);
-      const decision = await decideCastPlayback(filePath, mediaItemId, episodeId);
-      const metadata = await getCastMediaMetadata(mediaItemId, episodeId);
-      const { baseUrl, warnings } = publicApiBaseUrl(request);
-      const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
-      const token = signStreamToken({
-        sub: request.account!.id,
-        role: request.account!.role,
-        activeProfileId: request.activeProfileId!,
-      }, '2h');
-      const qs = new URLSearchParams({ token });
-      if (episodeId) qs.set('episodeId', episodeId);
-      const startTimeSeconds = parseStartTime(currentTime);
-      if (decision.method === 'hls' && startTimeSeconds > 0) {
-        qs.set('startTime', startTimeSeconds.toFixed(3));
-      }
-      if (decision.method === 'hls') {
-        request.log.info({
-          mediaItemId,
-          episodeId,
-          startTimeSeconds,
-        }, '[Cast/HLS] prewarming receiver session before media load');
-        await ensureHlsSessionReady(
-          mediaItemId,
-          episodeId,
-          undefined,
-          startTimeSeconds,
-          request.log,
-          true,
-        );
-      }
-
-      const pathPart = decision.method === 'direct'
-        ? `/api/stream/${encodeURIComponent(mediaItemId)}`
-        : `/api/stream/${encodeURIComponent(mediaItemId)}/hls/index.m3u8`;
-      const url = `${baseUrl}${pathPart}?${qs.toString()}`;
-
-      request.log.info({
-        mediaItemId,
-        episodeId,
-        method: decision.method,
-        contentType: decision.contentType,
-        videoCodec: decision.videoCodec,
-        audioCodec: decision.audioCodec,
-        reason: decision.reason,
-        warnings,
-      }, '[Cast] generated receiver playback URL');
-
-      return {
-        url,
-        contentType: decision.contentType,
-        streamType: 'BUFFERED',
-        method: decision.method,
-        title: metadata.title,
-        subtitle: metadata.subtitle,
-        posterUrl: posterUrlFromPath(metadata.posterPath),
-        durationSeconds: decision.durationSeconds,
-        expiresAt: expiresAt.toISOString(),
-        warnings,
-      };
-    },
-  );
-
   // ── GET /:mediaItemId/hls/index.m3u8 — HLS manifest (transcode on demand) ─
 
   app.get(
@@ -529,6 +479,8 @@ export const streamingRoutes: FastifyPluginAsync = async (
           ? Number(audioStream)
           : undefined;
       const startTimeSeconds = parseStartTime(startTime);
+      assertCastPlaybackAccess(request, mediaItemId, episodeId);
+      receiverCors(reply);
       const baseKey = sessionBaseKey(mediaItemId, episodeId, audioStreamIndex);
       const key = sessionKey(mediaItemId, episodeId, audioStreamIndex, startTimeSeconds);
       const token = streamToken(request);
@@ -648,6 +600,9 @@ export const streamingRoutes: FastifyPluginAsync = async (
           ? Number(audioStream)
           : undefined;
       const startTimeSeconds = parseStartTime(startTime);
+
+      assertCastPlaybackAccess(request, mediaItemId, episodeId);
+      receiverCors(reply);
 
       const key = sessionKey(mediaItemId, episodeId, audioStreamIndex, startTimeSeconds);
       const session = hlsSessions.get(key);

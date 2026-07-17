@@ -462,6 +462,7 @@ export interface PlaybackInfoDTO {
 }
 
 export interface CastPlaybackInfoDTO {
+  sessionId: string;
   url: string;
   contentType: 'video/mp4' | 'application/x-mpegURL';
   streamType: 'BUFFERED';
@@ -472,6 +473,21 @@ export interface CastPlaybackInfoDTO {
   durationSeconds: number | null;
   expiresAt: string;
   warnings: string[];
+}
+
+/** A Cast receiver-safe text track. URLs are scoped to one Cast session. */
+export interface CastSubtitleTrackDTO {
+  id: number;
+  language: string;
+  label: string;
+  mimeType: 'text/vtt';
+  url: string;
+}
+
+export interface CreateCastSessionRequest {
+  mediaItemId: string;
+  episodeId?: string;
+  positionSeconds?: number;
 }
 
 // ─── Requests (per-profile) ───────────────────────────────────────────────────
