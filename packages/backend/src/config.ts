@@ -30,6 +30,8 @@ const envSchema = z.object({
     (value) => value === '' ? undefined : value,
     z.string().url().optional(),
   ),
+  CAST_SESSION_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(7200),
+  ANDROID_RELEASE_ROOT: z.string().min(1).default('/data/releases/android'),
 
   MEDIA_ROOT: z.string().min(1).default('/data/media'),
   DOWNLOAD_ROOT: z.string().min(1).default('/data/downloads'),

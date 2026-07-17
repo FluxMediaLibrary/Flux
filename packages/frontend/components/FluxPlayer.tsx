@@ -9,6 +9,13 @@ import {
   type MediaPlayerInstance,
 } from '@vidstack/react';
 import { api } from '@/lib/api';
+
+declare global {
+  interface Window {
+    FLUX_NATIVE_APP?: boolean;
+    FluxNative?: { setPlaybackContext?: (payload: string) => void };
+  }
+}
 import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
 import { ControlBar } from './player/ControlBar';
 import { DebugOverlay } from './player/DebugOverlay';
@@ -296,7 +303,6 @@ function FluxMediaPlayer({
       keyDisabled
       streamType="on-demand"
       controlsDelay={2600}
-      googleCast={{}}
       onCanPlay={() => setPlaybackReady(true)}
       onPlay={() => {
         playbackStartedRef.current = true;
@@ -454,6 +460,17 @@ function FluxPlayerChrome({
       ? duration
       : 0;
   const absoluteCurrentTime = timelineOffset + (Number.isFinite(currentTime) ? currentTime : 0);
+
+  // Android owns the single Cast sender. The WebView only publishes the
+  // selected media and current position; it never renders a second Cast button.
+  useEffect(() => {
+    if (!window.FluxNative?.setPlaybackContext) return;
+    window.FluxNative.setPlaybackContext(JSON.stringify({
+      mediaItemId,
+      episodeId: episodeId ?? null,
+      currentTimeSeconds: Math.max(0, absoluteCurrentTime),
+    }));
+  }, [absoluteCurrentTime, episodeId, mediaItemId]);
 
   useEffect(() => {
     return () => {
@@ -727,9 +744,6 @@ function FluxPlayerChrome({
         onSeek={seekTo}
       />
       <ControlBar
-        mediaItemId={mediaItemId}
-        episodeId={episodeId}
-        castStartTimeSeconds={absoluteCurrentTime}
         durationSeconds={stableDuration || null}
         positionOffset={timelineOffset}
         onSeek={seekTo}
