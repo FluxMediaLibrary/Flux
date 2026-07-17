@@ -9,6 +9,27 @@
 // ─── Enums (mirror schema.prisma) ─────────────────────────────────────────────
 
 export type Role = 'ADMIN' | 'MEMBER';
+export type AdminPermission =
+  | 'MANAGE_LIBRARY'
+  | 'MANAGE_REQUESTS'
+  | 'MANAGE_DOWNLOADS'
+  | 'MANAGE_USERS'
+  | 'VIEW_SYSTEM'
+  | 'CHANGE_SETTINGS'
+  | 'VIEW_LOGS'
+  | 'RESTART_SERVICES'
+  | 'DELETE_MEDIA';
+export const ADMIN_PERMISSIONS: AdminPermission[] = [
+  'MANAGE_LIBRARY',
+  'MANAGE_REQUESTS',
+  'MANAGE_DOWNLOADS',
+  'MANAGE_USERS',
+  'VIEW_SYSTEM',
+  'CHANGE_SETTINGS',
+  'VIEW_LOGS',
+  'RESTART_SERVICES',
+  'DELETE_MEDIA',
+];
 export type MediaType = 'MOVIE' | 'SHOW';
 export type TorrentStatus =
   | 'PENDING_CONFIRM'
@@ -30,6 +51,7 @@ export interface AccountDTO {
   id: string;
   email: string;
   role: Role;
+  permissions: AdminPermission[];
   createdAt: string;
 }
 
@@ -808,4 +830,106 @@ export interface AdminBulkMediaAnalyzeResultDTO {
   analyzed: number;
   skipped: number;
   failed: number;
+}
+
+export type AdminHealthStatus = 'HEALTHY' | 'DEGRADED' | 'UNHEALTHY';
+export type AdminAttentionSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
+
+export interface AdminSignalDTO {
+  generatedAt: string;
+  status: AdminHealthStatus;
+  counts: {
+    pendingRequests: number;
+    activeDownloads: number;
+    failedDownloads: number;
+    libraryIssues: number;
+    activeStreams: number;
+  };
+  storagePercent: number | null;
+}
+
+export interface AdminAttentionItemDTO {
+  id: string;
+  severity: AdminAttentionSeverity;
+  kind:
+    | 'DOWNLOAD_FAILED'
+    | 'LIBRARY_BROKEN'
+    | 'METADATA_MISSING'
+    | 'ANALYSIS_MISSING'
+    | 'STORAGE_WARNING'
+    | 'SERVICE_OFFLINE'
+    | 'REQUEST_PENDING';
+  title: string;
+  detail: string;
+  href: string;
+  count: number;
+}
+
+export interface AdminActivityEventDTO {
+  id: string;
+  occurredAt: string;
+  actor: string;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  targetLabel: string | null;
+  result: 'SUCCESS' | 'FAILURE' | 'INFO';
+  details: string | null;
+}
+
+export interface AdminPlaybackSessionDTO {
+  id: string;
+  profileId: string;
+  profileName: string;
+  accountEmail: string;
+  mediaItemId: string | null;
+  episodeId: string | null;
+  title: string;
+  subtitle: string | null;
+  positionSeconds: number;
+  durationSeconds: number | null;
+  progress: number | null;
+  updatedAt: string;
+  state: 'ACTIVE' | 'RECENT';
+}
+
+export interface AdminOverviewDTO {
+  generatedAt: string;
+  signal: AdminSignalDTO;
+  stats: {
+    mediaItems: number;
+    users: number;
+    pendingRequests: number;
+    activeDownloads: number;
+    failedJobs: number;
+    activeStreams: number;
+    storageUsedBytes: number | null;
+    storageTotalBytes: number | null;
+  };
+  playback: AdminPlaybackSessionDTO[];
+  attention: AdminAttentionItemDTO[];
+  activity: AdminActivityEventDTO[];
+}
+
+export interface AdminUserDTO {
+  id: string;
+  email: string;
+  role: Role;
+  permissions: AdminPermission[];
+  disabled: boolean;
+  requestLimit: number | null;
+  streamLimit: number | null;
+  profiles: { id: string; name: string; avatar: string | null }[];
+  requestCount: number;
+  currentStreamCount: number;
+  lastActiveAt: string | null;
+  createdAt: string;
+}
+
+export interface UpdateAdminUserRequest {
+  role?: Role;
+  permissions?: AdminPermission[];
+  disabled?: boolean;
+  requestLimit?: number | null;
+  streamLimit?: number | null;
 }

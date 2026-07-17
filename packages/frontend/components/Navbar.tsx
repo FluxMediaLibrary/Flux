@@ -31,7 +31,8 @@ export function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { activeProfile, isAdmin, switchProfile, logout } = useAuth();
+  const { activeProfile, isAdmin, account, switchProfile, logout } = useAuth();
+  const adminAccess = isAdmin || (account?.permissions?.length ?? 0) > 0;
 
   const [menu, setMenu] = useState<null | 'nav' | 'profile'>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -74,7 +75,7 @@ export function Navbar() {
       window.FluxNative.checkForUpdates();
       return;
     }
-    if (isAdmin) {
+    if (isAdmin || account?.permissions?.includes('CHANGE_SETTINGS')) {
       router.push('/admin/settings#updates');
       return;
     }
@@ -113,11 +114,11 @@ export function Navbar() {
           <button className="nav-ic nav-ic--opt" aria-label="Users" onClick={() => router.push('/profiles')}>
             <IconUsers />
           </button>
-          {isAdmin && (
+          {adminAccess && (
             <button
               className="nav-ic nav-ic--opt"
               aria-label="Admin"
-              onClick={() => router.push('/admin/torrents')}
+              onClick={() => router.push('/admin/overview')}
               title="Admin"
             >
               <IconShield />
@@ -144,8 +145,8 @@ export function Navbar() {
           <div className="nav-menu" style={{ left: 18, right: 'auto' }} role="menu">
             <button onClick={() => { setMenu(null); router.push('/library'); }}>Library</button>
             <button onClick={() => { setMenu(null); router.push('/browse'); }}>Browse &amp; Request</button>
-            {isAdmin && (
-              <button onClick={() => { setMenu(null); router.push('/admin/torrents'); }}>Admin</button>
+            {adminAccess && (
+              <button onClick={() => { setMenu(null); router.push('/admin/overview'); }}>Admin</button>
             )}
           </div>
         )}

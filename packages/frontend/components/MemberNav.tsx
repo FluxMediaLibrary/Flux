@@ -15,7 +15,8 @@ const LINKS = [
 export function MemberNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { activeProfile, isAdmin, switchProfile, logout } = useAuth();
+  const { activeProfile, isAdmin, account, switchProfile, logout } = useAuth();
+  const adminAccess = isAdmin || (account?.permissions?.length ?? 0) > 0;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -61,9 +62,9 @@ export function MemberNav() {
               </Link>
             );
           })}
-          {isAdmin && (
+          {adminAccess && (
             <Link
-              href="/admin/torrents"
+              href="/admin/overview"
               className={
                 pathname.startsWith('/admin') ? 'navlink active' : 'navlink'
               }

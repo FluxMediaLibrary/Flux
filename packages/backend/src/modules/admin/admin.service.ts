@@ -613,6 +613,8 @@ export async function getAdminLibraryHealth(): Promise<AdminLibraryHealthDTO> {
           : undefined,
       }));
 
+      if (item.metadata == null) issues.push('TMDb metadata missing');
+
       if (item.type === 'MOVIE') {
         if (!item.filePath) {
           issues.push('No movie file');

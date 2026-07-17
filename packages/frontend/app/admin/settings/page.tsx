@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { NotificationSettingsDTO } from '@flux/shared';
+import { PageHeader } from '@/components/admin/AdminUI';
 
 type AndroidAppInfo = {
   versionName?: string;
@@ -119,8 +120,8 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <div>
-      <h1 style={{ fontSize: '1.9rem', marginBottom: 28 }}>Settings</h1>
+    <div className="control-page control-settings-page">
+      <PageHeader title="Settings" description="Server integrations, delivery channels, and Android application behavior." />
 
       {error && <div className="form-error">{error}</div>}
       {success && (

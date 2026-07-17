@@ -12,11 +12,12 @@ import type {
   MediaType,
 } from '@flux/shared';
 import { api, FluxApiError } from '@/lib/api';
+import { PageHeader } from '@/components/admin/AdminUI';
 
 const TMDB_POSTER = 'https://image.tmdb.org/t/p/w92';
 
 type TypeFilter = 'ALL' | MediaType;
-type IssueFilter = 'ALL' | 'ISSUES' | 'MISSING_FILES' | 'MISSING_ANALYSIS';
+type IssueFilter = 'ALL' | 'ISSUES' | 'MISSING_FILES' | 'BROKEN' | 'METADATA' | 'ANALYSIS';
 type RepairTarget = AdminLibraryAcquisitionTargetDTO & {
   item: AdminLibraryItemDTO;
   href: string;
@@ -32,7 +33,9 @@ const ISSUE_LABEL: Record<IssueFilter, string> = {
   ALL: 'Everything',
   ISSUES: 'Needs work',
   MISSING_FILES: 'Missing files',
-  MISSING_ANALYSIS: 'Missing analysis',
+  BROKEN: 'Broken',
+  METADATA: 'Metadata',
+  ANALYSIS: 'Analysis',
 };
 
 function parseTypeFilter(value: string | null): TypeFilter {
@@ -44,7 +47,9 @@ function parseIssueFilter(value: string | null): IssueFilter {
     value === 'ALL' ||
     value === 'ISSUES' ||
     value === 'MISSING_FILES' ||
-    value === 'MISSING_ANALYSIS'
+    value === 'BROKEN' ||
+    value === 'METADATA' ||
+    value === 'ANALYSIS'
   ) {
     return value;
   }
@@ -81,6 +86,8 @@ function itemMatchesIssue(item: AdminLibraryItemDTO, filter: IssueFilter): boole
   if (filter === 'ALL') return true;
   if (filter === 'ISSUES') return item.issues.length > 0;
   if (filter === 'MISSING_FILES') return hasMissingFiles(item);
+  if (filter === 'BROKEN') return item.fileExists === false || item.brokenEpisodes > 0;
+  if (filter === 'METADATA') return item.issues.some((issue) => issue.toLowerCase().includes('metadata'));
   return hasMissingAnalysis(item);
 }
 
@@ -130,7 +137,7 @@ function torrentPrefillHref(
     params.set('episode', String(episode));
   }
   if (requestId) params.set('request', requestId);
-  return `/admin/torrents?${params.toString()}`;
+  return `/admin/downloads?${params.toString()}`;
 }
 
 function buildRepairTargets(items: AdminLibraryItemDTO[]): RepairTarget[] {
@@ -327,18 +334,12 @@ export default function AdminLibraryPage() {
   }
 
   return (
-    <div className="admin-library">
-      <div className="section-head">
-        <div>
-          <h1>Library</h1>
-          <p className="muted" style={{ margin: 0 }}>
-            File availability, episode coverage, and media analysis state.
-          </p>
-        </div>
-        <div className="admin-library-head-actions">
+    <div className="admin-library control-page">
+      <PageHeader title="Library" description="File availability, episode coverage, metadata, and media analysis state." actions={
+        <>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="control-button"
             onClick={() => void syncAllEpisodes()}
             disabled={bulkAction !== null}
           >
@@ -346,17 +347,17 @@ export default function AdminLibraryPage() {
           </button>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="control-button"
             onClick={() => void analyzeMissingMedia()}
             disabled={bulkAction !== null}
           >
             {bulkAction === 'analyze' ? 'Analyzing...' : 'Analyze missing'}
           </button>
-          <button type="button" className="btn btn-ghost" onClick={() => void load()} disabled={bulkAction !== null}>
+          <button type="button" className="control-button" onClick={() => void load()} disabled={bulkAction !== null}>
             Refresh
           </button>
-        </div>
-      </div>
+        </>
+      } />
 
       {error && <div className="form-error">{error}</div>}
       {notice && <div className="admin-notice">{notice}</div>}
@@ -396,7 +397,7 @@ export default function AdminLibraryPage() {
               ))}
             </div>
             <div className="toggle-group">
-              {(['ALL', 'ISSUES', 'MISSING_FILES', 'MISSING_ANALYSIS'] as const).map((option) => (
+              {(['ALL', 'ISSUES', 'MISSING_FILES', 'BROKEN', 'METADATA', 'ANALYSIS'] as const).map((option) => (
                 <button
                   key={option}
                   type="button"

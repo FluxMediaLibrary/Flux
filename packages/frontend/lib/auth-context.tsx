@@ -116,7 +116,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const claims = effective ? decodeJwt(effective) : null;
     setActiveProfileId(claims?.activeProfileId ?? null);
     setStatus('authenticated');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function persistAuth(token: string, acct: AccountDTO, profs: ProfileDTO[]) {

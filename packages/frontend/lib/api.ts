@@ -5,6 +5,11 @@ import type {
   AdminBulkMediaAnalyzeResultDTO,
   AdminEpisodeSyncResultDTO,
   AdminInfoDTO,
+  AdminActivityEventDTO,
+  AdminOverviewDTO,
+  AdminPlaybackSessionDTO,
+  AdminSignalDTO,
+  AdminUserDTO,
   AdminLibraryHealthDTO,
   AdminLibraryRepairResultDTO,
   AdminMediaAnalyzeResultDTO,
@@ -37,6 +42,7 @@ import type {
   TorrentDTO,
   TorrentParseResult,
   UpdateNotificationSettingsRequest,
+  UpdateAdminUserRequest,
   WatchProgressDTO,
 } from '@flux/shared';
 
@@ -349,10 +355,10 @@ export const api = {
     return request<TorrentDTO>('/api/torrents/confirm', { body });
   },
   listTorrents(signal?: AbortSignal) {
-    return request<TorrentDTO[]>('/api/torrents', { signal });
+    return request<TorrentDTO[]>('/api/admin/downloads', { signal });
   },
   torrentHealth(signal?: AbortSignal) {
-    return request<TorrentClientHealthDTO>('/api/torrents/health', { signal });
+    return request<TorrentClientHealthDTO>('/api/admin/downloads/health', { signal });
   },
   getTorrent(id: string) {
     return request<TorrentDTO>(`/api/torrents/${encodeURIComponent(id)}`);
@@ -360,42 +366,42 @@ export const api = {
   /** Stop seeding (SEEDING → STOPPED). */
   stopTorrent(id: string) {
     return request<TorrentDTO>(
-      `/api/torrents/${encodeURIComponent(id)}/stop`,
+      `/api/admin/downloads/${encodeURIComponent(id)}/stop`,
       { method: 'POST' },
     );
   },
   retryTorrent(id: string) {
     return request<TorrentDTO>(
-      `/api/torrents/${encodeURIComponent(id)}/retry`,
+      `/api/admin/downloads/${encodeURIComponent(id)}/retry`,
       { method: 'POST' },
     );
   },
   /** Remove a torrent entirely. */
   removeTorrent(id: string) {
-    return request<void>(`/api/torrents/${encodeURIComponent(id)}`, {
+    return request<void>(`/api/admin/downloads/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
   },
 
   // Admin request management
   listAllRequests(signal?: AbortSignal) {
-    return request<RequestDTO[]>('/api/requests/admin', { signal });
+    return request<RequestDTO[]>('/api/admin/requests', { signal });
   },
   approveRequest(id: string) {
     return request<RequestDTO>(
-      `/api/requests/${encodeURIComponent(id)}/approve`,
+      `/api/admin/requests/${encodeURIComponent(id)}/approve`,
       { method: 'POST' },
     );
   },
   rejectRequest(id: string) {
     return request<RequestDTO>(
-      `/api/requests/${encodeURIComponent(id)}/reject`,
+      `/api/admin/requests/${encodeURIComponent(id)}/reject`,
       { method: 'POST' },
     );
   },
   syncFulfilledRequests() {
     return request<AdminRequestFulfillmentSyncResultDTO>(
-      '/api/requests/admin/sync-fulfilled',
+      '/api/admin/requests/sync-fulfilled',
       { method: 'POST' },
     );
   },
@@ -491,6 +497,30 @@ export const api = {
   getAdminInfo() {
     return request<AdminInfoDTO>('/api/admin/info');
   },
+  getAdminOverview() {
+    return request<AdminOverviewDTO>('/api/admin/overview');
+  },
+  getAdminSignal() {
+    return request<AdminSignalDTO>('/api/admin/signal');
+  },
+  getAdminSystem() {
+    return request<AdminInfoDTO>('/api/admin/system');
+  },
+  getAdminStorage() {
+    return request<AdminInfoDTO['storage']>('/api/admin/storage');
+  },
+  getAdminPlayback() {
+    return request<AdminPlaybackSessionDTO[]>('/api/admin/playback');
+  },
+  getAdminActivity(limit = 50) {
+    return request<AdminActivityEventDTO[]>(`/api/admin/activity?limit=${encodeURIComponent(String(limit))}`);
+  },
+  listAdminUsers() {
+    return request<AdminUserDTO[]>('/api/admin/users');
+  },
+  updateAdminUser(id: string, body: UpdateAdminUserRequest) {
+    return request<AdminUserDTO>(`/api/admin/users/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+  },
   getAdminLibrary() {
     return request<AdminLibraryHealthDTO>('/api/admin/library');
   },
@@ -532,5 +562,61 @@ export const api = {
     );
   },
 };
+
+/** One authenticated SSE connection replaces page-specific status polling. */
+export function subscribeAdminSignals(
+  onSignal: (signal: AdminSignalDTO) => void,
+  onConnectionChange?: (connected: boolean) => void,
+): () => void {
+  const controller = new AbortController();
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const connect = async (): Promise<void> => {
+    if (controller.signal.aborted || !BASE_URL) return;
+    try {
+      const token = getToken();
+      const response = await fetch(`${BASE_URL}/api/admin/events`, {
+        headers: {
+          Accept: 'text/event-stream',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      if (!response.ok || !response.body) throw new Error(`Live stream failed (${response.status})`);
+      onConnectionChange?.(true);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (!controller.signal.aborted) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() ?? '';
+        for (const event of events) {
+          const data = event.split('\n').find((line) => line.startsWith('data: '));
+          if (!data) continue;
+          try {
+            onSignal(JSON.parse(data.slice(6)) as AdminSignalDTO);
+          } catch {
+            // Ignore one malformed frame; the stream remains usable.
+          }
+        }
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      onConnectionChange?.(false);
+    }
+    if (!controller.signal.aborted) retryTimer = setTimeout(() => void connect(), 5_000);
+  };
+
+  void connect();
+  return () => {
+    controller.abort();
+    if (retryTimer) clearTimeout(retryTimer);
+    onConnectionChange?.(false);
+  };
+}
 
 export { BASE_URL as API_BASE_URL };

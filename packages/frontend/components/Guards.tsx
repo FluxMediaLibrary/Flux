@@ -52,18 +52,18 @@ export function RequireProfile({ children }: { children: ReactNode }) {
  * Requires auth + active profile + ADMIN role. Non-admins -> /library.
  */
 export function RequireAdmin({ children }: { children: ReactNode }) {
-  const { status, activeProfileId, isAdmin } = useAuth();
+  const { status, activeProfileId, isAdmin, account } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (status === 'anonymous') router.replace('/login');
     else if (status === 'authenticated') {
       if (!activeProfileId) router.replace('/profiles');
-      else if (!isAdmin) router.replace('/library');
+      else if (!isAdmin && (account?.permissions?.length ?? 0) === 0) router.replace('/library');
     }
-  }, [status, activeProfileId, isAdmin, router]);
+  }, [status, activeProfileId, isAdmin, account, router]);
 
-  if (status !== 'authenticated' || !activeProfileId || !isAdmin) {
+  if (status !== 'authenticated' || !activeProfileId || (!isAdmin && (account?.permissions?.length ?? 0) === 0)) {
     return <FullPageLoader />;
   }
   return <>{children}</>;

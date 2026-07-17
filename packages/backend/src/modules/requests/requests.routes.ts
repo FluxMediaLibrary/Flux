@@ -18,6 +18,7 @@ import {
   rejectRequest,
   syncFulfilledRequests,
 } from './requests.service.js';
+import { writeAuditEvent } from '../admin/admin-control.service.js';
 
 export const requestRoutes: FastifyPluginAsync = async (
   app: FastifyInstance,
@@ -40,29 +41,35 @@ export const requestRoutes: FastifyPluginAsync = async (
 
   // ── Admin routes (requireAdmin) — registered before parameterised routes ──
 
-  app.get('/admin', { preHandler: [app.requireAdmin] }, async () => {
+  app.get('/admin', { preHandler: [app.requirePermission('MANAGE_REQUESTS')] }, async () => {
     return listAllRequests();
   });
 
-  app.post('/admin/sync-fulfilled', { preHandler: [app.requireAdmin] }, async () => {
-    return syncFulfilledRequests();
+  app.post('/admin/sync-fulfilled', { preHandler: [app.requirePermission('MANAGE_REQUESTS')] }, async (request) => {
+    const result = await syncFulfilledRequests();
+    await writeAuditEvent({ actorId: request.account!.id, action: 'REQUESTS_SYNCED', targetType: 'REQUEST_QUEUE', details: result });
+    return result;
   });
 
   app.post(
     '/:id/approve',
-    { preHandler: [app.requireAdmin] },
+    { preHandler: [app.requirePermission('MANAGE_REQUESTS')] },
     async (request) => {
       const { id } = request.params as { id: string };
-      return approveRequest(id);
+      const result = await approveRequest(id);
+      await writeAuditEvent({ actorId: request.account!.id, action: 'REQUEST_APPROVED', targetType: 'REQUEST', targetId: id, targetLabel: result.title });
+      return result;
     },
   );
 
   app.post(
     '/:id/reject',
-    { preHandler: [app.requireAdmin] },
+    { preHandler: [app.requirePermission('MANAGE_REQUESTS')] },
     async (request) => {
       const { id } = request.params as { id: string };
-      return rejectRequest(id);
+      const result = await rejectRequest(id);
+      await writeAuditEvent({ actorId: request.account!.id, action: 'REQUEST_REJECTED', targetType: 'REQUEST', targetId: id, targetLabel: result.title });
+      return result;
     },
   );
 };
