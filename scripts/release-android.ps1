@@ -28,7 +28,7 @@ New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
 Copy-Item -LiteralPath $apk -Destination $destination -Force
 $hash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
 $size = (Get-Item -LiteralPath $destination).Length
-$releaseNotes = @('Fixed Android update checks with a static manifest fallback', 'Moved update controls into the web Settings tab', 'Removed the native top-left settings overlay')
+$releaseNotes = @('Moved update checks into the profile menu', 'Moved Cast into the media player controls', 'Removed the native top-right Cast overlay')
 $releaseDate = [DateTime]::UtcNow.ToString('o')
 $manifest = [ordered]@{
   versionCode = $code; versionName = $Version; minimumSupportedVersionCode = $MinimumSupportedVersionCode
