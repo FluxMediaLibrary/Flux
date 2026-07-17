@@ -6,6 +6,7 @@ import { UploadConfirm } from './UploadConfirm';
 import { TorrentDashboard } from './TorrentDashboard';
 import type { InitialTorrentMatch } from './UploadConfirm';
 import type { MediaType } from '@flux/shared';
+import { PageHeader } from '@/components/admin/AdminUI';
 
 /**
  * Admin torrent acquisition surface (spec §4.1):
@@ -23,10 +24,8 @@ export function TorrentsAdmin() {
   const refreshRef = useRef<() => void>(() => {});
 
   return (
-    <div className="torrents-page">
-      <div className="section-head">
-        <h1>Torrents</h1>
-      </div>
+    <div className="torrents-page control-page">
+      <PageHeader title="Downloads" description="Acquisition, transfer progress, processing, and failed job recovery." />
 
       <UploadConfirm
         initialRequestId={initialRequestId}

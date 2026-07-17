@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TorrentClientHealthDTO, TorrentDTO, TorrentStatus } from '@flux/shared';
 import { api, FluxApiError } from '@/lib/api';
+import { useAdminSignal } from '@/components/admin/AdminControlCenter';
+import { ConfirmDialog } from '@/components/admin/AdminUI';
 import {
   formatBytes,
   formatEta,
@@ -11,8 +13,6 @@ import {
   formatSince,
   formatSpeed,
 } from '@/lib/format';
-
-const POLL_MS = 2500;
 
 const STATUS_LABEL: Record<TorrentStatus, string> = {
   PENDING_CONFIRM: 'Pending',
@@ -59,6 +59,8 @@ export function TorrentDashboard({
   const [health, setHealth] = useState<TorrentClientHealthDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<TorrentDTO | null>(null);
+  const { signal } = useAdminSignal();
 
   // Keep a live ref so the polling interval always calls the latest loader.
   const loadRef = useRef<() => void>(() => {});
@@ -88,18 +90,18 @@ export function TorrentDashboard({
     loadRef.current = () => void load();
   }, [load]);
 
-  // Poll every ~2s. Abort the in-flight request and clear the interval on unmount.
+  // Load once. The shared admin SSE connection drives subsequent snapshots.
   useEffect(() => {
     const controller = new AbortController();
     void load(controller.signal);
-    const id = setInterval(() => {
-      void load(controller.signal);
-    }, POLL_MS);
     return () => {
-      clearInterval(id);
       controller.abort();
     };
   }, [load]);
+
+  useEffect(() => {
+    if (signal) void load();
+  }, [signal?.generatedAt, load]);
 
   // Expose a manual refresh (used right after a confirm).
   useEffect(() => {
@@ -135,16 +137,11 @@ export function TorrentDashboard({
   }
 
   async function remove(t: TorrentDTO) {
-    const requestNote = t.linkedRequest && t.linkedRequest.status !== 'FULFILLED'
-      ? ' The linked request will return to approved.'
-      : '';
-    if (!window.confirm(`Remove "${t.name}"? This stops seeding and removes the torrent.${requestNote}`)) {
-      return;
-    }
     setBusyId(t.id);
     try {
       await api.removeTorrent(t.id);
       setTorrents((prev) => (prev ?? []).filter((x) => x.id !== t.id));
+      setRemoveTarget(null);
     } catch (err) {
       setError(err instanceof FluxApiError ? err.message : 'Failed to remove torrent.');
     } finally {
@@ -158,7 +155,7 @@ export function TorrentDashboard({
         <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Active &amp; seeding</h2>
         {torrents !== null && (
           <span className="muted" style={{ fontSize: '0.85rem' }}>
-            Live · updates every {POLL_MS / 1000}s
+            Live · one shared server event stream
           </span>
         )}
       </div>
@@ -193,11 +190,21 @@ export function TorrentDashboard({
               busy={busyId === t.id}
               onStop={() => void stop(t)}
               onRetry={() => void retry(t)}
-              onRemove={() => void remove(t)}
+              onRemove={() => setRemoveTarget(t)}
             />
           ))}
         </div>
       )}
+      <ConfirmDialog
+        open={removeTarget !== null}
+        title="Remove this download?"
+        description={`This stops the torrent and removes its transfer record. Media already imported into the library is kept.${removeTarget?.linkedRequest && removeTarget.linkedRequest.status !== 'FULFILLED' ? ' The linked request will return to approved.' : ''}`}
+        confirmLabel="Remove download"
+        dangerous
+        busy={removeTarget ? busyId === removeTarget.id : false}
+        onClose={() => setRemoveTarget(null)}
+        onConfirm={() => { if (removeTarget) void remove(removeTarget); }}
+      />
     </section>
   );
 }

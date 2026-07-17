@@ -19,9 +19,10 @@ import type {
   FastifyRequest,
   preHandlerHookHandler,
 } from 'fastify';
-import type { Role } from '@flux/shared';
+import type { AdminPermission, Role } from '@flux/shared';
 import { verifyToken, type CastPlaybackClaims } from '../lib/jwt.js';
 import { ApiError } from '../lib/errors.js';
+import { prisma } from '../lib/db.js';
 
 export interface AuthedAccount {
   id: string;
@@ -38,6 +39,7 @@ declare module 'fastify' {
   interface FastifyInstance {
     requireAuth: preHandlerHookHandler;
     requireAdmin: preHandlerHookHandler;
+    requirePermission: (permission: AdminPermission) => preHandlerHookHandler;
     requireProfile: preHandlerHookHandler;
     /**
      * Like requireProfile, but also accepts the JWT via a `?token=` query
@@ -106,6 +108,16 @@ function applyClaims(request: FastifyRequest, token: string): void {
   }
 }
 
+async function ensureAccountEnabled(accountId: string): Promise<void> {
+  const account = await prisma.user.findUnique({
+    where: { id: accountId },
+    select: { disabled: true },
+  });
+  if (!account || account.disabled) {
+    throw ApiError.forbidden('This account is disabled', 'ACCOUNT_DISABLED');
+  }
+}
+
 const authPlugin = fp(async (app: FastifyInstance) => {
   // Ensure decorators exist so `request.account` is a known property.
   app.decorateRequest('account', undefined);
@@ -117,6 +129,7 @@ const authPlugin = fp(async (app: FastifyInstance) => {
     _reply: FastifyReply,
   ) => {
     authenticate(request);
+    await ensureAccountEnabled(request.account!.id);
   };
 
   const requireAdmin: preHandlerHookHandler = async (
@@ -124,8 +137,26 @@ const authPlugin = fp(async (app: FastifyInstance) => {
     _reply: FastifyReply,
   ) => {
     authenticate(request);
+    await ensureAccountEnabled(request.account!.id);
     if (request.account?.role !== 'ADMIN') {
       throw ApiError.forbidden('Admin role required');
+    }
+  };
+
+  const requirePermission = (permission: AdminPermission): preHandlerHookHandler => async (
+    request: FastifyRequest,
+    _reply: FastifyReply,
+  ) => {
+    authenticate(request);
+    const account = await prisma.user.findUnique({
+      where: { id: request.account!.id },
+      select: { role: true, permissions: true, disabled: true },
+    });
+    if (!account || account.disabled) {
+      throw ApiError.forbidden('This account is disabled', 'ACCOUNT_DISABLED');
+    }
+    if (account.role !== 'ADMIN' && !account.permissions.includes(permission)) {
+      throw ApiError.forbidden(`Permission required: ${permission}`, 'PERMISSION_REQUIRED');
     }
   };
 
@@ -134,6 +165,7 @@ const authPlugin = fp(async (app: FastifyInstance) => {
     _reply: FastifyReply,
   ) => {
     authenticate(request);
+    await ensureAccountEnabled(request.account!.id);
     if (!request.activeProfileId) {
       throw ApiError.forbidden(
         'No active profile selected. Activate a profile first.',
@@ -157,6 +189,7 @@ const authPlugin = fp(async (app: FastifyInstance) => {
 
   app.decorate('requireAuth', requireAuth);
   app.decorate('requireAdmin', requireAdmin);
+  app.decorate('requirePermission', requirePermission);
   app.decorate('requireProfile', requireProfile);
   app.decorate('requireProfileStream', requireProfileStream);
 });

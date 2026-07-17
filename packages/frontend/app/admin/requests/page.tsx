@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import type { RequestDTO, RequestStatus, TorrentStatus } from '@flux/shared';
 import { api, FluxApiError } from '@/lib/api';
+import { PageHeader } from '@/components/admin/AdminUI';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -110,7 +111,7 @@ function torrentFulfillHref(request: RequestDTO): string {
   if (request.mediaType === 'SHOW' && request.season && request.episode) {
     params.set('episode', String(request.episode));
   }
-  return `/admin/torrents?${params.toString()}`;
+  return `/admin/downloads?${params.toString()}`;
 }
 
 function torrentPillClass(status: TorrentStatus): string {
@@ -231,23 +232,17 @@ export default function AdminRequestsPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div>
-      <div className="section-head">
-        <div>
-          <h1>Member Requests</h1>
-          <p className="muted" style={{ margin: 0 }}>
-            Approvals, acquisition handoff, and stale fulfillment repair.
-          </p>
-        </div>
+    <div className="control-page">
+      <PageHeader title="Requests" description="Review, approve, reject, and hand requests into acquisition." actions={
         <button
           type="button"
-          className="btn btn-ghost"
+          className="control-button"
           onClick={() => void syncFulfilled()}
           disabled={syncingFulfilled}
         >
           {syncingFulfilled ? 'Checking...' : 'Sync fulfilled'}
         </button>
-      </div>
+      } />
 
       {/* Filter tabs */}
       <div className="toggle-group" style={{ marginBottom: 20 }}>

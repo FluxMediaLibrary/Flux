@@ -28,6 +28,7 @@ import { torrentFilePath } from '../../lib/media-paths.js';
 import { writeFile, readFile } from 'node:fs/promises';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { writeAuditEvent } from '../admin/admin-control.service.js';
 
 export const torrentRoutes: FastifyPluginAsync = async (
   app: FastifyInstance,
@@ -36,7 +37,7 @@ export const torrentRoutes: FastifyPluginAsync = async (
     limits: { fileSize: 2 * 1024 * 1024 }, // 2 MiB — .torrent files are tiny
   });
 
-  app.addHook('preHandler', app.requireAdmin);
+  app.addHook('preHandler', app.requirePermission('MANAGE_DOWNLOADS'));
 
   app.get('/health', async () => {
     return getTorrentClientHealth();
@@ -77,7 +78,9 @@ export const torrentRoutes: FastifyPluginAsync = async (
       await markTorrentStartFailed(dto.id, err);
     }
 
-    return getTorrent(dto.id);
+    const result = await getTorrent(dto.id);
+    await writeAuditEvent({ actorId: request.account!.id, action: 'DOWNLOAD_CREATED', targetType: 'TORRENT', targetId: result.id, targetLabel: result.name });
+    return result;
   });
 
   // ─── GET / — list all torrents ────────────────────────────────────────
@@ -94,12 +97,16 @@ export const torrentRoutes: FastifyPluginAsync = async (
   // ─── POST /:id/stop — stop seeding ────────────────────────────────────
   app.post('/:id/stop', async (request) => {
     const { id } = request.params as { id: string };
-    return stopTorrent(id);
+    const result = await stopTorrent(id);
+    await writeAuditEvent({ actorId: request.account!.id, action: 'DOWNLOAD_STOPPED', targetType: 'TORRENT', targetId: id, targetLabel: result.name });
+    return result;
   });
 
   app.post('/:id/retry', async (request) => {
     const { id } = request.params as { id: string };
-    return retryTorrentDownload(id);
+    const result = await retryTorrentDownload(id);
+    await writeAuditEvent({ actorId: request.account!.id, action: 'DOWNLOAD_RETRIED', targetType: 'TORRENT', targetId: id, targetLabel: result.name });
+    return result;
   });
 
   // ─── DELETE /:id — remove torrent ─────────────────────────────────────
@@ -108,6 +115,7 @@ export const torrentRoutes: FastifyPluginAsync = async (
     const { deleteFiles } = request.query as { deleteFiles?: string };
     const shouldDelete = deleteFiles === 'true';
     await removeTorrentById(id, shouldDelete);
+    await writeAuditEvent({ actorId: request.account!.id, action: shouldDelete ? 'DOWNLOAD_FILES_DELETED' : 'DOWNLOAD_REMOVED', targetType: 'TORRENT', targetId: id });
     return reply.status(204).send();
   });
 };
