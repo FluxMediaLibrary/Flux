@@ -26,6 +26,11 @@ final class FluxNativeBridge {
     }
 
     @JavascriptInterface
+    public void requestCast() {
+        main.post(activity::requestCastFromWeb);
+    }
+
+    @JavascriptInterface
     public boolean isNativeApp() { return true; }
 
     @JavascriptInterface

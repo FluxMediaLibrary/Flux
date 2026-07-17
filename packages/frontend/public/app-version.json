@@ -1,17 +1,17 @@
 ﻿{
-    "versionCode":  6,
-    "versionName":  "1.1.1",
+    "versionCode":  7,
+    "versionName":  "1.1.2",
     "minimumSupportedVersionCode":  4,
     "mandatory":  false,
-    "releaseDate":  "2026-07-17T17:50:53.9654905Z",
+    "releaseDate":  "2026-07-17T21:12:50.0805045Z",
     "url":  "/flux.apk",
     "apkUrl":  "/flux.apk",
-    "sha256":  "1919b76eeabd9beb8b59bc6e0985239324494b839d9050677c070f6a97874c9b",
-    "fileSize":  4788804,
+    "sha256":  "a5d8173e69393352e5ba893c7ac37370b5ae8588f4cd8b75c26ef25c28d2ed10",
+    "fileSize":  4788280,
     "releaseNotes":  [
-                         "Fixed Android update checks with a static manifest fallback",
-                         "Moved update controls into the web Settings tab",
-                         "Removed the native top-left settings overlay"
+                         "Moved update checks into the profile menu",
+                         "Moved Cast into the media player controls",
+                         "Removed the native top-right Cast overlay"
                      ],
     "notes":  "Latest Flux app build."
 }

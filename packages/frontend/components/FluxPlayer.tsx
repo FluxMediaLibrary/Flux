@@ -16,6 +16,7 @@ declare global {
     FluxNative?: {
       isNativeApp?: () => boolean;
       getAppInfo?: () => string;
+      requestCast?: () => void;
       checkForUpdates?: () => void;
       setAutomaticUpdates?: (enabled: boolean) => void;
       clearUpdateDownloads?: () => void;

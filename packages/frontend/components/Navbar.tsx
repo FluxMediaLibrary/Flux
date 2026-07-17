@@ -6,6 +6,21 @@ import { useAuth } from '@/lib/auth-context';
 import { SearchOverlay } from '@/components/SearchOverlay';
 import { Avatar } from '@/components/Avatar';
 
+declare global {
+  interface Window {
+    FLUX_NATIVE_APP?: boolean;
+    FluxNative?: {
+      isNativeApp?: () => boolean;
+      checkForUpdates?: () => void;
+      getAppInfo?: () => string;
+      requestCast?: () => void;
+      setAutomaticUpdates?: (enabled: boolean) => void;
+      clearUpdateDownloads?: () => void;
+      setPlaybackContext?: (payload: string) => void;
+    };
+  }
+}
+
 const TABS = [
   { label: 'Library', href: '/library', query: ''},
   { label: 'Movies', href: '/library', query: 'movie' },
@@ -20,6 +35,7 @@ export function Navbar() {
 
   const [menu, setMenu] = useState<null | 'nav' | 'profile'>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [nativeApp, setNativeApp] = useState(false);
   const barRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -28,6 +44,10 @@ export function Navbar() {
     }
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  useEffect(() => {
+    setNativeApp(Boolean(window.FLUX_NATIVE_APP || window.FluxNative?.isNativeApp?.()));
   }, []);
 
   const currentType = searchParams.get('type');
@@ -46,6 +66,19 @@ export function Navbar() {
   const go = (t: (typeof TABS)[number]) => {
     setMenu(null);
     router.push(`${t.href}?type=${t.query}`);
+  };
+
+  const handleUpdates = () => {
+    setMenu(null);
+    if (nativeApp && window.FluxNative?.checkForUpdates) {
+      window.FluxNative.checkForUpdates();
+      return;
+    }
+    if (isAdmin) {
+      router.push('/admin/settings#updates');
+      return;
+    }
+    window.location.href = '/flux.apk';
   };
 
   return (
@@ -93,15 +126,6 @@ export function Navbar() {
           <button className="nav-ic" aria-label="Search" onClick={() => setSearchOpen(true)}>
             <IconSearch />
           </button>
-          <a
-            className="nav-ic"
-            href="/flux.apk"
-            download
-            aria-label="Download Android app"
-            title="Download Android app"
-          >
-            <IconAndroid />
-          </a>
           <button
             className="nav-ic"
             aria-label="Profile"
@@ -128,6 +152,9 @@ export function Navbar() {
 
         {menu === 'profile' && (
           <div className="nav-menu" role="menu">
+            <button onClick={handleUpdates}>
+              {nativeApp ? 'Check for updates' : isAdmin ? 'Updates' : 'Download Android app'}
+            </button>
             <button onClick={() => { setMenu(null); switchProfile(); router.replace('/profiles'); }}>
               Switch profile
             </button>
@@ -150,9 +177,3 @@ const IconPlus = () => (<svg viewBox="0 0 24 24" {...ico}><path d="M12 5v14M5 12
 const IconUsers = () => (<svg viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3.2" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M17 5.2a3.2 3.2 0 0 1 0 5.6" /><path d="M18.5 14.2A6.5 6.5 0 0 1 21.5 20" /></svg>);
 const IconSearch = () => (<svg viewBox="0 0 24 24" {...ico}><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>);
 const IconShield = () => (<svg viewBox="0 0 24 24" {...ico}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>);
-const IconAndroid = () => (
-  <svg viewBox="0 0 24 24" {...ico}>
-    <path d="M12 3v12m0 0-4-4m4 4 4-4" />
-    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-  </svg>
-);

@@ -14,7 +14,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.Gravity;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -165,22 +164,10 @@ public final class MainActivity extends AppCompatActivity {
         root.addView(progressBar, progressParams);
 
         mediaRouteButton = new MediaRouteButton(this);
-        mediaRouteButton.setContentDescription("Cast");
-        FrameLayout.LayoutParams castParams = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.END);
-        castParams.setMargins(0, dp(8), dp(8), 0);
+        mediaRouteButton.setAlpha(0f);
+        mediaRouteButton.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        FrameLayout.LayoutParams castParams = new FrameLayout.LayoutParams(dp(1), dp(1), Gravity.BOTTOM | Gravity.START);
         root.addView(mediaRouteButton, castParams);
-        mediaRouteButton.setOnTouchListener((view, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_UP) {
-                if (playbackContext == null) {
-                    notifyCastError("Open a movie or episode before starting Cast");
-                } else {
-                    pendingCastContext = playbackContext;
-                    castLaunchRequested = true;
-                    notifyCastState("connecting", null);
-                }
-            }
-            return false;
-        });
 
         errorPanel = new LinearLayout(this);
         errorPanel.setOrientation(LinearLayout.VERTICAL);
@@ -229,10 +216,6 @@ public final class MainActivity extends AppCompatActivity {
             progressLayoutParams.topMargin = statusBars.top;
             progressBar.setLayoutParams(progressLayoutParams);
 
-            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) mediaRouteButton.getLayoutParams();
-            params.topMargin = statusBars.top + dp(6);
-            params.rightMargin = dp(8);
-            mediaRouteButton.setLayoutParams(params);
             errorPanel.setPadding(dp(28), statusBars.top + dp(28), dp(28), navigationBars.bottom + dp(28));
             return insets;
         });
@@ -318,6 +301,27 @@ public final class MainActivity extends AppCompatActivity {
     void updatePlaybackContext(NativePlaybackContext context) {
         playbackContext = context;
         Log.d(TAG, "Updated native playback context mediaId=" + context.mediaItemId + " episodeId=" + context.episodeId);
+    }
+
+    void requestCastFromWeb() {
+        if (playbackContext == null) {
+            notifyCastError("Open a movie or episode before starting Cast");
+            return;
+        }
+
+        pendingCastContext = playbackContext;
+        castLaunchRequested = true;
+        notifyCastState("connecting", null);
+
+        CastSession session = sessionManager != null ? sessionManager.getCurrentCastSession() : null;
+        if (session != null && session.isConnected()) {
+            loadPendingCastMedia();
+            return;
+        }
+
+        if (mediaRouteButton == null || !mediaRouteButton.performClick()) {
+            notifyCastError("Cast is unavailable on this device");
+        }
     }
 
     private void loadPendingCastMedia() {
@@ -607,7 +611,6 @@ public final class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT
             ));
             webView.setVisibility(View.GONE);
-            mediaRouteButton.setVisibility(View.GONE);
             getWindow().getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_FULLSCREEN |
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
@@ -645,7 +648,6 @@ public final class MainActivity extends AppCompatActivity {
         root.removeView(fullscreenView);
         fullscreenView = null;
         webView.setVisibility(View.VISIBLE);
-        mediaRouteButton.setVisibility(View.VISIBLE);
         getWindow().getDecorView().setSystemUiVisibility(0);
         if (fullscreenCallback != null) {
             fullscreenCallback.onCustomViewHidden();
