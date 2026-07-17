@@ -58,11 +58,6 @@
         </activity>
 
         <activity
-            android:name=".SettingsActivity"
-            android:exported="false"
-            android:theme="@style/Theme.Flux" />
-
-        <activity
             android:name="com.google.android.gms.cast.framework.media.widget.ExpandedControllerActivity"
             android:exported="false"
             android:theme="@style/Theme.CastVideosExpandedController" />

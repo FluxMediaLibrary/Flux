@@ -1,6 +1,17 @@
-{
-  "versionCode": 4,
-  "versionName": "1.0.3",
-  "url": "/flux.apk",
-  "notes": "Latest Flux app build."
+﻿{
+    "versionCode":  6,
+    "versionName":  "1.1.1",
+    "minimumSupportedVersionCode":  4,
+    "mandatory":  false,
+    "releaseDate":  "2026-07-17T17:50:53.9654905Z",
+    "url":  "/flux.apk",
+    "apkUrl":  "/flux.apk",
+    "sha256":  "1919b76eeabd9beb8b59bc6e0985239324494b839d9050677c070f6a97874c9b",
+    "fileSize":  4788804,
+    "releaseNotes":  [
+                         "Fixed Android update checks with a static manifest fallback",
+                         "Moved update controls into the web Settings tab",
+                         "Removed the native top-left settings overlay"
+                     ],
+    "notes":  "Latest Flux app build."
 }

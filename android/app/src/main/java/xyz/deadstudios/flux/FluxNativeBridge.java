@@ -5,7 +5,9 @@ import android.os.Looper;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
 
-/** Narrow native bridge: web playback supplies context, native owns Cast. */
+import org.json.JSONObject;
+
+/** Narrow native bridge: web supplies playback/settings actions; native owns Cast and updates. */
 final class FluxNativeBridge {
     private final MainActivity activity;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -25,4 +27,34 @@ final class FluxNativeBridge {
 
     @JavascriptInterface
     public boolean isNativeApp() { return true; }
+
+    @JavascriptInterface
+    public String getAppInfo() {
+        try {
+            JSONObject info = new JSONObject();
+            info.put("versionName", BuildConfig.VERSION_NAME);
+            info.put("versionCode", BuildConfig.VERSION_CODE);
+            info.put("automaticUpdates", UpdateManager.areAutomaticUpdatesEnabled(activity));
+            info.put("updateServer", activity.getString(R.string.flux_api_base_url));
+            return info.toString();
+        } catch (Exception error) {
+            Log.w("FluxNativeBridge", "Could not build app info", error);
+            return "{}";
+        }
+    }
+
+    @JavascriptInterface
+    public void checkForUpdates() {
+        main.post(() -> UpdateManager.checkForUpdate(activity, true));
+    }
+
+    @JavascriptInterface
+    public void setAutomaticUpdates(boolean enabled) {
+        main.post(() -> UpdateManager.setAutomaticUpdatesEnabled(activity, enabled));
+    }
+
+    @JavascriptInterface
+    public void clearUpdateDownloads() {
+        main.post(() -> UpdateManager.clearDownloads(activity));
+    }
 }
