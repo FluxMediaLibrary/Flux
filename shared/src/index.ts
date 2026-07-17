@@ -461,6 +461,19 @@ export interface PlaybackInfoDTO {
   }[];
 }
 
+export interface CastPlaybackInfoDTO {
+  url: string;
+  contentType: 'video/mp4' | 'application/x-mpegURL';
+  streamType: 'BUFFERED';
+  method: 'direct' | 'hls';
+  title: string;
+  subtitle: string | null;
+  posterUrl: string | null;
+  durationSeconds: number | null;
+  expiresAt: string;
+  warnings: string[];
+}
+
 // ─── Requests (per-profile) ───────────────────────────────────────────────────
 
 export interface RequestDTO {

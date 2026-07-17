@@ -1,0 +1,7 @@
+<resources>
+    <color name="flux_bg">#0B1116</color>
+    <color name="flux_panel">#111A22</color>
+    <color name="flux_text">#FFFFFFFF</color>
+    <color name="flux_muted">#B8C4CF</color>
+    <color name="flux_accent">#55D6C2</color>
+</resources>

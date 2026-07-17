@@ -10,6 +10,7 @@ import type {
   AdminMediaAnalyzeResultDTO,
   ApiError,
   AuthResponse,
+  CastPlaybackInfoDTO,
   ConfirmTorrentRequest,
   CreateInviteRequest,
   CreateProfileRequest,
@@ -435,6 +436,23 @@ export const api = {
   getPlaybackInfo(mediaItemId: string, episodeId?: string, signal?: AbortSignal) {
     const qs = episodeId ? `?episodeId=${encodeURIComponent(episodeId)}` : '';
     return request<PlaybackInfoDTO>(`/api/stream/${encodeURIComponent(mediaItemId)}/info${qs}`, { signal });
+  },
+  getCastPlaybackInfo(
+    mediaItemId: string,
+    episodeId?: string,
+    currentTimeSeconds = 0,
+    signal?: AbortSignal,
+  ) {
+    const qs = new URLSearchParams();
+    if (episodeId) qs.set('episodeId', episodeId);
+    if (Number.isFinite(currentTimeSeconds) && currentTimeSeconds > 0) {
+      qs.set('currentTime', currentTimeSeconds.toFixed(3));
+    }
+    const q = qs.toString();
+    return request<CastPlaybackInfoDTO>(
+      `/api/stream/${encodeURIComponent(mediaItemId)}/cast-info${q ? `?${q}` : ''}`,
+      { signal },
+    );
   },
   getHlsUrl(
     mediaItemId: string,

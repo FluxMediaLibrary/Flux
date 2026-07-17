@@ -29,10 +29,12 @@ const SDK_SRC = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCast
 export interface CastMedia {
   url: string;
   contentType: string; // e.g. 'video/mp4' or 'application/x-mpegURL'
+  streamType?: 'BUFFERED' | 'LIVE' | 'OTHER';
   title: string;
   subtitle?: string;
   poster?: string;
   currentTime?: number;
+  durationSeconds?: number | null;
 }
 
 export interface CastState {
@@ -47,6 +49,7 @@ export interface CastState {
   isPlaying: boolean;
   currentTime: number;
   duration: number;
+  lastError: string | null;
 }
 
 type Listener = (s: CastState) => void;
@@ -79,7 +82,35 @@ const state: CastState = {
   isPlaying: false,
   currentTime: 0,
   duration: 0,
+  lastError: null,
 };
+
+function log(message: string, details?: unknown) {
+  if (details === undefined) console.info(`[Cast] ${message}`);
+  else console.info(`[Cast] ${message}`, details);
+}
+
+function warn(message: string, details?: unknown) {
+  if (details === undefined) console.warn(`[Cast] ${message}`);
+  else console.warn(`[Cast] ${message}`, details);
+}
+
+function fail(message: string, details?: unknown) {
+  state.lastError = message;
+  if (details === undefined) console.error(`[Cast] ${message}`);
+  else console.error(`[Cast] ${message}`, details);
+  emit();
+}
+
+function redactToken(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.searchParams.has('token')) parsed.searchParams.set('token', '[redacted]');
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
 
 function emit() {
   const snapshot = { ...state };
@@ -102,6 +133,7 @@ function refreshFromContext() {
   state.connected = castState === 'CONNECTED';
   const session = context.getCurrentSession();
   state.deviceName = session?.getCastDevice?.()?.friendlyName ?? null;
+  log('state changed', { castState, deviceName: state.deviceName });
   emit();
 }
 
@@ -115,10 +147,17 @@ function wireRemotePlayer() {
   remoteController.addEventListener(RPET.MEDIA_INFO_CHANGED, () => {
     state.hasMedia = !!remotePlayer.mediaInfo;
     state.duration = remotePlayer.duration || 0;
+    log('media info changed', {
+      hasMedia: state.hasMedia,
+      duration: state.duration,
+      contentId: remotePlayer.mediaInfo?.contentId,
+      contentType: remotePlayer.mediaInfo?.contentType,
+    });
     emit();
   });
   remoteController.addEventListener(RPET.IS_PAUSED_CHANGED, () => {
     state.isPlaying = !remotePlayer.isPaused;
+    log('playback state changed', { isPlaying: state.isPlaying });
     emit();
   });
   remoteController.addEventListener(RPET.CURRENT_TIME_CHANGED, () => {
@@ -136,13 +175,24 @@ function initContext() {
     receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
     autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
   });
+  log('context initialized', {
+    receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+    autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+  });
   context.addEventListener(
     cast.framework.CastContextEventType.CAST_STATE_CHANGED,
     refreshFromContext,
   );
   context.addEventListener(
     cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
-    refreshFromContext,
+    (event: any) => {
+      log('session state changed', {
+        sessionState: event.sessionState,
+        errorCode: event.errorCode,
+      });
+      if (event.errorCode) fail(`Session failed: ${event.errorCode}`, event);
+      refreshFromContext();
+    },
   );
   wireRemotePlayer();
   ready = true;
@@ -154,7 +204,9 @@ function ensureLoaded() {
   if (loaded || typeof window === 'undefined') return;
   loaded = true;
   window.__onGCastApiAvailable = (isAvailable: boolean) => {
+    log('SDK availability callback', { isAvailable });
     if (isAvailable) initContext();
+    else fail('Google Cast Web Sender SDK is not available in this browser');
   };
   // If the framework is somehow already present, init directly.
   if (window.cast?.framework) {
@@ -164,17 +216,24 @@ function ensureLoaded() {
   const script = document.createElement('script');
   script.src = SDK_SRC;
   script.async = true;
+  script.onerror = () => fail('Failed to load Google Cast Web Sender SDK', { src: SDK_SRC });
+  log('loading SDK', { src: SDK_SRC });
   document.head.appendChild(script);
 }
 
 /** Open the native device-picker dialog and connect. */
 export async function requestSession(): Promise<void> {
   const cast = castNs();
-  if (!cast?.framework) return;
+  if (!cast?.framework) {
+    fail('Cannot request Cast session before SDK initialization');
+    return;
+  }
   try {
+    log('requesting session');
     await cast.framework.CastContext.getInstance().requestSession();
-  } catch {
+  } catch (error) {
     // User dismissed the picker or no device chosen — nothing to do.
+    warn('session request did not connect', error);
   }
 }
 
@@ -182,6 +241,7 @@ export async function requestSession(): Promise<void> {
 export function endSession(): void {
   const cast = castNs();
   if (!cast?.framework) return;
+  log('ending current session');
   cast.framework.CastContext.getInstance().endCurrentSession(true);
 }
 
@@ -189,12 +249,21 @@ export function endSession(): void {
 export async function loadMedia(media: CastMedia): Promise<void> {
   const cast = castNs();
   const chrome = chromeNs();
-  if (!cast?.framework || !chrome?.cast) return;
+  if (!cast?.framework || !chrome?.cast) {
+    fail('Cannot load media before Cast SDK initialization');
+    return;
+  }
   const session = cast.framework.CastContext.getInstance().getCurrentSession();
-  if (!session) return;
+  if (!session) {
+    fail('Cannot load media because there is no active Cast session');
+    return;
+  }
 
   const mediaInfo = new chrome.cast.media.MediaInfo(media.url, media.contentType);
-  mediaInfo.streamType = chrome.cast.media.StreamType.BUFFERED;
+  mediaInfo.streamType = chrome.cast.media.StreamType[media.streamType ?? 'BUFFERED'];
+  if (media.durationSeconds && media.durationSeconds > 0) {
+    mediaInfo.duration = media.durationSeconds;
+  }
   const meta = new chrome.cast.media.GenericMediaMetadata();
   meta.title = media.title;
   if (media.subtitle) meta.subtitle = media.subtitle;
@@ -203,7 +272,23 @@ export async function loadMedia(media: CastMedia): Promise<void> {
 
   const request = new chrome.cast.media.LoadRequest(mediaInfo);
   if (media.currentTime) request.currentTime = media.currentTime;
-  await session.loadMedia(request);
+  request.autoplay = true;
+  log('loading media on receiver', {
+    title: media.title,
+    contentType: media.contentType,
+    streamType: media.streamType ?? 'BUFFERED',
+    currentTime: request.currentTime ?? 0,
+    url: redactToken(media.url),
+  });
+  try {
+    await session.loadMedia(request);
+    state.lastError = null;
+    log('receiver accepted media load');
+    emit();
+  } catch (error) {
+    fail('Receiver rejected media load', error);
+    throw error;
+  }
 }
 
 export function play(): void {

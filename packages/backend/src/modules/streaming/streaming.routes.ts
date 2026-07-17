@@ -12,6 +12,8 @@ import {
   probeMedia,
   buildHlsFfmpegArgs,
   getPlaybackInfo,
+  decideCastPlayback,
+  getCastMediaMetadata,
 } from './streaming.service.js';
 import { buildAdaptiveHlsArgs } from '../../lib/adaptive-hls.js';
 import {
@@ -25,6 +27,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { signStreamToken } from '../../lib/jwt.js';
+import type { CastPlaybackInfoDTO } from '@flux/shared';
 
 // ── In-memory session tracking ──────────────────────────────────────────────
 // Maps a (mediaItemId, episodeId) pair → sessionDir so segment routes know
@@ -62,6 +66,27 @@ function parseStartTime(value: string | undefined): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return 0;
   return Math.round(parsed * 1000) / 1000;
+}
+
+function publicApiBaseUrl(request: { protocol: string; headers: { host?: string } }): { baseUrl: string; warnings: string[] } {
+  const inferred = request.headers.host ? `${request.protocol}://${request.headers.host}` : '';
+  const baseUrl = (config.PUBLIC_API_BASE_URL ?? inferred).replace(/\/$/, '');
+  const warnings: string[] = [];
+  if (!baseUrl) {
+    throw ApiError.internal('Could not determine public API base URL for Cast playback', 'CAST_PUBLIC_URL_MISSING');
+  }
+  const url = new URL(baseUrl);
+  if (['localhost', '127.0.0.1', '::1'].includes(url.hostname)) {
+    warnings.push('Cast receivers cannot reach localhost URLs. Set PUBLIC_API_BASE_URL to an HTTPS/LAN API URL reachable by the TV.');
+  }
+  if (url.protocol !== 'https:' && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
+    warnings.push('Production Cast playback should use HTTPS. Some receiver/network combinations reject insecure media URLs.');
+  }
+  return { baseUrl, warnings };
+}
+
+function posterUrlFromPath(posterPath: string | null): string | null {
+  return posterPath ? `https://image.tmdb.org/t/p/w342${posterPath}` : null;
 }
 
 /**
@@ -283,6 +308,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
       if (rangeHeader) {
         const parsed = parseRange(rangeHeader, size);
         if (!parsed) {
+          request.log.warn({ mediaItemId, episodeId, rangeHeader, size }, '[Stream] invalid range request');
           return reply
             .status(416)
             .header('Content-Range', `bytes */${size}`)
@@ -299,6 +325,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
           .header('Content-Length', chunkSize)
           .header('Content-Type', mimeType);
 
+        request.log.info({ mediaItemId, episodeId, mimeType, start, end, size }, '[Stream] serving byte range');
         const stream = fs.createReadStream(filePath, { start, end });
         return reply.send(stream);
       }
@@ -310,6 +337,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
         .header('Content-Length', size)
         .header('Content-Type', mimeType);
 
+      request.log.info({ mediaItemId, episodeId, mimeType, size }, '[Stream] serving full file');
       const stream = fs.createReadStream(filePath);
       return reply.send(stream);
     },
@@ -325,6 +353,65 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const { episodeId } = request.query as { episodeId?: string };
       const { filePath } = await getMediaFilePath(mediaItemId, episodeId);
       return getPlaybackInfo(filePath, mediaItemId, episodeId);
+    },
+  );
+
+  // ── GET /:mediaItemId/cast-info — receiver-safe URL + media metadata ─────
+
+  app.get(
+    '/:mediaItemId/cast-info',
+    { preHandler: [app.requireProfile] },
+    async (request): Promise<CastPlaybackInfoDTO> => {
+      const { mediaItemId } = request.params as { mediaItemId: string };
+      const { episodeId, currentTime } = request.query as {
+        episodeId?: string;
+        currentTime?: string;
+      };
+      const { filePath } = await getMediaFilePath(mediaItemId, episodeId);
+      const decision = await decideCastPlayback(filePath, mediaItemId, episodeId);
+      const metadata = await getCastMediaMetadata(mediaItemId, episodeId);
+      const { baseUrl, warnings } = publicApiBaseUrl(request);
+      const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+      const token = signStreamToken({
+        sub: request.account!.id,
+        role: request.account!.role,
+        activeProfileId: request.activeProfileId!,
+      }, '2h');
+      const qs = new URLSearchParams({ token });
+      if (episodeId) qs.set('episodeId', episodeId);
+      const startTimeSeconds = parseStartTime(currentTime);
+      if (decision.method === 'hls' && startTimeSeconds > 0) {
+        qs.set('startTime', startTimeSeconds.toFixed(3));
+      }
+
+      const pathPart = decision.method === 'direct'
+        ? `/api/stream/${encodeURIComponent(mediaItemId)}`
+        : `/api/stream/${encodeURIComponent(mediaItemId)}/hls/index.m3u8`;
+      const url = `${baseUrl}${pathPart}?${qs.toString()}`;
+
+      request.log.info({
+        mediaItemId,
+        episodeId,
+        method: decision.method,
+        contentType: decision.contentType,
+        videoCodec: decision.videoCodec,
+        audioCodec: decision.audioCodec,
+        reason: decision.reason,
+        warnings,
+      }, '[Cast] generated receiver playback URL');
+
+      return {
+        url,
+        contentType: decision.contentType,
+        streamType: 'BUFFERED',
+        method: decision.method,
+        title: metadata.title,
+        subtitle: metadata.subtitle,
+        posterUrl: posterUrlFromPath(metadata.posterPath),
+        durationSeconds: decision.durationSeconds,
+        expiresAt: expiresAt.toISOString(),
+        warnings,
+      };
     },
   );
 
@@ -379,6 +466,13 @@ export const streamingRoutes: FastifyPluginAsync = async (
           manifestType = started.manifest;
           session = { dir: sessionDir, manifest: manifestType, transcode: started.transcode };
           hlsSessions.set(key, session);
+          request.log.info({
+            mediaItemId,
+            episodeId,
+            audioStreamIndex,
+            startTimeSeconds,
+            manifestType,
+          }, '[Cast/HLS] started transcode session');
         }
       } else {
         manifestType = session.manifest;
@@ -399,6 +493,13 @@ export const streamingRoutes: FastifyPluginAsync = async (
       }
       if (!ready) {
         const failed = session.transcode.failure !== null;
+        request.log.error({
+          mediaItemId,
+          episodeId,
+          manifestType,
+          failed,
+          failure: session.transcode.failure,
+        }, '[Cast/HLS] manifest did not become ready');
         await discardSession(key, session);
         throw ApiError.badRequest(
           failed
@@ -415,6 +516,11 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const segDir = manifestType === 'master.m3u8' ? 'stream_0' : '.';
       await pollForSessionFile(session, path.join(session.dir, segDir, 'segment_00002.ts'), 16, 500);
       if (session.transcode.failure) {
+        request.log.error({
+          mediaItemId,
+          episodeId,
+          failure: session.transcode.failure,
+        }, '[Cast/HLS] transcode stopped before playback runway was ready');
         await discardSession(key, session);
         throw ApiError.badRequest(
           'The transcode stopped before playback was ready. Retry to start a clean session.',
@@ -422,6 +528,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
         );
       }
 
+      request.log.info({ mediaItemId, episodeId, manifestType, startTimeSeconds }, '[Cast/HLS] serving manifest');
       return sendManifest(fs.readFileSync(manifestPath, 'utf-8'));
     },
   );
@@ -465,6 +572,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
         await pollForFile(filePath, 30, 500);
       }
       if (!fs.existsSync(filePath)) {
+        request.log.warn({ mediaItemId, episodeId, relPath }, '[Cast/HLS] requested segment was not found');
         throw ApiError.notFound('HLS segment not found');
       }
 
@@ -494,6 +602,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
           .send(tokenized);
       }
 
+      request.log.debug({ mediaItemId, episodeId, relPath, contentType }, '[Cast/HLS] serving segment');
       const stream = fs.createReadStream(filePath);
       return reply
         .header('Content-Type', contentType)

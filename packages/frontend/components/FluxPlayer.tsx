@@ -463,6 +463,15 @@ function FluxPlayerChrome({
   }, []);
 
   useEffect(() => {
+    const pauseForNativeCast = () => {
+      onPlaybackIntent(false);
+      remote.pause();
+    };
+    document.addEventListener('flux:native-cast-local-pause', pauseForNativeCast);
+    return () => document.removeEventListener('flux:native-cast-local-pause', pauseForNativeCast);
+  }, [onPlaybackIntent, remote]);
+
+  useEffect(() => {
     onPlaybackStateChange({ paused, started });
   }, [onPlaybackStateChange, paused, started]);
 
@@ -718,6 +727,9 @@ function FluxPlayerChrome({
         onSeek={seekTo}
       />
       <ControlBar
+        mediaItemId={mediaItemId}
+        episodeId={episodeId}
+        castStartTimeSeconds={absoluteCurrentTime}
         durationSeconds={stableDuration || null}
         positionOffset={timelineOffset}
         onSeek={seekTo}

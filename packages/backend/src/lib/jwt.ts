@@ -21,6 +21,11 @@ export function signToken(claims: JwtClaims): string {
   return jwt.sign({ ...claims }, config.JWT_SECRET, options);
 }
 
+/** Sign a short-lived token for browserless media clients such as Cast receivers. */
+export function signStreamToken(claims: JwtClaims, expiresIn: SignOptions['expiresIn'] = '2h'): string {
+  return jwt.sign({ ...claims, purpose: 'stream' }, config.JWT_SECRET, { expiresIn });
+}
+
 /** Verify + decode a JWT. Throws if invalid/expired. */
 export function verifyToken(token: string): DecodedClaims {
   const decoded = jwt.verify(token, config.JWT_SECRET);

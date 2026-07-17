@@ -21,6 +21,15 @@ const envSchema = z.object({
 
   BACKEND_PORT: z.coerce.number().int().positive().default(4000),
   FRONTEND_ORIGIN: z.string().url().default('http://localhost:3000'),
+  /**
+   * Absolute backend origin reachable by Cast receivers / smart TVs.
+   * Leave unset to infer from the incoming request, but production casting
+   * should set this to the HTTPS API URL instead of localhost.
+   */
+  PUBLIC_API_BASE_URL: z.preprocess(
+    (value) => value === '' ? undefined : value,
+    z.string().url().optional(),
+  ),
 
   MEDIA_ROOT: z.string().min(1).default('/data/media'),
   DOWNLOAD_ROOT: z.string().min(1).default('/data/downloads'),

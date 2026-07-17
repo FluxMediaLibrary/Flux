@@ -158,6 +158,16 @@ export interface PlaybackDecision {
   durationSeconds: number | null;
 }
 
+export interface CastPlaybackDecision {
+  /** Chromecast-friendly direct MP4, otherwise route through HLS. */
+  method: 'direct' | 'hls';
+  contentType: 'video/mp4' | 'application/x-mpegURL';
+  videoCodec: string | null;
+  audioCodec: string | null;
+  durationSeconds: number | null;
+  reason: string;
+}
+
 function mapMediaStream(row: MediaStream): MediaStreamDTO {
   return {
     id: row.id,
@@ -280,6 +290,73 @@ export async function decidePlayback(
     videoCodec: probe.videoCodec,
     audioCodec: probe.audioCodec,
     durationSeconds: probe.durationSeconds,
+  };
+}
+
+/**
+ * Chromecast built-in receivers are stricter than desktop browsers. Prefer
+ * direct play only for broadly supported MP4/H.264/AAC sources; everything else
+ * goes through Flux's HLS remux/transcode path.
+ */
+export async function decideCastPlayback(
+  filePath: string,
+  mediaItemId: string,
+  episodeId?: string,
+): Promise<CastPlaybackDecision> {
+  const decision = await decidePlayback(filePath, mediaItemId, episodeId);
+  const ext = path.extname(filePath).toLowerCase();
+  const containerOk = ext === '.mp4' || ext === '.m4v';
+  const videoOk = decision.videoCodec === 'h264';
+  const audioOk = decision.audioCodec === null || decision.audioCodec === 'aac';
+
+  if (containerOk && videoOk && audioOk) {
+    return {
+      method: 'direct',
+      contentType: 'video/mp4',
+      videoCodec: decision.videoCodec,
+      audioCodec: decision.audioCodec,
+      durationSeconds: decision.durationSeconds,
+      reason: 'MP4/H.264/AAC is supported by the default Cast receiver',
+    };
+  }
+
+  return {
+    method: 'hls',
+    contentType: 'application/x-mpegURL',
+    videoCodec: decision.videoCodec,
+    audioCodec: decision.audioCodec,
+    durationSeconds: decision.durationSeconds,
+    reason: `Cast receiver fallback: container=${ext || 'unknown'} video=${decision.videoCodec ?? 'unknown'} audio=${decision.audioCodec ?? 'none'}`,
+  };
+}
+
+export async function getCastMediaMetadata(
+  mediaItemId: string,
+  episodeId?: string,
+): Promise<{ title: string; subtitle: string | null; posterPath: string | null }> {
+  if (episodeId) {
+    const item = await prisma.mediaItem.findUnique({
+      where: { id: mediaItemId },
+      include: { episodes: { where: { id: episodeId }, take: 1 } },
+    });
+    if (!item) throw ApiError.notFound('Media item not found');
+    const episode = item.episodes[0];
+    if (!episode) throw ApiError.notFound('Episode not found');
+
+    return {
+      title: item.title,
+      subtitle: `S${episode.season} E${episode.episode}${episode.title ? ` - ${episode.title}` : ''}`,
+      posterPath: item.posterPath,
+    };
+  }
+
+  const item = await prisma.mediaItem.findUnique({ where: { id: mediaItemId } });
+  if (!item) throw ApiError.notFound('Media item not found');
+
+  return {
+    title: item.title,
+    subtitle: null,
+    posterPath: item.posterPath,
   };
 }
 

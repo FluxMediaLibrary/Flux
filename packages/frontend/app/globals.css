@@ -27,6 +27,7 @@
   --glass-blur: blur(18px);
   --ease: cubic-bezier(.2,.8,.2,1);
   --maxw: 1280px;
+  --safe-top: env(safe-area-inset-top, 0px);
   font-synthesis: none;
 }
 
@@ -311,6 +312,7 @@ label {
   position: sticky;
   top: 0;
   z-index: 50;
+  padding-top: var(--safe-top);
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--surface-border);
@@ -4466,6 +4468,40 @@ media-player.fx-player .fx-scrub-time {
   outline-offset: 2px;
 }
 .fx-player .fx-btn.active { color: var(--accent-2); }
+.fx-player .fx-cast-launcher {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border-radius: 999px;
+  color: rgba(255,255,255,.92);
+  cursor: pointer;
+  transition: background .15s var(--ease), color .15s var(--ease), transform .12s var(--ease);
+}
+.fx-player .fx-cast-launcher:hover {
+  background: rgba(255,255,255,.14);
+  color: #fff;
+}
+.fx-player .fx-cast-launcher:active { transform: scale(.92); }
+.fx-player .fx-cast-launcher.is-connected { color: var(--accent-2); }
+.fx-player .fx-cast-native {
+  width: 24px;
+  height: 24px;
+  --connected-color: var(--accent-2);
+  --disconnected-color: currentColor;
+}
+.fx-player .fx-cast-fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.fx-player .fx-cast-native:not(:defined) + .fx-cast-fallback { display: inline-flex; }
 .fx-player .fx-vol {
   display: flex;
   align-items: center;
@@ -4649,6 +4685,11 @@ media-player.fx-player .fx-scrub-time {
     height: 34px;
     min-width: 34px;
   }
+  .fx-player .fx-cast-launcher {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+  }
   .fx-player .fx-time {
     margin-left: 4px;
     font-size: .76rem;
@@ -4705,7 +4746,7 @@ html { scroll-behavior: smooth; }
   display: flex;
   align-items: center;
   gap: 22px;
-  padding: 14px 26px;
+  padding: calc(14px + var(--safe-top)) 26px 14px;
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -5048,7 +5089,7 @@ html { scroll-behavior: smooth; }
 .state-center { text-align: center; color: var(--text-muted); padding: 70px 20px; }
 
 @media (max-width: 900px) {
-  .navbar { gap: 14px; padding: 12px 18px; }
+  .navbar { gap: 14px; padding: calc(12px + var(--safe-top)) 18px 12px; }
   .navbar__tabs { justify-content: flex-start; margin: 0; }
   .lib2 { padding: 20px 34px 80px 18px; }
 }
@@ -5056,7 +5097,7 @@ html { scroll-behavior: smooth; }
   /* Phone navbar: tighten spacing and shed the redundant controls so the row
      doesn't squish. Users lives in the avatar menu; Cast/Admin aren't needed
      here (Admin is in the hamburger menu); Request collapses to its icon. */
-  .navbar { gap: 8px; padding: 10px 12px; }
+  .navbar { gap: 8px; padding: calc(10px + var(--safe-top)) 12px 10px; }
   .navbar__left { gap: 8px; }
   .navbar__brand { font-size: 0.98rem; }
   .navbar__request { margin-left: 0; padding: 8px; }
@@ -5067,7 +5108,7 @@ html { scroll-behavior: smooth; }
   .navbar__right { gap: 0; }
   .nav-ic { width: 38px; height: 38px; }
   .nav-ic--opt { display: none; }
-  .nav-menu { top: 56px; }
+  .nav-menu { top: calc(56px + var(--safe-top)); }
 }
 @media (max-width: 620px) {
   .alpha { display: none; }
