@@ -255,7 +255,7 @@ public final class MainActivity extends AppCompatActivity {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setSafeBrowsingEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " FluxAndroid/1.0.2");
+        settings.setUserAgentString(settings.getUserAgentString() + " FluxAndroid/1.0.3");
 
         webView.setBackgroundColor(getColor(R.color.flux_bg));
         webView.addJavascriptInterface(new FluxAndroidCastBridge(this), "FluxAndroidCast");
@@ -402,6 +402,7 @@ public final class MainActivity extends AppCompatActivity {
         }
 
         MediaInfo.Builder mediaBuilder = new MediaInfo.Builder(info.url)
+            .setContentUrl(info.url)
             .setContentType(info.contentType)
             .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
             .setMetadata(metadata);
@@ -430,7 +431,10 @@ public final class MainActivity extends AppCompatActivity {
         client.registerCallback(new RemoteMediaClient.Callback() {
             @Override public void onStatusUpdated() {
                 MediaStatus status = client.getMediaStatus();
-                if (status != null) notifyCastState("playback", String.valueOf(status.getPlayerState()));
+                if (status != null) {
+                    Log.i(TAG, "Receiver status playerState=" + status.getPlayerState() + " idleReason=" + status.getIdleReason());
+                    notifyCastState("playback", "state=" + status.getPlayerState() + " idle=" + status.getIdleReason());
+                }
             }
         });
     }

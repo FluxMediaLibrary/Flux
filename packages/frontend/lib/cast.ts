@@ -260,6 +260,7 @@ export async function loadMedia(media: CastMedia): Promise<void> {
   }
 
   const mediaInfo = new chrome.cast.media.MediaInfo(media.url, media.contentType);
+  mediaInfo.contentUrl = media.url;
   mediaInfo.streamType = chrome.cast.media.StreamType[media.streamType ?? 'BUFFERED'];
   if (media.durationSeconds && media.durationSeconds > 0) {
     mediaInfo.duration = media.durationSeconds;
