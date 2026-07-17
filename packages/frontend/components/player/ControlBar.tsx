@@ -216,6 +216,12 @@ function CastLauncher({
   const pendingLoadRef = useRef(false);
   const loadingRef = useRef(false);
   const [loading, setLoading] = useState(false);
+  const [androidCastAvailable, setAndroidCastAvailable] = useState(false);
+
+  useEffect(() => {
+    const bridge = typeof window !== 'undefined' ? window.FluxAndroidCast : undefined;
+    setAndroidCastAvailable(bridge?.isAvailable?.() === true || typeof bridge?.requestCast === 'function');
+  }, []);
 
   const startReceiverPlayback = useCallback(async () => {
     if (loadingRef.current) return;
@@ -249,6 +255,7 @@ function CastLauncher({
     const bridge = typeof window !== 'undefined' ? window.FluxAndroidCast : undefined;
     if (!bridge?.requestCast) return false;
     try {
+      document.dispatchEvent(new CustomEvent('flux:native-cast-local-pause'));
       bridge.requestCast(JSON.stringify({
         mediaItemId,
         episodeId: episodeId ?? null,
@@ -268,11 +275,31 @@ function CastLauncher({
     }
   }, [cast.connected, startReceiverPlayback]);
 
+  if (androidCastAvailable) {
+    return (
+      <button
+        className="fx-btn"
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          requestAndroidCast();
+        }}
+        aria-label="Cast"
+        aria-busy={loading}
+        title="Cast"
+      >
+        <CastIcon connected={cast.connected} />
+      </button>
+    );
+  }
+
   return (
     <span
       className={cast.connected ? 'fx-cast-launcher is-connected' : 'fx-cast-launcher'}
       title={cast.lastError ?? (cast.deviceName ? `Cast to ${cast.deviceName}` : 'Cast')}
-      onClick={() => {
+      onClick={(event) => {
+        event.stopPropagation();
         if (requestAndroidCast()) return;
         pendingLoadRef.current = true;
         if (cast.connected) void startReceiverPlayback();
