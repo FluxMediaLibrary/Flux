@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useMediaRemote, useMediaState } from '@vidstack/react';
 import {
+  CastIcon,
   FullscreenExitIcon,
   FullscreenIcon,
   MuteIcon,
@@ -16,6 +17,21 @@ import {
 } from './icons';
 import { SettingsPanel } from './SettingsPanel';
 import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
+
+declare global {
+  interface Window {
+    FLUX_NATIVE_APP?: boolean;
+    FluxNative?: {
+      isNativeApp?: () => boolean;
+      getAppInfo?: () => string;
+      checkForUpdates?: () => void;
+      requestCast?: () => void;
+      setAutomaticUpdates?: (enabled: boolean) => void;
+      clearUpdateDownloads?: () => void;
+      setPlaybackContext?: (payload: string) => void;
+    };
+  }
+}
 
 interface ControlBarProps {
   durationSeconds?: number | null;
@@ -63,6 +79,8 @@ export function ControlBar({
   const canPictureInPicture = useMediaState('canPictureInPicture');
   const pictureInPicture = useMediaState('pictureInPicture');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [nativeCastAvailable, setNativeCastAvailable] = useState(false);
+  const [castConnected, setCastConnected] = useState(false);
   const displayDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
     ? durationSeconds
     : typeof duration === 'number' && Number.isFinite(duration) && duration > 0
@@ -95,6 +113,26 @@ export function ControlBar({
   }, [pictureInPicture, remote]);
 
   const displayVolume = muted ? 0 : volume;
+
+  useEffect(() => {
+    setNativeCastAvailable(Boolean(
+      window.FluxNative?.requestCast &&
+      (window.FLUX_NATIVE_APP || window.FluxNative?.isNativeApp?.()),
+    ));
+
+    const handleCastState = (event: Event) => {
+      const state = (event as CustomEvent<{ state?: string }>).detail?.state;
+      if (!state) return;
+      if (state === 'connected' || state === 'media-loaded' || state === 'playback') {
+        setCastConnected(true);
+      } else if (state === 'disconnected' || state === 'error') {
+        setCastConnected(false);
+      }
+    };
+
+    document.addEventListener('flux:native-cast-state', handleCastState);
+    return () => document.removeEventListener('flux:native-cast-state', handleCastState);
+  }, []);
 
   return (
     <div className="fx-controls">
@@ -141,6 +179,17 @@ export function ControlBar({
         </div>
 
         <div className="fx-spacer" />
+
+        {nativeCastAvailable && (
+          <button
+            className={castConnected ? 'fx-btn active' : 'fx-btn'}
+            type="button"
+            onClick={() => window.FluxNative?.requestCast?.()}
+            aria-label={castConnected ? 'Cast connected' : 'Cast'}
+          >
+            <CastIcon connected={castConnected} />
+          </button>
+        )}
 
         {canPictureInPicture && (
           <button className={pictureInPicture ? 'fx-btn active' : 'fx-btn'} type="button" onClick={togglePip} aria-label="Picture in picture">

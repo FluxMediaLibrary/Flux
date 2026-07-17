@@ -17,6 +17,7 @@ declare global {
     FluxNative?: {
       isNativeApp?: () => boolean;
       getAppInfo?: () => string;
+      requestCast?: () => void;
       checkForUpdates?: () => void;
       setAutomaticUpdates?: (enabled: boolean) => void;
       clearUpdateDownloads?: () => void;
@@ -138,7 +139,7 @@ export default function AdminSettingsPage() {
       )}
 
       {androidInfo && (
-        <section className="form-group">
+        <section className="form-group" id="updates">
           <h2>Updates</h2>
           <div className="settings-meta-grid">
             <div>
