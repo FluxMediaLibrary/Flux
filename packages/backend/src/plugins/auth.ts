@@ -20,7 +20,7 @@ import type {
   preHandlerHookHandler,
 } from 'fastify';
 import type { Role } from '@flux/shared';
-import { verifyToken } from '../lib/jwt.js';
+import { verifyToken, type CastPlaybackClaims } from '../lib/jwt.js';
 import { ApiError } from '../lib/errors.js';
 
 export interface AuthedAccount {
@@ -32,6 +32,8 @@ declare module 'fastify' {
   interface FastifyRequest {
     account?: AuthedAccount;
     activeProfileId?: string;
+    /** Present only for a signed, media-scoped Cast receiver token. */
+    castPlayback?: CastPlaybackClaims;
   }
   interface FastifyInstance {
     requireAuth: preHandlerHookHandler;
@@ -95,12 +97,20 @@ function applyClaims(request: FastifyRequest, token: string): void {
   }
   request.account = { id: claims.sub, role: claims.role };
   request.activeProfileId = claims.activeProfileId;
+  if (claims.purpose === 'cast-playback') {
+    const cast = claims as unknown as CastPlaybackClaims;
+    if (!cast.castSessionId || !cast.mediaItemId) {
+      throw ApiError.unauthorized('Invalid Cast playback token');
+    }
+    request.castPlayback = cast;
+  }
 }
 
 const authPlugin = fp(async (app: FastifyInstance) => {
   // Ensure decorators exist so `request.account` is a known property.
   app.decorateRequest('account', undefined);
   app.decorateRequest('activeProfileId', undefined);
+  app.decorateRequest('castPlayback', undefined);
 
   const requireAuth: preHandlerHookHandler = async (
     request: FastifyRequest,

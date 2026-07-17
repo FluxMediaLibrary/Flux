@@ -80,6 +80,7 @@ services:
       MEDIA_ROOT: ${MEDIA_ROOT}
       DOWNLOAD_ROOT: ${DOWNLOAD_ROOT}
       TRANSCODE_ROOT: ${TRANSCODE_ROOT}
+      ANDROID_RELEASE_ROOT: /data/releases/android
       TRANSMISSION_RPC_URL: ${TRANSMISSION_RPC_URL:-http://localhost:9091/transmission/rpc}
       TRANSMISSION_USER: ${TRANSMISSION_USER:-admin}
       TRANSMISSION_PASS: ${TRANSMISSION_PASS:-flux}
@@ -89,6 +90,7 @@ services:
       - media:/data/media
       - downloads:/data/downloads
       - transcode:/data/transcode
+      - ./releases/android:/data/releases/android:ro
 
   frontend:
     build:

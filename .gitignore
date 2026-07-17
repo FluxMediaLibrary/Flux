@@ -60,3 +60,6 @@ twa/
 
 # Exception — public Android APK for self-hosted installs
 !packages/frontend/public/flux.apk
+
+# Android release artifacts are deployed from server release storage, not Git.
+releases/android/*.apk

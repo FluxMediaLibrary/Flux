@@ -14,6 +14,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -60,10 +61,8 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
-import java.net.URLEncoder;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -78,13 +77,16 @@ public final class MainActivity extends AppCompatActivity {
     private TextView errorTitle;
     private TextView errorDetail;
     private MediaRouteButton mediaRouteButton;
+    private Button nativeSettingsButton;
     private View fullscreenView;
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private ValueCallback<Uri[]> filePathCallback;
 
     private CastContext castContext;
     private SessionManager sessionManager;
-    private CastRequest pendingCastRequest;
+    private NativePlaybackContext playbackContext;
+    private NativePlaybackContext pendingCastContext;
+    private boolean castLaunchRequested;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newSingleThreadExecutor();
 
@@ -92,7 +94,7 @@ public final class MainActivity extends AppCompatActivity {
         @Override public void onSessionStarted(@NonNull CastSession session, @NonNull String sessionId) {
             Log.i(TAG, "Cast session started: " + sessionId);
             notifyCastState("connected", null);
-            loadPendingCastMedia();
+            if (castLaunchRequested) loadPendingCastMedia();
         }
         @Override public void onSessionStartFailed(@NonNull CastSession session, int error) {
             Log.e(TAG, "Cast session start failed: " + error);
@@ -105,7 +107,7 @@ public final class MainActivity extends AppCompatActivity {
         @Override public void onSessionResumed(@NonNull CastSession session, boolean wasSuspended) {
             Log.i(TAG, "Cast session resumed suspended=" + wasSuspended);
             notifyCastState("connected", null);
-            loadPendingCastMedia();
+            notifyCastState("connected", "session-restored");
         }
         @Override public void onSessionResumeFailed(@NonNull CastSession session, int error) {
             Log.e(TAG, "Cast session resume failed: " + error);
@@ -168,6 +170,27 @@ public final class MainActivity extends AppCompatActivity {
         FrameLayout.LayoutParams castParams = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.END);
         castParams.setMargins(0, dp(8), dp(8), 0);
         root.addView(mediaRouteButton, castParams);
+        mediaRouteButton.setOnTouchListener((view, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_UP) {
+                if (playbackContext == null) {
+                    notifyCastError("Open a movie or episode before starting Cast");
+                } else {
+                    pendingCastContext = playbackContext;
+                    castLaunchRequested = true;
+                    notifyCastState("connecting", null);
+                }
+            }
+            return false;
+        });
+
+        nativeSettingsButton = new Button(this);
+        nativeSettingsButton.setText("⋮");
+        nativeSettingsButton.setContentDescription("Flux app settings");
+        nativeSettingsButton.setTextSize(22);
+        nativeSettingsButton.setOnClickListener(view -> startActivity(new Intent(this, SettingsActivity.class)));
+        FrameLayout.LayoutParams settingsParams = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.START);
+        settingsParams.setMargins(dp(6), dp(8), 0, 0);
+        root.addView(nativeSettingsButton, settingsParams);
 
         errorPanel = new LinearLayout(this);
         errorPanel.setOrientation(LinearLayout.VERTICAL);
@@ -258,7 +281,7 @@ public final class MainActivity extends AppCompatActivity {
         settings.setUserAgentString(settings.getUserAgentString() + " FluxAndroid/1.0.3");
 
         webView.setBackgroundColor(getColor(R.color.flux_bg));
-        webView.addJavascriptInterface(new FluxAndroidCastBridge(this), "FluxAndroidCast");
+        webView.addJavascriptInterface(new FluxNativeBridge(this), "FluxNative");
         webView.setWebViewClient(new FluxWebViewClient());
         webView.setWebChromeClient(new FluxWebChromeClient());
     }
@@ -302,21 +325,13 @@ public final class MainActivity extends AppCompatActivity {
         }
     }
 
-    void requestNativeCast(CastRequest request) {
-        pendingCastRequest = request;
-        Log.i(TAG, "Native cast requested mediaId=" + request.mediaItemId + " episodeId=" + request.episodeId);
-        CastSession session = sessionManager != null ? sessionManager.getCurrentCastSession() : null;
-        if (session != null && session.isConnected()) {
-            loadPendingCastMedia();
-        } else if (mediaRouteButton != null) {
-            mediaRouteButton.performClick();
-        } else {
-            notifyCastError("Cast is not initialized");
-        }
+    void updatePlaybackContext(NativePlaybackContext context) {
+        playbackContext = context;
+        Log.d(TAG, "Updated native playback context mediaId=" + context.mediaItemId + " episodeId=" + context.episodeId);
     }
 
     private void loadPendingCastMedia() {
-        CastRequest request = pendingCastRequest;
+        NativePlaybackContext request = pendingCastContext;
         CastSession session = sessionManager != null ? sessionManager.getCurrentCastSession() : null;
         if (request == null || session == null || !session.isConnected()) return;
 
@@ -352,21 +367,22 @@ public final class MainActivity extends AppCompatActivity {
         });
     }
 
-    private CastPlaybackInfo fetchCastPlaybackInfo(CastRequest request, String token) throws Exception {
-        StringBuilder url = new StringBuilder(getString(R.string.flux_api_base_url))
-            .append("/api/stream/")
-            .append(URLEncoder.encode(request.mediaItemId, StandardCharsets.UTF_8))
-            .append("/cast-info?currentTime=")
-            .append(String.format(Locale.US, "%.3f", request.currentTimeSeconds));
-        if (request.episodeId != null) {
-            url.append("&episodeId=").append(URLEncoder.encode(request.episodeId, StandardCharsets.UTF_8));
-        }
-        Log.i(TAG, "Preparing cast URL: " + redact(url.toString()));
-        HttpURLConnection connection = (HttpURLConnection) new URL(url.toString()).openConnection();
+    private CastPlaybackInfo fetchCastPlaybackInfo(NativePlaybackContext request, String token) throws Exception {
+        String url = getString(R.string.flux_api_base_url) + "/api/cast/sessions";
+        Log.i(TAG, "Creating scoped cast session at " + redact(url));
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setConnectTimeout(10000);
         connection.setReadTimeout(20000);
+        connection.setRequestMethod("POST");
+        connection.setDoOutput(true);
         connection.setRequestProperty("Accept", "application/json");
+        connection.setRequestProperty("Content-Type", "application/json");
         connection.setRequestProperty("Authorization", "Bearer " + token);
+        JSONObject payload = new JSONObject();
+        payload.put("mediaItemId", request.mediaItemId);
+        if (request.episodeId != null) payload.put("episodeId", request.episodeId);
+        payload.put("positionSeconds", request.currentTimeSeconds);
+        connection.getOutputStream().write(payload.toString().getBytes(StandardCharsets.UTF_8));
         int status = connection.getResponseCode();
         InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
         String body = readAll(stream);
@@ -385,7 +401,7 @@ public final class MainActivity extends AppCompatActivity {
         return builder.toString();
     }
 
-    private void loadMediaOnReceiver(CastSession session, CastRequest request, CastPlaybackInfo info) {
+    private void loadMediaOnReceiver(CastSession session, NativePlaybackContext request, CastPlaybackInfo info) {
         RemoteMediaClient client = session.getRemoteMediaClient();
         if (client == null) {
             notifyCastError("Remote media client is unavailable");
@@ -423,7 +439,8 @@ public final class MainActivity extends AppCompatActivity {
                 Log.e(TAG, "Receiver rejected load status=" + status.getStatusCode());
                 notifyCastError("Receiver rejected media: " + status.getStatusCode());
             } else {
-                pendingCastRequest = null;
+                pendingCastContext = null;
+                castLaunchRequested = false;
                 notifyCastState("media-loaded", info.method);
                 webView.evaluateJavascript("document.dispatchEvent(new CustomEvent('flux:native-cast-local-pause'))", null);
             }
@@ -493,6 +510,7 @@ public final class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         webView.onResume();
+        UpdateManager.checkForUpdate(this, false);
     }
 
     @Override
@@ -512,7 +530,7 @@ public final class MainActivity extends AppCompatActivity {
         networkExecutor.shutdownNow();
         if (isFinishing()) {
             root.removeView(webView);
-            webView.removeJavascriptInterface("FluxAndroidCast");
+            webView.removeJavascriptInterface("FluxNative");
             webView.destroy();
         }
         super.onDestroy();
@@ -563,6 +581,7 @@ public final class MainActivity extends AppCompatActivity {
         public void onPageFinished(WebView view, String url) {
             Log.i(TAG, "Page load finished: " + redact(url));
             progressBar.setVisibility(View.GONE);
+            view.evaluateJavascript("window.FLUX_NATIVE_APP=true;", null);
         }
 
         @Override
