@@ -1,0 +1,18 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import type { AdminInfoDTO, StorageRootDTO } from '@flux/shared';
+import { api, FluxApiError } from '@/lib/api';
+import { formatBytes } from '@/lib/format';
+import { LoadingState, PageError, PageHeader, StatusBadge } from '@/components/admin/AdminUI';
+
+function percent(root: StorageRootDTO): number | null { return root.usedBytes !== null && root.totalBytes ? root.usedBytes / root.totalBytes : null; }
+
+export default function AdminStoragePage() {
+  const [info, setInfo] = useState<AdminInfoDTO | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => { setError(null); try { setInfo(await api.getAdminSystem()); } catch (err) { setError(err instanceof FluxApiError ? err.message : 'Storage metrics could not be loaded.'); } }, []);
+  useEffect(() => { void load(); }, [load]);
+  const roots = info ? [{ label: 'Media library', purpose: 'Movies, series, and episode files', root: info.storage.mediaRoot }, { label: 'Download staging', purpose: 'Active and completed acquisitions', root: info.storage.downloadRoot }, { label: 'Transcode cache', purpose: 'Temporary HLS sessions and segments', root: info.storage.transcodeRoot }] : [];
+  return <div className="control-page"><PageHeader title="Storage" description="Capacity, mount health, and space consumed by Flux workloads." actions={<button className="control-button" onClick={() => void load()}>Refresh volumes</button>} />{error && <PageError message={error} onRetry={() => void load()} />}{!info ? <LoadingState cards={3} /> : <><div className="control-storage-grid">{roots.map(({ label, purpose, root }) => { const usage = percent(root); return <article className="control-panel control-storage-card" key={label}><header><div><strong>{label}</strong><small>{purpose}</small></div><StatusBadge tone={!root.exists ? 'bad' : usage !== null && usage >= .85 ? 'warn' : 'good'}>{!root.exists ? 'Offline' : 'Writable mount'}</StatusBadge></header><div className="control-storage-number">{root.usedBytes === null ? '—' : formatBytes(root.usedBytes)} <span>used</span></div><div className="control-progress"><span style={{ width: `${Math.round((usage ?? 0) * 100)}%`, background: usage !== null && usage >= .9 ? 'var(--control-bad)' : undefined }} /></div><div className="control-storage-meta"><span>{usage === null ? 'Unknown capacity' : `${Math.round(usage * 100)}% full`}</span><span>{root.freeBytes === null ? 'Free space unavailable' : `${formatBytes(root.freeBytes)} free`}</span></div><code>{root.path}</code></article>; })}</div><section className="control-section"><div className="control-section-heading"><h2>Managed storage</h2><span>Measured from the server filesystem</span></div><div className="control-panel control-storage-breakdown"><div><span>Movies</span><strong>{info.library.availableMovies}</strong><small>available titles</small></div><div><span>Series</span><strong>{info.library.shows}</strong><small>catalog entries</small></div><div><span>Episodes</span><strong>{info.library.availableEpisodes}</strong><small>available files</small></div><div><span>Transcode cache</span><strong>{formatBytes(info.library.transcodeBytes)}</strong><small>{info.library.transcodeSessions} session folders</small></div><div><span>Broken files</span><strong>{info.library.brokenFiles}</strong><small>database paths missing</small></div></div></section><div className="control-telemetry-note"><strong>Safe cleanup</strong><p>Flux reports cleanup candidates here without exposing a destructive button until the backend can produce a complete preview. Cache, orphan, duplicate, and unknown-file cleanup must remain preview-first.</p></div></>}</div>;
+}

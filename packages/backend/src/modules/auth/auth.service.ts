@@ -8,7 +8,7 @@
  *  - Login returns an AuthResponse whose token has NO active profile yet.
  */
 import argon2 from 'argon2';
-import type { AuthResponse, AccountDTO, ProfileDTO } from '@flux/shared';
+import { ADMIN_PERMISSIONS, type AuthResponse, type AccountDTO, type ProfileDTO } from '@flux/shared';
 import type { User, Profile } from '@prisma/client';
 import { prisma } from '../../lib/db.js';
 import { signToken } from '../../lib/jwt.js';
@@ -22,6 +22,7 @@ export function toAccountDTO(user: User): AccountDTO {
     id: user.id,
     email: user.email,
     role: user.role,
+    permissions: user.role === 'ADMIN' ? [...ADMIN_PERMISSIONS] : user.permissions as AccountDTO['permissions'],
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -124,6 +125,9 @@ export async function login(input: LoginInput): Promise<AuthResponse> {
   const ok = await argon2.verify(user.passwordHash, input.password).catch(() => false);
   if (!ok) {
     throw ApiError.unauthorized('Invalid email or password', 'INVALID_CREDENTIALS');
+  }
+  if (user.disabled) {
+    throw ApiError.forbidden('This account has been disabled', 'ACCOUNT_DISABLED');
   }
 
   const { profiles, ...userOnly } = user;

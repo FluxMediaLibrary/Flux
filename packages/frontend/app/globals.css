@@ -1,5 +1,6 @@
 @import '@vidstack/react/player/styles/default/theme.css';
 @import '@vidstack/react/player/styles/default/layouts/video.css';
+@import './admin-control.css';
 
 /* ── Flux theme — dark, cinematic, Plex/Netflix-adjacent ───────────────────── */
 
