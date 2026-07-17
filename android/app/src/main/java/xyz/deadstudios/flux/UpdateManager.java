@@ -23,6 +23,8 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -34,8 +36,17 @@ final class UpdateManager {
     private static final long CHECK_INTERVAL_MS = 6L * 60L * 60L * 1000L;
     private static final ExecutorService WORKER = Executors.newSingleThreadExecutor();
 
+    static boolean areAutomaticUpdatesEnabled(Context context) {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("automatic_updates", true);
+    }
+
+    static void setAutomaticUpdatesEnabled(Context context, boolean enabled) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("automatic_updates", enabled).apply();
+        toast(context, enabled ? "Automatic updates enabled." : "Automatic updates disabled.");
+    }
+
     static void checkForUpdate(Context context, boolean manual) {
-        if (!manual && (!context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("automatic_updates", true) ||
+        if (!manual && (!areAutomaticUpdatesEnabled(context) ||
             System.currentTimeMillis() - context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("last_update_check", 0) < CHECK_INTERVAL_MS)) return;
         WORKER.execute(() -> {
             try {
@@ -50,7 +61,7 @@ final class UpdateManager {
                 showPrompt(context, manifest);
             } catch (Exception error) {
                 Log.w(TAG, "Update check failed", error);
-                if (manual) toast(context, "Could not reach the Flux update server.");
+                if (manual) toast(context, userMessage(error));
             }
         });
     }
@@ -63,7 +74,23 @@ final class UpdateManager {
     }
 
     private static Manifest fetchManifest(Context context) throws Exception {
-        URL url = new URL(context.getString(R.string.flux_api_base_url) + "/api/app/android/latest");
+        String base = context.getString(R.string.flux_api_base_url).replaceAll("/+$", "");
+        List<Exception> failures = new ArrayList<>();
+        for (String path : new String[] { "/api/app/android/latest", "/app-version.json" }) {
+            URL url = new URL(base + path);
+            try {
+                return fetchManifestFrom(url);
+            } catch (Exception error) {
+                failures.add(error);
+                Log.w(TAG, "Manifest fetch failed for " + url, error);
+            }
+        }
+        IllegalStateException error = new IllegalStateException("No Flux update manifest is reachable or valid");
+        for (Exception failure : failures) error.addSuppressed(failure);
+        throw error;
+    }
+
+    private static Manifest fetchManifestFrom(URL url) throws Exception {
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
         c.setConnectTimeout(10000); c.setReadTimeout(15000); c.setRequestProperty("Accept", "application/json");
         if (c.getResponseCode() != 200) throw new IllegalStateException("manifest HTTP " + c.getResponseCode());
@@ -144,14 +171,23 @@ final class UpdateManager {
     private static String sha256(File file) throws Exception { MessageDigest digest = MessageDigest.getInstance("SHA-256"); try (FileInputStream in = new FileInputStream(file)) { byte[] b = new byte[32768]; int n; while ((n = in.read(b)) >= 0) digest.update(b, 0, n); } return hex(digest.digest()); }
     private static String hex(byte[] bytes) { StringBuilder b = new StringBuilder(); for (byte value : bytes) b.append(String.format(Locale.US, "%02x", value)); return b.toString(); }
     private static String readableBytes(long bytes) { return String.format(Locale.US, "%.1f MB", bytes / (1024d * 1024d)); }
+    private static String userMessage(Exception error) {
+        String combined = error.getMessage() == null ? "" : error.getMessage();
+        for (Throwable suppressed : error.getSuppressed()) {
+            if (suppressed.getMessage() != null) combined += " " + suppressed.getMessage();
+        }
+        if (combined.contains("Unsafe update manifest")) return "The Flux update manifest is invalid or incomplete.";
+        if (combined.contains("manifest HTTP 404")) return "No Android update is published on this server yet.";
+        return "Could not reach the Flux update server.";
+    }
 
     private static final class Manifest {
         final int versionCode, minimumSupportedVersionCode; final String versionName, sha256, notes; final boolean mandatory; final long fileSize; final URL apkUrl;
         Manifest(int versionCode, int minimum, String versionName, String sha256, String notes, boolean mandatory, long fileSize, URL apkUrl) { this.versionCode=versionCode; this.minimumSupportedVersionCode=minimum; this.versionName=versionName; this.sha256=sha256; this.notes=notes; this.mandatory=mandatory; this.fileSize=fileSize; this.apkUrl=apkUrl; }
         static Manifest parse(JSONObject json, URL manifestUrl) throws Exception {
-            int code=json.getInt("versionCode"), minimum=json.optInt("minimumSupportedVersionCode", 1); String name=json.getString("versionName"), sum=json.getString("sha256"), raw=json.getString("apkUrl"); long size=json.getLong("fileSize");
-            URL apk=new URL(manifestUrl, raw); if (!apk.getProtocol().equals(manifestUrl.getProtocol()) || !apk.getHost().equalsIgnoreCase(manifestUrl.getHost()) || code < 1 || code <= 0 || size < 1 || !sum.matches("(?i)[a-f0-9]{64}")) throw new SecurityException("Unsafe update manifest");
-            JSONArray notes=json.optJSONArray("releaseNotes"); StringBuilder text=new StringBuilder(); if(notes!=null) for(int i=0;i<notes.length();i++) text.append(i==0?"• ":"\n• ").append(notes.optString(i));
+            int code=json.getInt("versionCode"), minimum=json.optInt("minimumSupportedVersionCode", 1); String name=json.getString("versionName"), sum=json.getString("sha256"), raw=json.optString("apkUrl", json.optString("url")); long size=json.getLong("fileSize");
+            URL apk=new URL(manifestUrl, raw); if (!apk.getProtocol().equals(manifestUrl.getProtocol()) || !apk.getHost().equalsIgnoreCase(manifestUrl.getHost()) || code < 1 || raw.length() == 0 || size < 1 || !sum.matches("(?i)[a-f0-9]{64}")) throw new SecurityException("Unsafe update manifest");
+            JSONArray notes=json.optJSONArray("releaseNotes"); StringBuilder text=new StringBuilder(); if(notes!=null) for(int i=0;i<notes.length();i++) text.append(i==0?"- ":"\n- ").append(notes.optString(i)); else text.append(json.optString("notes", ""));
             return new Manifest(code, minimum, name, sum, text.toString(), json.optBoolean("mandatory", false), size, apk);
         }
     }

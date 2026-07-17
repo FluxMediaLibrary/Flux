@@ -77,7 +77,6 @@ public final class MainActivity extends AppCompatActivity {
     private TextView errorTitle;
     private TextView errorDetail;
     private MediaRouteButton mediaRouteButton;
-    private Button nativeSettingsButton;
     private View fullscreenView;
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private ValueCallback<Uri[]> filePathCallback;
@@ -183,15 +182,6 @@ public final class MainActivity extends AppCompatActivity {
             return false;
         });
 
-        nativeSettingsButton = new Button(this);
-        nativeSettingsButton.setText("⋮");
-        nativeSettingsButton.setContentDescription("Flux app settings");
-        nativeSettingsButton.setTextSize(22);
-        nativeSettingsButton.setOnClickListener(view -> startActivity(new Intent(this, SettingsActivity.class)));
-        FrameLayout.LayoutParams settingsParams = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.START);
-        settingsParams.setMargins(dp(6), dp(8), 0, 0);
-        root.addView(nativeSettingsButton, settingsParams);
-
         errorPanel = new LinearLayout(this);
         errorPanel.setOrientation(LinearLayout.VERTICAL);
         errorPanel.setGravity(Gravity.CENTER);
@@ -278,7 +268,7 @@ public final class MainActivity extends AppCompatActivity {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setSafeBrowsingEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " FluxAndroid/1.0.3");
+        settings.setUserAgentString(settings.getUserAgentString() + " FluxAndroid/" + BuildConfig.VERSION_NAME);
 
         webView.setBackgroundColor(getColor(R.color.flux_bg));
         webView.addJavascriptInterface(new FluxNativeBridge(this), "FluxNative");

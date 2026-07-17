@@ -4,12 +4,35 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { NotificationSettingsDTO } from '@flux/shared';
 
+type AndroidAppInfo = {
+  versionName?: string;
+  versionCode?: number;
+  automaticUpdates?: boolean;
+  updateServer?: string;
+};
+
+declare global {
+  interface Window {
+    FLUX_NATIVE_APP?: boolean;
+    FluxNative?: {
+      isNativeApp?: () => boolean;
+      getAppInfo?: () => string;
+      checkForUpdates?: () => void;
+      setAutomaticUpdates?: (enabled: boolean) => void;
+      clearUpdateDownloads?: () => void;
+      setPlaybackContext?: (payload: string) => void;
+    };
+  }
+}
+
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<NotificationSettingsDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [androidInfo, setAndroidInfo] = useState<AndroidAppInfo | null>(null);
+  const [androidAutomaticUpdates, setAndroidAutomaticUpdates] = useState(true);
 
   // Form state
   const [discordEnabled, setDiscordEnabled] = useState(false);
@@ -40,6 +63,23 @@ export default function AdminSettingsPage() {
       },
     );
   }, []);
+
+  useEffect(() => {
+    const bridge = window.FluxNative;
+    if (!bridge?.isNativeApp?.() || !bridge.getAppInfo) return;
+    try {
+      const info = JSON.parse(bridge.getAppInfo()) as AndroidAppInfo;
+      setAndroidInfo(info);
+      setAndroidAutomaticUpdates(info.automaticUpdates ?? true);
+    } catch {
+      setAndroidInfo({});
+    }
+  }, []);
+
+  function handleAndroidAutomaticUpdates(checked: boolean) {
+    setAndroidAutomaticUpdates(checked);
+    window.FluxNative?.setAutomaticUpdates?.(checked);
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -79,7 +119,7 @@ export default function AdminSettingsPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: '1.9rem', marginBottom: 28 }}>Notification Settings</h1>
+      <h1 style={{ fontSize: '1.9rem', marginBottom: 28 }}>Settings</h1>
 
       {error && <div className="form-error">{error}</div>}
       {success && (
@@ -95,6 +135,46 @@ export default function AdminSettingsPage() {
         >
           Settings saved.
         </div>
+      )}
+
+      {androidInfo && (
+        <section className="form-group">
+          <h2>Updates</h2>
+          <div className="settings-meta-grid">
+            <div>
+              <span>Installed version</span>
+              <strong>
+                {androidInfo.versionName ?? 'Unknown'}
+                {typeof androidInfo.versionCode === 'number' ? ` (${androidInfo.versionCode})` : ''}
+              </strong>
+            </div>
+            {androidInfo.updateServer && (
+              <div>
+                <span>Update server</span>
+                <strong>{androidInfo.updateServer}</strong>
+              </div>
+            )}
+          </div>
+          <div className="toggle-row">
+            <span className="toggle-label">Check for updates automatically</span>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={androidAutomaticUpdates}
+                onChange={(e) => handleAndroidAutomaticUpdates(e.target.checked)}
+              />
+              <span className="toggle-track" />
+            </label>
+          </div>
+          <div className="settings-actions">
+            <button className="btn btn-primary" type="button" onClick={() => window.FluxNative?.checkForUpdates?.()}>
+              Check for updates
+            </button>
+            <button className="btn btn-ghost" type="button" onClick={() => window.FluxNative?.clearUpdateDownloads?.()}>
+              Clear downloaded files
+            </button>
+          </div>
+        </section>
       )}
 
       <form onSubmit={handleSave}>
