@@ -130,6 +130,23 @@ export async function createRequest(
   profileId: string,
   data: CreateRequestInput,
 ): Promise<RequestDTO> {
+  const requester = await prisma.profile.findUnique({
+    where: { id: profileId },
+    select: { userId: true, user: { select: { disabled: true, requestLimit: true } } },
+  });
+  if (!requester || requester.user.disabled) {
+    throw ApiError.forbidden('This account cannot submit requests', 'ACCOUNT_DISABLED');
+  }
+  if (requester.user.requestLimit !== null) {
+    const now = new Date();
+    const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const used = await prisma.request.count({
+      where: { profile: { userId: requester.userId }, createdAt: { gte: periodStart } },
+    });
+    if (used >= requester.user.requestLimit) {
+      throw ApiError.forbidden('Monthly request limit reached', 'REQUEST_LIMIT_REACHED');
+    }
+  }
   const target = {
     season: data.mediaType === 'SHOW' ? data.season ?? null : null,
     episode: data.mediaType === 'SHOW' && data.season ? data.episode ?? null : null,

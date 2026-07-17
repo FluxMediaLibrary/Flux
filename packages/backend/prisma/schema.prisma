@@ -27,14 +27,37 @@ model User {
   email        String   @unique
   passwordHash String
   role         Role     @default(MEMBER)
+  permissions  String[] @default([])
+  disabled     Boolean  @default(false)
+  requestLimit Int?
+  streamLimit  Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   profiles       Profile[]
   invitesCreated Invite[]  @relation("InviteCreatedBy")
   invitedBy      Invite?   @relation("InviteUsedBy")
+  auditEvents    AuditEvent[]
 
   @@map("users")
+}
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  actorId     String?
+  action      String
+  targetType  String
+  targetId    String?
+  targetLabel String?
+  result      String   @default("SUCCESS")
+  details     Json?
+  createdAt   DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorId])
+  @@map("audit_events")
 }
 
 /// A Netflix-style profile under an account. Unlimited per account in v1.
