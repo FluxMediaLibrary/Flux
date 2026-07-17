@@ -43,6 +43,11 @@ coverage/
 
 # Misc
 tes.js
+.codex/
+
+# Android local SDK path
+android/local.properties
+android/.gradle/
 
 # Android TWA / app signing — NEVER commit these. The keystore + its password
 # sign the APK; losing them means you can't ship updates, and leaking them lets

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { createElement, useCallback, useEffect, useRef, useState } from 'react';
 import { useMediaRemote, useMediaState } from '@vidstack/react';
 import {
   CastIcon,
@@ -17,6 +17,17 @@ import {
 } from './icons';
 import { SettingsPanel } from './SettingsPanel';
 import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
+import { api } from '@/lib/api';
+import { loadMedia, useCast } from '@/lib/cast';
+
+declare global {
+  interface Window {
+    FluxAndroidCast?: {
+      isAvailable?: () => boolean;
+      requestCast?: (payload: string) => void;
+    };
+  }
+}
 
 interface ControlBarProps {
   durationSeconds?: number | null;
@@ -30,6 +41,9 @@ interface ControlBarProps {
   selectedAudioStreamIndex: number | null;
   onAudioStreamChange: (streamIndex: number | null) => void;
   playbackMethod: 'direct' | 'hls';
+  mediaItemId: string;
+  episodeId?: string;
+  castStartTimeSeconds: number;
 }
 
 function formatTime(value: number): string {
@@ -53,6 +67,9 @@ export function ControlBar({
   selectedAudioStreamIndex,
   onAudioStreamChange,
   playbackMethod,
+  mediaItemId,
+  episodeId,
+  castStartTimeSeconds,
 }: ControlBarProps) {
   const remote = useMediaRemote();
   const paused = useMediaState('paused');
@@ -143,9 +160,11 @@ export function ControlBar({
 
         <div className="fx-spacer" />
 
-        <button className="fx-btn" type="button" onClick={() => remote.requestGoogleCast()} aria-label="Cast">
-          <CastIcon connected={false} />
-        </button>
+        <CastLauncher
+          mediaItemId={mediaItemId}
+          episodeId={episodeId}
+          currentTimeSeconds={castStartTimeSeconds}
+        />
 
         {canPictureInPicture && (
           <button className={pictureInPicture ? 'fx-btn active' : 'fx-btn'} type="button" onClick={togglePip} aria-label="Picture in picture">
@@ -181,5 +200,92 @@ export function ControlBar({
         </button>
       </div>
     </div>
+  );
+}
+
+function CastLauncher({
+  mediaItemId,
+  episodeId,
+  currentTimeSeconds,
+}: {
+  mediaItemId: string;
+  episodeId?: string;
+  currentTimeSeconds: number;
+}) {
+  const cast = useCast();
+  const pendingLoadRef = useRef(false);
+  const loadingRef = useRef(false);
+  const [loading, setLoading] = useState(false);
+
+  const startReceiverPlayback = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setLoading(true);
+    try {
+      const info = await api.getCastPlaybackInfo(mediaItemId, episodeId, currentTimeSeconds);
+      if (info.warnings.length > 0) {
+        console.warn('[Cast] receiver URL warnings', info.warnings);
+      }
+      await loadMedia({
+        url: info.url,
+        contentType: info.contentType,
+        streamType: info.streamType,
+        title: info.title,
+        subtitle: info.subtitle ?? undefined,
+        poster: info.posterUrl ?? undefined,
+        currentTime: info.method === 'direct' ? currentTimeSeconds : 0,
+        durationSeconds: info.durationSeconds,
+      });
+      pendingLoadRef.current = false;
+    } catch (error) {
+      console.error('[Cast] failed to start receiver playback', error);
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
+    }
+  }, [currentTimeSeconds, episodeId, mediaItemId]);
+
+  const requestAndroidCast = useCallback(() => {
+    const bridge = typeof window !== 'undefined' ? window.FluxAndroidCast : undefined;
+    if (!bridge?.requestCast) return false;
+    try {
+      bridge.requestCast(JSON.stringify({
+        mediaItemId,
+        episodeId: episodeId ?? null,
+        currentTimeSeconds,
+      }));
+      pendingLoadRef.current = false;
+      return true;
+    } catch (error) {
+      console.error('[Cast] Android bridge request failed', error);
+      return false;
+    }
+  }, [currentTimeSeconds, episodeId, mediaItemId]);
+
+  useEffect(() => {
+    if (cast.connected && pendingLoadRef.current) {
+      void startReceiverPlayback();
+    }
+  }, [cast.connected, startReceiverPlayback]);
+
+  return (
+    <span
+      className={cast.connected ? 'fx-cast-launcher is-connected' : 'fx-cast-launcher'}
+      title={cast.lastError ?? (cast.deviceName ? `Cast to ${cast.deviceName}` : 'Cast')}
+      onClick={() => {
+        if (requestAndroidCast()) return;
+        pendingLoadRef.current = true;
+        if (cast.connected) void startReceiverPlayback();
+      }}
+      aria-busy={loading}
+    >
+      {createElement('google-cast-launcher', {
+        className: 'fx-cast-native',
+        'aria-label': loading ? 'Starting cast' : 'Cast',
+      })}
+      <span className="fx-cast-fallback" aria-hidden="true">
+        <CastIcon connected={cast.connected} />
+      </span>
+    </span>
   );
 }

@@ -1,0 +1,24 @@
+<resources>
+    <style name="Theme.Flux" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="windowNoTitle">true</item>
+        <item name="windowActionBar">false</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/flux_bg</item>
+        <item name="android:statusBarColor">@color/flux_bg</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowSplashScreenBackground">@color/flux_bg</item>
+        <item name="android:hardwareAccelerated">true</item>
+    </style>
+
+    <style name="Theme.CastVideosExpandedController" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="windowNoTitle">true</item>
+        <item name="windowActionBar">false</item>
+        <item name="android:colorAccent">@color/flux_accent</item>
+        <item name="android:navigationBarColor">@color/flux_bg</item>
+        <item name="android:statusBarColor">@color/flux_bg</item>
+    </style>
+</resources>
