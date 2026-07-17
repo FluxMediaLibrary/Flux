@@ -13,7 +13,14 @@ import { api } from '@/lib/api';
 declare global {
   interface Window {
     FLUX_NATIVE_APP?: boolean;
-    FluxNative?: { setPlaybackContext?: (payload: string) => void };
+    FluxNative?: {
+      isNativeApp?: () => boolean;
+      getAppInfo?: () => string;
+      checkForUpdates?: () => void;
+      setAutomaticUpdates?: (enabled: boolean) => void;
+      clearUpdateDownloads?: () => void;
+      setPlaybackContext?: (payload: string) => void;
+    };
   }
 }
 import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
