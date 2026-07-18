@@ -18,7 +18,7 @@
     <Label text="Recent searches" width="620" height="42" translation="[70,725]" font="font:MediumBoldSystemFont" color="#f4f4f5" />
     <LabelList id="recent" translation="[70,775]" itemSize="[620,48]" numRows="5" focusBitmapUri="pkg:/images/focus.9.png" />
     <Label id="hint" text="Enter at least two characters" width="1050" height="50" translation="[760,72]" font="font:SmallSystemFont" color="#aaa9aa" />
-    <RowList id="resultRows" translation="[760,125]" numRows="3" rowLabelOffset="[0,18]" itemSize="[1080,300]" rowItemSize="[[185,278]]" rowItemSpacing="[[24,0]]" showRowLabel="true" focusBitmapUri="pkg:/images/focus.9.png" />
+    <RowList id="resultRows" translation="[760,125]" numRows="3" rowLabelOffset="[[0,18]]" itemSize="[1080,300]" rowItemSize="[[185,278]]" rowItemSpacing="[[24,0]]" showRowLabel="[true]" focusBitmapUri="pkg:/images/focus.9.png" />
     <Timer id="debounce" duration="0.45" repeat="false" />
   </children>
 </component>

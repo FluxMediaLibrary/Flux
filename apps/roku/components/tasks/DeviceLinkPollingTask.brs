@@ -7,7 +7,7 @@ sub poll()
     if interval < 3 then interval = 5
     while true
         Sleep(interval * 1000)
-        response = PerformJsonRequest({ url: m.top.url, method: "POST", body: { deviceCode: m.top.deviceCode } }, 12000)
+        response = PerformJsonRequest({ url: m.top.url, method: "POST", bodyJson: FormatJson(CanonicalizeRequestJson({ deviceCode: m.top.deviceCode })) }, 12000)
         status = response.status
         data = response.data
         if status = 0 or status >= 500

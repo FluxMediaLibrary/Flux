@@ -24,6 +24,6 @@
     <HeroBanner id="hero" translation="[370,145]" />
     <Timer id="heroTimer" repeat="true" duration="8" />
     <Label id="empty" text="Your Flux library is empty. Add media on the server, then return here to refresh." width="1320" height="90" translation="[410,520]" wrap="true" font="font:MediumSystemFont" color="#aaa9aa" visible="false" />
-    <RowList id="rows" translation="[370,480]" numRows="2" rowLabelOffset="[0,18]" itemSize="[1480,265]" rowItemSize="[[170,255]]" rowItemSpacing="[[24,0]]" showRowLabel="true" focusBitmapUri="pkg:/images/focus.9.png" />
+    <RowList id="rows" translation="[370,480]" numRows="2" rowLabelOffset="[[0,18]]" itemSize="[1480,265]" rowItemSize="[[170,255]]" rowItemSpacing="[[24,0]]" showRowLabel="[true]" focusBitmapUri="pkg:/images/focus.9.png" />
   </children>
 </component>

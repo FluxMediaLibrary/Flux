@@ -96,6 +96,7 @@ sub runRequest(request as Object, successCallback as String, failureCallback as 
     m.requestGeneration++
     task = CreateObject("roSGNode", "ApiRequestTask")
     task.requestId = m.requestGeneration
+    if request.body <> invalid then task.bodyJson = FormatJson(CanonicalizeRequestJson(request.body)) else task.bodyJson = ""
     task.request = request
     task.observeField("response", successCallback)
     task.observeField("failure", failureCallback)
@@ -107,6 +108,7 @@ end sub
 
 sub runBackgroundRequest(request as Object)
     task = CreateObject("roSGNode", "ApiRequestTask")
+    if request.body <> invalid then task.bodyJson = FormatJson(CanonicalizeRequestJson(request.body)) else task.bodyJson = ""
     task.request = request
     if m.backgroundTasks = invalid then m.backgroundTasks = []
     m.backgroundTasks.Push(task)

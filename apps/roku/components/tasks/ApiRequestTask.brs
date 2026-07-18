@@ -8,6 +8,7 @@ sub executeRequest()
         m.top.failure = { code: "REQUEST_INVALID", message: "The request is incomplete.", retryable: false }
         return
     end if
+    if m.top.bodyJson <> "" then input.bodyJson = m.top.bodyJson
 
     result = PerformJsonRequest(input, 12000)
     status = result.status

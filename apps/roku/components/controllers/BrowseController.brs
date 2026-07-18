@@ -1,7 +1,6 @@
 sub loadHome()
     m.state = "LOADING_HOME"
     cached = m.cachedHome
-    if cached = invalid then cached = SafeJsonParse(ReadAsciiFile("tmp:/flux-home.json"))
     if cached <> invalid
         showHome(cached, "Refreshing library…")
         m.state = "LOADING_HOME"
@@ -92,7 +91,6 @@ sub onHomeFailed(event as Object)
         return
     end if
     cached = m.cachedHome
-    if cached = invalid then cached = SafeJsonParse(ReadAsciiFile("tmp:/flux-home.json"))
     if cached <> invalid
         showHome(cached, "Offline · showing cached rows")
     else

@@ -97,6 +97,16 @@ for (const file of files) {
   if (/\btransfer\.(?:GetResponseCode|GetToString|PostFromString)\s*\(/i.test(source)) {
     failures.push(`${relative(file)}: uses a synchronous roUrlTransfer response path`);
   }
+  const urlEncodeFunction = source.match(/function\s+UrlEncode\b[\s\S]*?end function/i)?.[0];
+  if (urlEncodeFunction && (/roUrlTransfer/i.test(urlEncodeFunction) || !/\.EncodeUriComponent\s*\(/i.test(urlEncodeFunction))) {
+    failures.push(`${relative(file)}: UrlEncode must use the render-thread-safe string encoder`);
+  }
+  if (/rowLabelOffset="\[(?!\[)/i.test(source)) {
+    failures.push(`${relative(file)}: RowList rowLabelOffset must be an array of vector2d values`);
+  }
+  if (/showRowLabel="(?:true|false)"/i.test(source)) {
+    failures.push(`${relative(file)}: RowList showRowLabel must be an array of Boolean values`);
+  }
   for (const uri of source.matchAll(/pkg:\/([^"'\s<]+)/g)) {
     const target = path.join(appRoot, uri[1]);
     if (!fs.existsSync(target)) failures.push(`${relative(file)}: missing ${uri[0]}`);
@@ -109,6 +119,16 @@ for (const file of files) {
     const ids = [...source.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
     const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
     if (duplicateIds.length) failures.push(`${relative(file)}: duplicate ids ${[...new Set(duplicateIds)].join(', ')}`);
+    const controllerPath = file.replace(/\.xml$/i, '.brs');
+    if (fs.existsSync(controllerPath)) {
+      const controller = fs.readFileSync(controllerPath, 'utf8');
+      for (const nodeId of ids.filter((id) => /^[A-Za-z][A-Za-z0-9_]*$/.test(id))) {
+        if (new RegExp(`\\bm\\.${nodeId}\\s*\\.`).test(controller)
+          && !new RegExp(`\\bm\\.${nodeId}\\s*=\\s*m\\.top\\.findNode\\(["']${nodeId}["']\\)`, 'i').test(controller)) {
+          failures.push(`${relative(controllerPath)}: uses m.${nodeId} without caching the ${nodeId} node`);
+        }
+      }
+    }
   }
 }
 
