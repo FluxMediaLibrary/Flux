@@ -1,4 +1,7 @@
 sub init()
+    m.titleLabel = m.top.findNode("titleLabel")
+    m.messageLabel = m.top.findNode("messageLabel")
+    m.actionsList = m.top.findNode("actionsList")
     m.actionsList.observeField("itemSelected", "onSelected")
 end sub
 
@@ -20,4 +23,3 @@ end sub
 sub onSelected()
     m.top.actionSelected = m.actionsList.itemSelected
 end sub
-

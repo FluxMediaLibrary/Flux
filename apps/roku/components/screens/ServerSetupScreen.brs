@@ -1,4 +1,6 @@
 sub init()
+    m.actions = m.top.findNode("actions")
+    m.errorLabel = m.top.findNode("errorLabel")
     content = CreateObject("roSGNode", "ContentNode")
     for each label in ["Enter server address", "How to find my server"]
         item = content.CreateChild("ContentNode")
@@ -35,4 +37,3 @@ sub onKeyboardButton(event as Object)
     dialog.close = true
     m.actions.SetFocus(true)
 end sub
-

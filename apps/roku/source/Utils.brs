@@ -6,9 +6,13 @@ function NormalizeServerUrl(value as Dynamic) as String
     end while
     lower = LCase(url)
     if Left(lower, 7) <> "http://" and Left(lower, 8) <> "https://" then return ""
-    pattern = CreateObject("roRegex", "^https?://[^/\\s]+$", "i")
+    pattern = CreateObject("roRegex", "^https?://[^/\s]+$", "i")
     if not pattern.IsMatch(url) then return ""
     return url
+end function
+
+function DefaultServerUrl() as String
+    return NormalizeServerUrl(CreateObject("roAppInfo").GetValue("flux_server_url"))
 end function
 
 function CompareSemanticVersions(leftValue as String, rightValue as String) as Integer
@@ -42,6 +46,57 @@ function SafeJsonParse(value as String) as Dynamic
     return ParseJson(value)
 end function
 
+function PerformJsonRequest(input as Object, timeoutMs as Integer) as Object
+    transfer = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    transfer.SetMessagePort(port)
+    transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    transfer.InitClientCertificates()
+    transfer.SetUrl(input.url)
+    transfer.SetRequest("GET")
+    transfer.SetHeaders({ "Accept": "application/json", "User-Agent": "FluxRoku/" + AppVersion() })
+    if input.method <> invalid then transfer.SetRequest(input.method)
+    if input.token <> invalid and input.token <> "" then transfer.AddHeader("Authorization", "Bearer " + input.token)
+    if input.headers <> invalid
+        for each name in input.headers
+            transfer.AddHeader(name, input.headers[name])
+        end for
+    end if
+    transfer.EnableEncodings(true)
+    transfer.RetainBodyOnError(true)
+    transfer.SetMinimumTransferRate(1, 10)
+
+    body = ""
+    if input.body <> invalid
+        transfer.AddHeader("Content-Type", "application/json")
+        body = FormatJson(input.body)
+    end if
+
+    if body = ""
+        started = transfer.AsyncGetToString()
+    else
+        started = transfer.AsyncPostFromString(body)
+    end if
+    if not started then return { status: 0, data: invalid, failureReason: "Request could not be started", timedOut: false }
+
+    responseEvent = Wait(timeoutMs, port)
+    if responseEvent = invalid
+        transfer.AsyncCancel()
+        return { status: 0, data: invalid, failureReason: "Request timed out", timedOut: true }
+    end if
+    if Type(responseEvent) <> "roUrlEvent"
+        transfer.AsyncCancel()
+        return { status: 0, data: invalid, failureReason: "Unexpected network event", timedOut: false }
+    end if
+
+    return {
+        status: responseEvent.GetResponseCode()
+        data: SafeJsonParse(responseEvent.GetString())
+        failureReason: responseEvent.GetFailureReason()
+        timedOut: false
+    }
+end function
+
 function IsAssociativeArray(value as Dynamic) as Boolean
     return GetInterface(value, "ifAssociativeArray") <> invalid
 end function
@@ -60,7 +115,7 @@ end function
 function MapApiFailure(status as Integer, parsed as Dynamic) as Object
     code = "NETWORK_ERROR"
     message = "Flux could not reach the server."
-    retryable = status = 0 or status = 408 or status = 429 or status >= 500
+    retryable = status <= 0 or status = 408 or status = 429 or status >= 500
     if IsAssociativeArray(parsed)
         if parsed.code <> invalid then code = parsed.code else if parsed.error <> invalid then code = parsed.error
         if parsed.message <> invalid then message = parsed.message

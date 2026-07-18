@@ -10,6 +10,7 @@ function ReadRegistryState() as Object
         deviceId: section.Read("device_id")
         preferences: DeserializePreferences(section.Read("preferences"))
     }
+    if state.serverUrl = "" then state.serverUrl = DefaultServerUrl()
     if state.deviceId = ""
         state.deviceId = CreateObject("roDeviceInfo").GetRandomUUID()
         section.Write("device_id", state.deviceId)

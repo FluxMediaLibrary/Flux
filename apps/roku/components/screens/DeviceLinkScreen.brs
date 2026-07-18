@@ -1,4 +1,8 @@
 sub init()
+    m.instructions = m.top.findNode("instructions")
+    m.userCode = m.top.findNode("userCode")
+    m.verificationUrl = m.top.findNode("verificationUrl")
+    m.retryButton = m.top.findNode("retryButton")
     m.retryButton.observeField("buttonSelected", "onRetry")
     m.retryButton.SetFocus(true)
 end sub
@@ -13,4 +17,3 @@ end sub
 sub onRetry()
     m.top.retryRequested = true
 end sub
-
