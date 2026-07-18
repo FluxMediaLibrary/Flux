@@ -1,4 +1,5 @@
 sub init()
+    m.profileList = m.top.findNode("profileList")
     m.profileList.observeField("itemSelected", "onSelected")
 end sub
 
@@ -18,4 +19,3 @@ sub onSelected()
     item = m.profileList.content.GetChild(m.profileList.itemSelected)
     m.top.profileSelected = item.id
 end sub
-

@@ -20,5 +20,6 @@
     <Rectangle id="background" width="1920" height="1080" color="#0d0f12" />
     <Group id="contentHost" focusable="true" />
     <BusySpinner id="spinner" translation="[930,510]" uri="pkg:/images/spinner.png" visible="false" />
+    <Timer id="startupWatchdog" repeat="false" duration="15" />
   </children>
 </component>

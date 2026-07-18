@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <component name="ApiRequestTask" extends="Task">
   <interface>
+    <field id="requestId" type="integer" />
     <field id="request" type="assocarray" />
     <field id="response" type="assocarray" alwaysNotify="true" />
     <field id="failure" type="assocarray" alwaysNotify="true" />
@@ -9,4 +10,3 @@
   <script type="text/brightscript" uri="pkg:/source/Logger.brs" />
   <script type="text/brightscript" uri="pkg:/components/tasks/ApiRequestTask.brs" />
 </component>
-

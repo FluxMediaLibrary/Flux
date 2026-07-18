@@ -13,6 +13,8 @@ sub openPendingDeepLink()
 end sub
 
 sub beginStartup()
+    m.watchdog.control = "stop"
+    m.watchdog.control = "start"
     m.state = "LOADING_REGISTRY"
     if m.registry.serverUrl = ""
         m.state = "READY"
@@ -230,7 +232,7 @@ sub onLogoutComplete(event as Object)
     if m.pendingSettingsAction = "server" or m.pendingSettingsAction = "remove_server"
         ClearServer()
         m.registry = ReadRegistryState()
-        showServerSetup()
+        retryStartup()
     else
         showDeviceLink()
     end if
@@ -269,4 +271,3 @@ sub onRefreshFailed(event as Object)
     m.registry.refreshToken = ""
     showDeviceLink()
 end sub
-
