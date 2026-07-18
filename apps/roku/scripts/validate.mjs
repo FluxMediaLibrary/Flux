@@ -7,7 +7,7 @@ const failures = [];
 const requiredManifest = [
   'title', 'major_version', 'minor_version', 'build_version',
   'mm_icon_focus_fhd', 'mm_icon_focus_hd', 'splash_screen_fhd',
-  'splash_screen_hd', 'ui_resolutions',
+  'splash_screen_hd', 'ui_resolutions', 'flux_server_url',
 ];
 
 function walk(directory) {
@@ -40,6 +40,14 @@ const manifest = new Map(
 );
 for (const key of requiredManifest) {
   if (!manifest.get(key)) failures.push(`manifest: missing ${key}`);
+}
+try {
+  const serverUrl = new URL(manifest.get('flux_server_url'));
+  if (serverUrl.protocol !== 'https:' || serverUrl.pathname !== '/' || serverUrl.search || serverUrl.hash) {
+    failures.push('manifest: flux_server_url must be an HTTPS origin without a path, query, or fragment');
+  }
+} catch {
+  failures.push('manifest: flux_server_url must be a valid absolute URL');
 }
 for (const [key, expected] of [
   ['mm_icon_focus_fhd', [540, 405]],
@@ -79,6 +87,15 @@ for (const file of files) {
   }
   if (/flux\.personal\.deadstudios\.xyz|Authorization\s*[:=]\s*["'][^"']+["']/i.test(source)) {
     failures.push(`${relative(file)}: contains a hardcoded domain or credential`);
+  }
+  if (/GetRoSGNode\(\)\s*(?:<>|=)/i.test(source)) {
+    failures.push(`${relative(file)}: compares SceneGraph node objects directly`);
+  }
+  if (/\.SetConnectTimeout\s*\(/i.test(source)) {
+    failures.push(`${relative(file)}: calls unsupported roUrlTransfer.SetConnectTimeout`);
+  }
+  if (/\btransfer\.(?:GetResponseCode|GetToString|PostFromString)\s*\(/i.test(source)) {
+    failures.push(`${relative(file)}: uses a synchronous roUrlTransfer response path`);
   }
   for (const uri of source.matchAll(/pkg:\/([^"'\s<]+)/g)) {
     const target = path.join(appRoot, uri[1]);

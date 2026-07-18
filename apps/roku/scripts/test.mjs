@@ -65,6 +65,16 @@ for (const [name, fields] of Object.entries(navigationContracts)) {
   if (!fs.existsSync(brsPath)) {
     console.error(`FAIL: ${name} has no paired BrightScript controller`);
     navigationFailures += 1;
+  } else {
+    const brs = fs.readFileSync(brsPath, "utf8");
+    const nodeIds = [...xml.matchAll(/\bid="([A-Za-z][A-Za-z0-9_]*)"/g)].map((match) => match[1]);
+    for (const nodeId of nodeIds) {
+      if (new RegExp(`\\bm\\.${nodeId}\\s*\\.`).test(brs)
+        && !new RegExp(`\\bm\\.${nodeId}\\s*=\\s*m\\.top\\.findNode\\(["']${nodeId}["']\\)`, "i").test(brs)) {
+        console.error(`FAIL: ${name} uses m.${nodeId} without caching the ${nodeId} node`);
+        navigationFailures += 1;
+      }
+    }
   }
   for (const field of fields) {
     if (!new RegExp(`<field\\s+id="${field}"`).test(xml)) {

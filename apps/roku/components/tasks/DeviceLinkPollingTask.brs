@@ -7,18 +7,9 @@ sub poll()
     if interval < 3 then interval = 5
     while true
         Sleep(interval * 1000)
-        transfer = CreateObject("roUrlTransfer")
-        transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
-        transfer.InitClientCertificates()
-        transfer.SetUrl(m.top.url)
-        transfer.SetRequest("POST")
-        transfer.AddHeader("Accept", "application/json")
-        transfer.AddHeader("Content-Type", "application/json")
-        transfer.SetConnectTimeout(10)
-        transfer.SetMinimumTransferRate(1, 20)
-        raw = transfer.PostFromString(FormatJson({ deviceCode: m.top.deviceCode }))
-        status = transfer.GetResponseCode()
-        data = SafeJsonParse(raw)
+        response = PerformJsonRequest({ url: m.top.url, method: "POST", body: { deviceCode: m.top.deviceCode } }, 12000)
+        status = response.status
+        data = response.data
         if status = 0 or status >= 500
             m.top.failure = { code: "DEVICE_POLL_NETWORK", message: "The server connection was interrupted while linking.", retryable: true }
             return
@@ -37,4 +28,3 @@ sub poll()
         end if
     end while
 end sub
-
