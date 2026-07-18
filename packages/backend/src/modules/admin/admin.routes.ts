@@ -29,6 +29,7 @@ import {
 } from './admin-control.service.js';
 import { approveRequest, listAllRequests, rejectRequest, syncFulfilledRequests } from '../requests/requests.service.js';
 import { getTorrentClientHealth, listTorrents, removeTorrentById, retryTorrentDownload, stopTorrent } from '../torrents/torrents.service.js';
+import { prisma } from '../../lib/db.js';
 
 const updateUserSchema = z.object({
   role: z.enum(['ADMIN', 'MEMBER']).optional(),
@@ -36,6 +37,14 @@ const updateUserSchema = z.object({
   disabled: z.boolean().optional(),
   requestLimit: z.number().int().positive().nullable().optional(),
   streamLimit: z.number().int().positive().nullable().optional(),
+});
+const playbackMarkersSchema = z.object({
+  episodeId: z.string().trim().min(1).max(128).optional(),
+  markers: z.array(z.object({
+    type: z.enum(['intro', 'credits']),
+    startSeconds: z.number().finite().min(0),
+    endSeconds: z.number().finite().positive(),
+  }).refine((marker) => marker.endSeconds > marker.startSeconds, 'Marker end must be after its start')).max(2),
 });
 
 export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
@@ -149,6 +158,27 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
   app.get('/library', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async () => {
     return getAdminLibraryHealth();
+  });
+
+  app.put('/library/:id/markers', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const { id } = request.params as { id: string };
+    const body = playbackMarkersSchema.parse(request.body);
+    const item = await prisma.mediaItem.findUnique({ where: { id }, select: { id: true, title: true } });
+    if (!item) throw ApiError.notFound('Media item not found');
+    if (body.episodeId) {
+      const episode = await prisma.episode.findFirst({ where: { id: body.episodeId, mediaItemId: id }, select: { id: true } });
+      if (!episode) throw ApiError.notFound('Episode not found');
+    }
+    const target = body.episodeId ? { episodeId: body.episodeId } : { mediaItemId: id };
+    const markers = await prisma.$transaction(async (tx) => {
+      await tx.playbackMarker.deleteMany({ where: target });
+      if (body.markers.length) {
+        await tx.playbackMarker.createMany({ data: body.markers.map((marker) => ({ ...marker, ...target })) });
+      }
+      return tx.playbackMarker.findMany({ where: target, orderBy: { startSeconds: 'asc' } });
+    });
+    await writeAuditEvent({ actorId: request.account!.id, action: 'PLAYBACK_MARKERS_UPDATED', targetType: body.episodeId ? 'EPISODE' : 'MEDIA_ITEM', targetId: body.episodeId ?? id, targetLabel: item.title, details: { markerCount: markers.length } });
+    return { markers };
   });
 
   app.post('/library/sync-episodes', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="ProfileSelectionScreen" extends="Group" initialFocus="profileList">
+  <interface>
+    <field id="profiles" type="array" onChange="renderProfiles" />
+    <field id="profileSelected" type="string" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/ProfileSelectionScreen.brs" />
+  <children>
+    <Label text="Who's watching?" width="1920" height="90" translation="[0,150]" horizAlign="center" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
+    <MarkupGrid id="profileList" translation="[360,340]" itemComponentName="ProfileCard" numColumns="4" numRows="1" itemSize="[300,380]" itemSpacing="[40,0]" />
+  </children>
+</component>
+

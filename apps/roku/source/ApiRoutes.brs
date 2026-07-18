@@ -1,0 +1,27 @@
+function ApiRoutes() as Object
+    return {
+        bootstrap: "/api/client/bootstrap"
+        createDevice: "/api/auth/device"
+        deviceStatus: "/api/auth/device/status"
+        refresh: "/api/auth/refresh"
+        logout: "/api/auth/logout"
+        profiles: "/api/roku/profiles"
+        selectProfile: "/api/roku/profiles/select"
+        home: "/api/roku/home"
+        homeRows: "/api/roku/home/rows"
+        movies: "/api/roku/library/movies"
+        shows: "/api/roku/library/shows"
+        search: "/api/roku/search"
+        requests: "/api/roku/requests"
+        media: "/api/roku/media"
+        episodes: "/api/roku/episodes"
+        shows: "/api/roku/shows"
+        resolvePlayback: "/api/roku/playback/resolve"
+        progress: "/api/roku/playback/progress"
+        stopPlayback: "/api/roku/playback/stop"
+        refreshPlayback: "/api/roku/playback/refresh"
+        nextPlayback: "/api/roku/playback/next"
+        version: "/api/clients/roku/version"
+        config: "/api/clients/roku/config"
+    }
+end function

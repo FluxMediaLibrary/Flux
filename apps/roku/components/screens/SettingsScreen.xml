@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SettingsScreen" extends="Group" initialFocus="actions">
+  <interface>
+    <field id="serverName" type="string" onChange="render" />
+    <field id="serverUrl" type="string" onChange="render" />
+    <field id="appVersion" type="string" onChange="render" />
+    <field id="preferences" type="assocarray" onChange="renderActions" />
+    <field id="serverVersion" type="string" onChange="render" />
+    <field id="accountLabel" type="string" onChange="render" />
+    <field id="profileLabel" type="string" onChange="render" />
+    <field id="actionSelected" type="string" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/SettingsScreen.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="#0d0f12" />
+    <Label text="Settings" width="1000" height="90" translation="[110,100]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
+    <Label id="server" width="1500" height="90" translation="[110,210]" wrap="true" font="font:MediumSystemFont" color="#aaa9aa" />
+    <Label id="identity" width="1500" height="55" translation="[110,310]" font="font:SmallSystemFont" color="#d4d4d8" />
+    <Label id="version" width="1100" height="45" translation="[110,365]" font="font:SmallSystemFont" color="#aaa9aa" />
+    <LabelList id="actions" translation="[110,435]" itemSize="[850,66]" numRows="8" focusBitmapUri="pkg:/images/focus.9.png" />
+  </children>
+</component>

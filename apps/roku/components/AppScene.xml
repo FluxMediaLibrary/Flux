@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="AppScene" extends="Scene" initialFocus="contentHost">
+  <interface>
+    <field id="launchArgs" type="assocarray" onChange="onLaunchArgs" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/source/Utils.brs" />
+  <script type="text/brightscript" uri="pkg:/source/Logger.brs" />
+  <script type="text/brightscript" uri="pkg:/source/RegistryManager.brs" />
+  <script type="text/brightscript" uri="pkg:/source/ApiRoutes.brs" />
+  <script type="text/brightscript" uri="pkg:/source/VersionManager.brs" />
+  <script type="text/brightscript" uri="pkg:/source/FeatureFlagManager.brs" />
+  <script type="text/brightscript" uri="pkg:/source/PlaybackManager.brs" />
+  <script type="text/brightscript" uri="pkg:/source/NavigationController.brs" />
+  <script type="text/brightscript" uri="pkg:/components/controllers/StartupAuthController.brs" />
+  <script type="text/brightscript" uri="pkg:/components/controllers/BrowseController.brs" />
+  <script type="text/brightscript" uri="pkg:/components/controllers/PlaybackController.brs" />
+  <script type="text/brightscript" uri="pkg:/components/controllers/SettingsController.brs" />
+  <script type="text/brightscript" uri="pkg:/components/AppScene.brs" />
+  <children>
+    <Rectangle id="background" width="1920" height="1080" color="#0d0f12" />
+    <Group id="contentHost" focusable="true" />
+    <BusySpinner id="spinner" translation="[930,510]" uri="pkg:/images/spinner.png" visible="false" />
+  </children>
+</component>

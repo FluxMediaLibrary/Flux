@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="DetailsScreen" extends="Group" initialFocus="actions">
+  <interface>
+    <field id="detail" type="assocarray" onChange="renderDetail" />
+    <field id="playSelected" type="assocarray" alwaysNotify="true" />
+    <field id="mediaSelected" type="assocarray" alwaysNotify="true" />
+    <field id="seasonSelected" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/DetailsScreen.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="#0d0f12" />
+    <Poster id="backdrop" width="1920" height="1080" opacity="0.24" loadDisplayMode="scaleToFill" />
+    <Rectangle width="1920" height="1080" color="#0d0f12" opacity="0.32" />
+    <Poster id="poster" width="330" height="495" translation="[95,135]" loadDisplayMode="scaleToFill" />
+    <Label id="title" width="1280" height="90" translation="[485,125]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
+    <Label id="metadata" width="1220" height="55" translation="[490,220]" font="font:MediumSystemFont" color="#aaa9aa" />
+    <Label id="overview" width="1220" height="190" translation="[490,295]" wrap="true" maxLines="5" font="font:MediumSystemFont" color="#f4f4f5" />
+    <Label id="credits" width="1220" height="46" translation="[490,480]" font="font:SmallSystemFont" color="#aaa9aa" />
+    <LabelList id="actions" translation="[490,535]" itemSize="[520,68]" numRows="3" focusBitmapUri="pkg:/images/focus.9.png" />
+    <Label id="availability" text="Not currently available to play" width="700" height="60" translation="[490,545]" font="font:MediumBoldSystemFont" color="#f59e0b" visible="false" />
+    <Label id="episodeHeader" width="500" height="50" translation="[95,690]" font="font:LargeBoldSystemFont" color="#f4f4f5" visible="false" />
+    <RowList id="episodes" translation="[95,750]" numRows="1" itemSize="[1725,240]" rowItemSize="[[300,190]]" rowItemSpacing="[[28,0]]" showRowLabel="false" focusBitmapUri="pkg:/images/focus.9.png" visible="false" />
+  </children>
+</component>

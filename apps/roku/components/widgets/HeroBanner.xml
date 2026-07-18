@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="HeroBanner" extends="Group" initialFocus="actions">
+  <interface>
+    <field id="heroData" type="assocarray" onChange="renderHero" />
+    <field id="accentColor" type="color" value="#8b5cf6" onChange="renderHero" />
+    <field id="actionSelected" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/widgets/HeroBanner.brs" />
+  <children>
+    <Rectangle width="1480" height="300" color="#171a1f" />
+    <Poster id="backdrop" width="920" height="300" translation="[560,0]" loadDisplayMode="scaleToFill" opacity="0.72" />
+    <Rectangle width="880" height="300" color="#0d0f12" opacity="0.84" />
+    <Rectangle width="180" height="300" translation="[880,0]" color="#0d0f12" opacity="0.45" />
+    <Rectangle id="accent" width="8" height="220" translation="[34,40]" color="#8b5cf6" />
+    <Label id="eyebrow" width="460" height="34" translation="[70,25]" font="font:SmallBoldSystemFont" color="#aaa9aa" />
+    <Label id="title" width="760" height="64" translation="[70,57]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
+    <Label id="metadata" width="790" height="36" translation="[70,120]" font="font:SmallSystemFont" color="#d4d4d8" />
+    <Label id="overview" width="790" height="58" translation="[70,156]" wrap="true" maxLines="2" font="font:SmallSystemFont" color="#d4d4d8" />
+    <Rectangle id="progressTrack" width="620" height="8" translation="[70,218]" color="#3f3f46" visible="false" />
+    <Rectangle id="progressFill" width="0" height="8" translation="[70,218]" color="#8b5cf6" visible="false" />
+    <ButtonGroup id="actions" translation="[70,236]" minWidth="170" />
+  </children>
+</component>

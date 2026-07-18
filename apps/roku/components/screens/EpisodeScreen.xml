@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="EpisodeScreen" extends="Group" initialFocus="actions">
+  <interface>
+    <field id="episode" type="assocarray" onChange="renderEpisode" />
+    <field id="playSelected" type="assocarray" alwaysNotify="true" />
+    <field id="backRequested" type="boolean" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/EpisodeScreen.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="#0d0f12" />
+    <Poster id="backdrop" width="1920" height="1080" opacity="0.22" loadDisplayMode="scaleToFill" />
+    <Rectangle width="1920" height="1080" color="#0d0f12" opacity="0.42" />
+    <Poster id="thumbnail" width="620" height="350" translation="[95,150]" loadDisplayMode="scaleToFill" />
+    <Label id="showTitle" width="1000" height="46" translation="[780,135]" font="font:MediumBoldSystemFont" color="#8b5cf6" />
+    <Label id="title" width="1040" height="92" translation="[775,185]" wrap="true" maxLines="2" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
+    <Label id="metadata" width="1000" height="46" translation="[780,285]" font="font:MediumSystemFont" color="#aaa9aa" />
+    <Label id="overview" width="1000" height="190" translation="[780,350]" wrap="true" maxLines="5" font="font:MediumSystemFont" color="#f4f4f5" />
+    <Label id="progress" width="1000" height="46" translation="[780,545]" font="font:SmallSystemFont" color="#aaa9aa" />
+    <Label id="availability" text="This episode is not currently available to play." width="900" height="58" translation="[780,610]" font="font:MediumBoldSystemFont" color="#f59e0b" visible="false" />
+    <LabelList id="actions" translation="[780,610]" itemSize="[560,70]" numRows="3" focusBitmapUri="pkg:/images/focus.9.png" />
+  </children>
+</component>

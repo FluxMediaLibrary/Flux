@@ -1,0 +1,15 @@
+{
+  "rootDir": ".",
+  "files": [
+    "manifest",
+    "source/**/*",
+    "components/**/*",
+    "images/**/*",
+    "locale/**/*"
+  ],
+  "stagingFolderPath": "dist/staging",
+  "retainStagingFolder": false,
+  "autoImportComponentScript": false,
+  "sourceMap": false
+}
+
