@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SplashScreen" extends="Group">
+  <children>
+    <Poster uri="pkg:/images/logo.png" width="220" height="220" translation="[850,350]" loadDisplayMode="scaleToFit" />
+    <Label text="FLUX" width="1920" height="80" translation="[0,590]" horizAlign="center" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
+    <Label text="Your media. Your server." width="1920" height="50" translation="[0,675]" horizAlign="center" font="font:MediumSystemFont" color="#aaa9aa" />
+  </children>
+</component>
+

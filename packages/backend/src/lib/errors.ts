@@ -38,6 +38,9 @@ export class ApiError extends Error {
   static conflict(message: string, code = 'CONFLICT') {
     return new ApiError(409, code, message);
   }
+  static tooManyRequests(message = 'Too many requests', code = 'RATE_LIMITED') {
+    return new ApiError(429, code, message);
+  }
   static internal(message = 'Internal server error', code = 'INTERNAL') {
     return new ApiError(500, code, message);
   }

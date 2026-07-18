@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="DeviceLinkScreen" extends="Group" initialFocus="retryButton">
+  <interface>
+    <field id="linkData" type="assocarray" onChange="render" />
+    <field id="serverName" type="string" onChange="render" />
+    <field id="retryRequested" type="boolean" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/DeviceLinkScreen.brs" />
+  <children>
+    <Label text="Link this Roku" width="1920" height="80" translation="[0,130]" horizAlign="center" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
+    <Label id="instructions" width="1500" height="100" translation="[210,255]" horizAlign="center" wrap="true" font="font:MediumSystemFont" color="#aaa9aa" />
+    <Rectangle width="700" height="175" translation="[610,395]" color="#171a1f" />
+    <Label id="userCode" width="700" height="120" translation="[610,420]" horizAlign="center" vertAlign="center" font="font:ExtraLargeBoldSystemFont" color="#60a5fa" />
+    <Label id="verificationUrl" width="1400" height="70" translation="[260,625]" horizAlign="center" font="font:LargeBoldSystemFont" color="#f4f4f5" />
+    <Button id="retryButton" text="Get a new code" minWidth="330" translation="[795,790]" />
+  </children>
+</component>
+

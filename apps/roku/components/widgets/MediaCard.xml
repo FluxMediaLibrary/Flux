@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="MediaCard" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="render" />
+    <field id="focusPercent" type="float" onChange="renderFocus" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/widgets/MediaCard.brs" />
+  <script type="text/brightscript" uri="pkg:/source/Utils.brs" />
+  <children>
+    <Rectangle id="focus" width="226" height="341" translation="[-5,-5]" color="#8b5cf6" visible="false" />
+    <Poster id="poster" width="216" height="324" loadDisplayMode="scaleToFill" />
+    <Rectangle id="watchedBadge" width="72" height="34" translation="[134,10]" color="#16a34a" visible="false" />
+    <Label id="watchedBadgeText" text="WATCHED" width="72" height="34" translation="[134,10]" horizAlign="center" vertAlign="center" font="font:SmallBoldSystemFont" color="#ffffff" visible="false" />
+    <Rectangle id="countBadge" width="130" height="34" translation="[10,10]" color="#7c3aed" visible="false" />
+    <Label id="countBadgeText" width="130" height="34" translation="[10,10]" horizAlign="center" vertAlign="center" font="font:SmallBoldSystemFont" color="#ffffff" visible="false" />
+    <Rectangle width="216" height="70" translation="[0,254]" color="#0d0f12" opacity="0.86" />
+    <Label id="title" width="196" height="58" translation="[10,262]" wrap="true" maxLines="2" font="font:SmallBoldSystemFont" color="#f4f4f5" />
+    <Rectangle id="progressTrack" width="216" height="8" translation="[0,316]" color="#52525b" visible="false" />
+    <Rectangle id="progressFill" width="0" height="8" translation="[0,316]" color="#8b5cf6" visible="false" />
+  </children>
+</component>

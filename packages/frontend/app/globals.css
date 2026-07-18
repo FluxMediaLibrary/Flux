@@ -177,6 +177,22 @@ label {
   margin-bottom: 16px;
 }
 
+.device-link-page {
+  width: min(620px, calc(100vw - 32px));
+  margin: 0 auto;
+  text-align: center;
+}
+.device-link-page > p { margin: 0 0 12px; }
+.device-link-code {
+  max-width: 360px;
+  text-align: center;
+  text-transform: uppercase;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: .18em;
+}
+.device-link-actions { display: flex; gap: 10px; justify-content: center; }
+
 .form-group {
   background: var(--bg-elev);
   border: 1px solid var(--surface-border);

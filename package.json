@@ -15,10 +15,17 @@
     "build": "npm run build --workspace @flux/shared && npm run build --workspace @flux/backend && npm run build --workspace @flux/frontend",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
+    "roku:check": "bsc --project apps/roku/bsconfig.json --create-package false --copy-to-staging false && node apps/roku/scripts/validate.mjs",
+    "roku:test": "node apps/roku/scripts/test.mjs",
+    "roku:package": "powershell -NoProfile -ExecutionPolicy Bypass -File apps/roku/package.ps1",
     "prisma:generate": "npm run prisma:generate --workspace @flux/backend",
     "prisma:migrate": "npm run prisma:migrate --workspace @flux/backend"
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "@rokucommunity/brs": "^0.47.4",
+    "brighterscript": "^0.73.0"
   }
 }

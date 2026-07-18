@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="MessageScreen" extends="Group" initialFocus="actionsList">
+  <interface>
+    <field id="title" type="string" onChange="render" />
+    <field id="message" type="string" onChange="render" />
+    <field id="actions" type="array" onChange="renderActions" />
+    <field id="actionSelected" type="integer" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/MessageScreen.brs" />
+  <children>
+    <Label id="titleLabel" width="1500" height="90" translation="[210,250]" horizAlign="center" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
+    <Label id="messageLabel" width="1300" height="190" translation="[310,385]" horizAlign="center" wrap="true" font="font:MediumSystemFont" color="#aaa9aa" />
+    <LabelList id="actionsList" translation="[650,650]" itemSize="[620,70]" numRows="3" focusBitmapUri="pkg:/images/focus.9.png" />
+  </children>
+</component>
+

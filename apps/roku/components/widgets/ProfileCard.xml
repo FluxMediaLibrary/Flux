@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="ProfileCard" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="render" />
+    <field id="focusPercent" type="float" onChange="renderFocus" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/widgets/ProfileCard.brs" />
+  <children>
+    <Rectangle id="focusBorder" width="260" height="260" translation="[20,0]" color="#60a5fa" visible="false" />
+    <Poster id="avatar" width="244" height="244" translation="[28,8]" loadDisplayMode="scaleToFill" />
+    <Label id="name" width="300" height="60" translation="[0,285]" horizAlign="center" font="font:LargeBoldSystemFont" color="#f4f4f5" />
+  </children>
+</component>
+
