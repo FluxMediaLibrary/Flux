@@ -20,7 +20,7 @@ import type {
   preHandlerHookHandler,
 } from 'fastify';
 import type { AdminPermission, Role } from '@flux/shared';
-import { verifyToken, type CastPlaybackClaims } from '../lib/jwt.js';
+import { verifyToken, type CastPlaybackClaims, type PlaybackClaims } from '../lib/jwt.js';
 import { ApiError } from '../lib/errors.js';
 import { prisma } from '../lib/db.js';
 
@@ -35,12 +35,16 @@ declare module 'fastify' {
     activeProfileId?: string;
     /** Present only for a signed, media-scoped Cast receiver token. */
     castPlayback?: CastPlaybackClaims;
+    /** Present only for a signed, persistent Roku playback session token. */
+    playback?: PlaybackClaims;
+    deviceSessionId?: string;
   }
   interface FastifyInstance {
     requireAuth: preHandlerHookHandler;
     requireAdmin: preHandlerHookHandler;
     requirePermission: (permission: AdminPermission) => preHandlerHookHandler;
     requireProfile: preHandlerHookHandler;
+    requireDeviceAuth: preHandlerHookHandler;
     /**
      * Like requireProfile, but also accepts the JWT via a `?token=` query
      * param. Needed for media streaming: <video> elements and hls.js segment
@@ -81,30 +85,41 @@ function extractTokenAllowQuery(request: FastifyRequest): string {
 /** Populate request.account/activeProfileId from a valid JWT, else 401. */
 function authenticate(request: FastifyRequest): void {
   const token = extractBearer(request);
-  applyClaims(request, token);
+  applyClaims(request, token, false);
 }
 
 /** Same as authenticate but allows the token to arrive via `?token=`. */
 function authenticateAllowQuery(request: FastifyRequest): void {
   const token = extractTokenAllowQuery(request);
-  applyClaims(request, token);
+  applyClaims(request, token, true);
 }
 
-function applyClaims(request: FastifyRequest, token: string): void {
+function applyClaims(request: FastifyRequest, token: string, allowMediaPurpose: boolean): void {
   let claims;
   try {
     claims = verifyToken(token);
   } catch {
     throw ApiError.unauthorized('Invalid or expired token');
   }
+  if (!allowMediaPurpose && ['stream', 'cast-playback', 'playback'].includes(claims.purpose ?? '')) {
+    throw ApiError.unauthorized('This token cannot access account APIs', 'TOKEN_PURPOSE_INVALID');
+  }
   request.account = { id: claims.sub, role: claims.role };
   request.activeProfileId = claims.activeProfileId;
+  request.deviceSessionId = claims.purpose === 'device' ? claims.sessionId : undefined;
   if (claims.purpose === 'cast-playback') {
     const cast = claims as unknown as CastPlaybackClaims;
     if (!cast.castSessionId || !cast.mediaItemId) {
       throw ApiError.unauthorized('Invalid Cast playback token');
     }
     request.castPlayback = cast;
+  }
+  if (claims.purpose === 'playback') {
+    const playback = claims as unknown as PlaybackClaims;
+    if (!playback.playbackSessionId || !playback.mediaItemId) {
+      throw ApiError.unauthorized('Invalid playback token');
+    }
+    request.playback = playback;
   }
 }
 
@@ -123,6 +138,8 @@ const authPlugin = fp(async (app: FastifyInstance) => {
   app.decorateRequest('account', undefined);
   app.decorateRequest('activeProfileId', undefined);
   app.decorateRequest('castPlayback', undefined);
+  app.decorateRequest('playback', undefined);
+  app.decorateRequest('deviceSessionId', undefined);
 
   const requireAuth: preHandlerHookHandler = async (
     request: FastifyRequest,
@@ -174,6 +191,28 @@ const authPlugin = fp(async (app: FastifyInstance) => {
     }
   };
 
+  const requireDeviceAuth: preHandlerHookHandler = async (
+    request: FastifyRequest,
+    _reply: FastifyReply,
+  ) => {
+    authenticate(request);
+    if (!request.deviceSessionId) {
+      throw ApiError.unauthorized('A Roku device session is required', 'DEVICE_SESSION_REQUIRED');
+    }
+    const session = await prisma.deviceSession.findUnique({
+      where: { id: request.deviceSessionId },
+      include: { user: { select: { disabled: true } } },
+    });
+    if (!session || session.userId !== request.account!.id || session.revokedAt ||
+      session.expiresAt.getTime() <= Date.now() || session.user.disabled) {
+      throw ApiError.unauthorized('The Roku device session is no longer valid', 'DEVICE_SESSION_REVOKED');
+    }
+    if (request.activeProfileId && session.activeProfileId !== request.activeProfileId) {
+      throw ApiError.unauthorized('The Roku profile session has changed', 'DEVICE_PROFILE_STALE');
+    }
+    await prisma.deviceSession.update({ where: { id: session.id }, data: { lastSeenAt: new Date() } });
+  };
+
   const requireProfileStream: preHandlerHookHandler = async (
     request: FastifyRequest,
     _reply: FastifyReply,
@@ -191,6 +230,7 @@ const authPlugin = fp(async (app: FastifyInstance) => {
   app.decorate('requireAdmin', requireAdmin);
   app.decorate('requirePermission', requirePermission);
   app.decorate('requireProfile', requireProfile);
+  app.decorate('requireDeviceAuth', requireDeviceAuth);
   app.decorate('requireProfileStream', requireProfileStream);
 });
 

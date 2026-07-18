@@ -67,6 +67,313 @@ export interface JwtClaims {
   sub: string; // account (User) id
   role: Role;
   activeProfileId?: string;
+  purpose?: 'account' | 'device' | 'stream' | 'cast-playback' | 'playback';
+  sessionId?: string;
+}
+
+export interface RokuBrandingDTO {
+  name: string;
+  logoUrl: string | null;
+  accentColor: string;
+  backgroundColor: string;
+}
+
+export interface RokuFeatureFlagsDTO {
+  profiles: boolean;
+  profilePins: boolean;
+  requests: boolean;
+  skipIntro: boolean;
+  subtitles: boolean;
+  audioTracks: boolean;
+}
+
+export interface ClientBootstrapDTO {
+  product: 'flux';
+  serverId: string;
+  serverName: string;
+  serverVersion: string;
+  apiVersion: number;
+  minimumApiVersion: number;
+  minimumRokuVersion: string;
+  latestRokuVersion: string;
+  rokuSupported: boolean;
+  authentication: {
+    deviceLink: true;
+    usernamePassword: false;
+  };
+  features: RokuFeatureFlagsDTO;
+  branding: RokuBrandingDTO;
+}
+
+export interface CreateDeviceAuthorizationRequest {
+  deviceName: string;
+  platform: 'roku';
+  deviceId: string;
+  appVersion: string;
+}
+
+export interface DeviceAuthorizationCreatedDTO {
+  deviceCode: string;
+  userCode: string;
+  verificationUrl: string;
+  expiresIn: number;
+  pollInterval: number;
+}
+
+export type DeviceAuthorizationState =
+  | 'pending'
+  | 'approved'
+  | 'denied'
+  | 'expired'
+  | 'slow_down';
+
+export interface DeviceAuthorizationStatusRequest {
+  deviceCode: string;
+}
+
+export interface DeviceAuthorizationStatusDTO {
+  state: DeviceAuthorizationState;
+  pollInterval?: number;
+  accessToken?: string;
+  refreshToken?: string;
+  expiresIn?: number;
+  account?: AccountDTO;
+  profiles?: ProfileDTO[];
+}
+
+export interface ApproveDeviceAuthorizationRequest {
+  userCode: string;
+  approve: boolean;
+}
+
+export interface RefreshDeviceSessionRequest {
+  refreshToken: string;
+  deviceId: string;
+}
+
+export interface DeviceSessionTokensDTO {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
+
+export interface RokuProfileDTO extends ProfileDTO {
+  avatarUrl: string | null;
+}
+
+export interface RokuProfilesDTO {
+  account: AccountDTO;
+  profiles: RokuProfileDTO[];
+}
+
+export interface SelectRokuProfileRequest {
+  profileId: string;
+}
+
+export interface SelectRokuProfileResponse extends DeviceSessionTokensDTO {
+  profile: RokuProfileDTO;
+}
+
+export interface RokuVersionDTO {
+  minimumVersion: string;
+  latestVersion: string;
+  updateRequired: boolean;
+  updateAvailable: boolean;
+  message: string;
+  releaseNotes: string[];
+}
+
+export interface RokuClientConfigDTO {
+  apiVersion: number;
+  features: RokuFeatureFlagsDTO;
+  rowOrder: string[];
+  minimumServerVersion: string;
+  playbackDefaults: {
+    maxBitrate: number;
+    progressIntervalSeconds: number;
+    completionThreshold: number;
+  };
+  loggingLevel: 'error' | 'warn' | 'info' | 'debug';
+  announcement: string | null;
+  ui: {
+    heroRotationSeconds: number;
+  };
+}
+
+export interface RokuArtworkDTO {
+  poster: string | null;
+  backdrop: string | null;
+  thumbnail: string | null;
+}
+
+export interface RokuProgressDTO {
+  positionSeconds: number;
+  durationSeconds: number | null;
+  completed: boolean;
+  percent: number | null;
+  updatedAt: string;
+}
+
+export interface RokuMediaItemDTO {
+  id: string;
+  mediaType: 'movie' | 'show' | 'episode';
+  title: string;
+  subtitle: string | null;
+  year: number | null;
+  runtimeMinutes: number | null;
+  contentRating: string | null;
+  rating: number | null;
+  overview: string | null;
+  genres: string[];
+  artwork: RokuArtworkDTO;
+  progress: RokuProgressDTO | null;
+  watched: boolean;
+  available: boolean;
+  episodeCount: number | null;
+  unplayedCount: number | null;
+  parentMediaId: string | null;
+  season: number | null;
+  episode: number | null;
+}
+
+export interface RokuMediaRowDTO {
+  id: string;
+  title: string;
+  layout: 'poster' | 'landscape' | 'episode';
+  items: RokuMediaItemDTO[];
+  error?: { code: string; message: string; retryable: boolean };
+}
+
+export interface RokuHomeDTO {
+  hero: RokuMediaItemDTO[];
+  rows: RokuMediaRowDTO[];
+  generatedAt: string;
+}
+
+export interface RokuPagedMediaDTO {
+  items: RokuMediaItemDTO[];
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+  availableGenres: string[];
+}
+
+export interface RokuSearchDTO {
+  query: string;
+  movies: RokuMediaItemDTO[];
+  shows: RokuMediaItemDTO[];
+  episodes: RokuMediaItemDTO[];
+}
+
+export interface RokuSeasonDTO {
+  season: number;
+  title: string;
+  episodeCount: number;
+  availableCount: number;
+  unplayedCount: number;
+  artwork: RokuArtworkDTO;
+}
+
+export interface RokuMediaDetailDTO extends RokuMediaItemDTO {
+  runtimeMinutes: number | null;
+  contentRating: string | null;
+  rating: number | null;
+  tagline: string | null;
+  cast: TmdbCastMember[];
+  directors: string[];
+  trailerYoutubeKey: string | null;
+  similar: RokuMediaItemDTO[];
+  seasons: RokuSeasonDTO[];
+  episodes: RokuMediaItemDTO[];
+}
+
+export interface RokuEpisodeDetailDTO extends RokuMediaItemDTO {
+  showTitle: string;
+  runtimeMinutes: number | null;
+  airDate: string | null;
+}
+
+export interface RokuPlaybackCapabilitiesDTO {
+  model: string;
+  firmware: string;
+  supports4k: boolean;
+  supportsHevc: boolean;
+  supportsHdr10: boolean;
+  maxBitrate: number;
+}
+
+export interface ResolveRokuPlaybackRequest {
+  mediaItemId: string;
+  episodeId?: string;
+  positionSeconds?: number;
+  audioStreamIndex?: number;
+  subtitleStreamIndex?: number;
+  preferredAudioLanguage?: string;
+  preferredSubtitleLanguage?: string;
+  subtitlesEnabled?: boolean;
+  capabilities: RokuPlaybackCapabilitiesDTO;
+}
+
+export interface RokuPlaybackTrackDTO {
+  index: number;
+  type: 'audio' | 'subtitle';
+  codec: string | null;
+  language: string | null;
+  title: string | null;
+  channels: number | null;
+  isDefault: boolean;
+  isForced: boolean;
+  selected: boolean;
+  url?: string;
+}
+
+export interface RokuPlaybackMarkerDTO {
+  type: 'intro' | 'credits';
+  startSeconds: number;
+  endSeconds: number;
+}
+
+export interface RokuPlaybackSessionDTO {
+  sessionId: string;
+  mediaItemId: string;
+  episodeId: string | null;
+  method: 'direct' | 'direct_stream' | 'transcode';
+  url: string;
+  contentType: 'video/mp4' | 'application/x-mpegURL';
+  title: string;
+  subtitle: string | null;
+  artworkUrl: string | null;
+  durationSeconds: number | null;
+  positionSeconds: number;
+  audioTracks: RokuPlaybackTrackDTO[];
+  subtitleTracks: RokuPlaybackTrackDTO[];
+  markers: RokuPlaybackMarkerDTO[];
+  next: RokuNextPlaybackDTO | null;
+  expiresAt: string;
+  warnings: string[];
+}
+
+export interface RokuPlaybackProgressRequest {
+  sessionId: string;
+  positionSeconds: number;
+  durationSeconds?: number;
+  state?: 'playing' | 'paused' | 'buffering';
+}
+
+export interface RokuPlaybackStopRequest {
+  sessionId: string;
+  positionSeconds: number;
+  durationSeconds?: number;
+  reason?: 'ended' | 'back' | 'error' | 'idle';
+}
+
+export interface RokuNextPlaybackDTO {
+  mediaItemId: string;
+  episodeId: string;
+  title: string;
+  subtitle: string;
+  artworkUrl: string | null;
 }
 
 export interface LoginRequest {
@@ -365,6 +672,9 @@ export interface MediaItemDTO {
   posterPath: string | null;
   backdropPath: string | null;
   genres: string[];
+  runtimeMinutes: number | null;
+  contentRating: string | null;
+  rating: number | null;
   addedAt: string;
 }
 
@@ -408,6 +718,15 @@ export interface HomeRowsDTO {
   recommended: MediaItemDTO[];
   randomPicks: MediaItemDTO[];
   byGenre: { genre: string; items: MediaItemDTO[] }[];
+  errors?: HomeRowErrorDTO[];
+}
+
+export interface HomeRowErrorDTO {
+  id: string;
+  title: string;
+  code: string;
+  message: string;
+  retryable: boolean;
 }
 
 export interface ContinueWatchingItemDTO {
