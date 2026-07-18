@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="ServerSetupScreen" extends="Group" initialFocus="actions">
+  <interface>
+    <field id="serverSubmitted" type="string" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/source/Utils.brs" />
+  <script type="text/brightscript" uri="pkg:/components/screens/ServerSetupScreen.brs" />
+  <children>
+    <Poster uri="pkg:/images/logo.png" width="140" height="140" translation="[140,100]" loadDisplayMode="scaleToFit" />
+    <Label text="Connect to Flux" width="900" height="80" translation="[140,285]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
+    <Label text="Enter the address of your Flux server. Local HTTP and public HTTPS servers are supported." width="1080" height="100" translation="[140,380]" wrap="true" font="font:MediumSystemFont" color="#aaa9aa" />
+    <LabelList id="actions" translation="[140,535]" itemSize="[720,70]" numRows="2" focusBitmapUri="pkg:/images/focus.9.png" />
+    <Label id="errorLabel" width="1200" height="60" translation="[140,740]" font="font:SmallSystemFont" color="#ef4444" />
+  </children>
+</component>
+

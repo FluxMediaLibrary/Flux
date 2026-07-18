@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="PlayerScreen" extends="Group" initialFocus="video">
+  <interface>
+    <field id="playbackData" type="assocarray" onChange="startPlayback" />
+    <field id="progressEvent" type="assocarray" alwaysNotify="true" />
+    <field id="stopped" type="assocarray" alwaysNotify="true" />
+    <field id="nextRequested" type="assocarray" alwaysNotify="true" />
+    <field id="audioTrackSelected" type="assocarray" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/PlayerScreen.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="#000000" />
+    <Video id="video" width="1920" height="1080" enableUI="true" />
+    <Group id="skipIntro" visible="false" translation="[1450,800]">
+      <Rectangle width="360" height="78" color="#f4f4f5" opacity="0.94" />
+      <Label text="Skip Intro  ▶" width="360" height="78" vertAlign="center" horizAlign="center" font="font:MediumBoldSystemFont" color="#0d0f12" />
+    </Group>
+    <Group id="upNext" visible="false" translation="[1260,745]">
+      <Rectangle width="560" height="210" color="#171a1f" opacity="0.96" />
+      <Label text="UP NEXT" width="500" height="45" translation="[30,20]" font="font:SmallBoldSystemFont" color="#8b5cf6" />
+      <Label id="nextTitle" width="500" height="62" translation="[30,68]" font="font:MediumBoldSystemFont" color="#f4f4f5" />
+      <Label id="nextSubtitle" width="500" height="45" translation="[30,132]" font="font:SmallSystemFont" color="#aaa9aa" />
+      <Label text="Press OK to play now" width="500" height="35" translation="[30,170]" font="font:SmallSystemFont" color="#f4f4f5" />
+    </Group>
+    <Group id="audioOverlay" visible="false" translation="[1260,260]">
+      <Rectangle width="560" height="440" color="#171a1f" opacity="0.98" />
+      <Label text="AUDIO TRACK" width="500" height="50" translation="[30,22]" font="font:SmallBoldSystemFont" color="#8b5cf6" />
+      <LabelList id="audioTracks" translation="[30,85]" itemSize="[500,68]" numRows="5" focusBitmapUri="pkg:/images/focus.9.png" />
+    </Group>
+    <Group id="exitControls" visible="false" translation="[560,875]">
+      <Rectangle width="800" height="90" color="#171a1f" opacity="0.96" />
+      <Label text="Playback controls  |  Press Back again to stop" width="800" height="90" vertAlign="center" horizAlign="center" font="font:MediumBoldSystemFont" color="#f4f4f5" />
+    </Group>
+    <Timer id="heartbeat" duration="15" repeat="true" />
+    <Timer id="exitTimer" duration="3" repeat="false" />
+  </children>
+</component>

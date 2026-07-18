@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="RequestsScreen" extends="Group" initialFocus="requests">
+  <interface>
+    <field id="requestData" type="assocarray" onChange="renderRequests" />
+    <field id="backRequested" type="boolean" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/RequestsScreen.brs" />
+  <children>
+    <Rectangle width="1920" height="1080" color="#0d0f12" />
+    <Label text="Requests" width="1000" height="90" translation="[100,85]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
+    <Label id="empty" text="No requests yet." width="1200" height="70" translation="[105,235]" font="font:MediumSystemFont" color="#aaa9aa" visible="false" />
+    <LabelList id="requests" translation="[100,220]" itemSize="[1250,82]" numRows="8" focusBitmapUri="pkg:/images/focus.9.png" />
+  </children>
+</component>

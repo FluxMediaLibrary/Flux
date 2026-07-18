@@ -26,6 +26,7 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { isValidCastSession } from '../../lib/cast-sessions.js';
+import { assertPlaybackAccess } from '../roku/roku-playback.service.js';
 
 // ── In-memory session tracking ──────────────────────────────────────────────
 // Maps a (mediaItemId, episodeId) pair → sessionDir so segment routes know
@@ -35,6 +36,7 @@ interface HlsSession {
   dir: string;
   manifest: 'index.m3u8' | 'master.m3u8';
   transcode: TranscodeState;
+  lastAccessAt: number;
 }
 
 interface TranscodeState {
@@ -302,6 +304,14 @@ async function discardSession(key: string, session: HlsSession): Promise<void> {
   await fs.promises.rm(session.dir, { recursive: true, force: true }).catch(() => {});
 }
 
+const hlsCleanupTimer = setInterval(() => {
+  const staleBefore = Date.now() - 30 * 60 * 1000;
+  for (const [key, session] of hlsSessions) {
+    if (session.lastAccessAt < staleBefore) void discardSession(key, session);
+  }
+}, 5 * 60 * 1000);
+hlsCleanupTimer.unref();
+
 async function discardOtherSessions(baseKey: string, keepKey: string): Promise<void> {
   const stale = [...hlsSessions.entries()].filter(
     ([key]) => key !== keepKey && key.startsWith(`${baseKey}::start=`),
@@ -334,7 +344,7 @@ async function ensureHlsSessionReady(
         audioStreamIndex,
         startTimeSeconds,
       );
-      session = { dir: sessionDir, manifest: started.manifest, transcode: started.transcode };
+      session = { dir: sessionDir, manifest: started.manifest, transcode: started.transcode, lastAccessAt: Date.now() };
       hlsSessions.set(key, session);
       log.info({
         mediaItemId,
@@ -345,6 +355,7 @@ async function ensureHlsSessionReady(
       }, '[Cast/HLS] started transcode session');
     }
   }
+  session.lastAccessAt = Date.now();
 
   let manifestPath = path.join(session.dir, session.manifest);
   let ready = await pollForSessionFile(session, manifestPath, 40, 500);
@@ -405,6 +416,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { episodeId } = request.query as { episodeId?: string };
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
+      await assertPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
       const { filePath, mimeType, size } = await getMediaFilePath(mediaItemId, episodeId);
 
@@ -480,6 +492,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
           : undefined;
       const startTimeSeconds = parseStartTime(startTime);
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
+      await assertPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
       const baseKey = sessionBaseKey(mediaItemId, episodeId, audioStreamIndex);
       const key = sessionKey(mediaItemId, episodeId, audioStreamIndex, startTimeSeconds);
@@ -513,7 +526,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
             startTimeSeconds,
           );
           manifestType = started.manifest;
-          session = { dir: sessionDir, manifest: manifestType, transcode: started.transcode };
+          session = { dir: sessionDir, manifest: manifestType, transcode: started.transcode, lastAccessAt: Date.now() };
           hlsSessions.set(key, session);
           request.log.info({
             mediaItemId,
@@ -526,6 +539,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
       } else {
         manifestType = session.manifest;
       }
+      session.lastAccessAt = Date.now();
 
       // Poll for the manifest (up to 40 attempts × 500 ms = 20 s).
       // Try master.m3u8 first (adaptive), then index.m3u8 (single-tier/remux).
@@ -602,6 +616,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const startTimeSeconds = parseStartTime(startTime);
 
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
+      await assertPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
 
       const key = sessionKey(mediaItemId, episodeId, audioStreamIndex, startTimeSeconds);
@@ -609,6 +624,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
       if (!session) {
         throw ApiError.notFound('No active HLS session for this media item');
       }
+      session.lastAccessAt = Date.now();
       if (session.transcode.failure) {
         await discardSession(key, session);
         throw ApiError.badRequest(
