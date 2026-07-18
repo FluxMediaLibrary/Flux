@@ -10,11 +10,25 @@ import type { JwtClaims } from '@flux/shared';
 import { config } from '../config.js';
 
 // jsonwebtoken bundles registered claims (iat/exp) alongside our custom claims.
-export type DecodedClaims = JwtClaims & Partial<CastPlaybackClaims> & { iat: number; exp: number };
+export type DecodedClaims = JwtClaims & {
+  castSessionId?: string;
+  playbackSessionId?: string;
+  mediaItemId?: string;
+  episodeId?: string;
+  iat: number;
+  exp: number;
+};
 
 export interface CastPlaybackClaims extends JwtClaims {
   purpose: 'cast-playback';
   castSessionId: string;
+  mediaItemId: string;
+  episodeId?: string;
+}
+
+export interface PlaybackClaims extends JwtClaims {
+  purpose: 'playback';
+  playbackSessionId: string;
   mediaItemId: string;
   episodeId?: string;
 }
@@ -26,6 +40,18 @@ export function signToken(claims: JwtClaims): string {
   };
   // Pass a plain object copy so jsonwebtoken can attach iat/exp.
   return jwt.sign({ ...claims }, config.JWT_SECRET, options);
+}
+
+export function signDeviceToken(
+  claims: Pick<JwtClaims, 'sub' | 'role' | 'activeProfileId'>,
+  sessionId: string,
+  expiresIn: SignOptions['expiresIn'] = '15m',
+): string {
+  return jwt.sign(
+    { ...claims, purpose: 'device', sessionId },
+    config.JWT_SECRET,
+    { expiresIn },
+  );
 }
 
 /** Sign a short-lived token for browserless media clients such as Cast receivers. */
@@ -40,6 +66,14 @@ export function signCastPlaybackToken(
   expiresIn: SignOptions['expiresIn'],
 ): string {
   return jwt.sign({ ...claims, ...grant, purpose: 'cast-playback' }, config.JWT_SECRET, { expiresIn });
+}
+
+export function signPlaybackToken(
+  claims: JwtClaims,
+  grant: Pick<PlaybackClaims, 'playbackSessionId' | 'mediaItemId' | 'episodeId'>,
+  expiresIn: SignOptions['expiresIn'] = '4h',
+): string {
+  return jwt.sign({ ...claims, ...grant, purpose: 'playback' }, config.JWT_SECRET, { expiresIn });
 }
 
 /** Verify + decode a JWT. Throws if invalid/expired. */

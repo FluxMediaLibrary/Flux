@@ -35,6 +35,7 @@
 | Validation | Zod |
 | Torrents | Transmission (sidecar) |
 | Transcoding | FFmpeg (on-demand HLS) |
+| TV client | Roku SceneGraph + BrightScript |
 
   </td>
     <td width="50%">
@@ -112,6 +113,15 @@ TMDb ID (`tmdbId` + `mediaType`) joins the library to requests. Library items ar
 2. **HLS fallback** — on-demand FFmpeg transcode streamed through hls.js when the browser cannot decode the source.
 
 Playback decisions are made per-file by probing codec support at the server level.
+
+### Roku
+
+The native Roku client lives in [`apps/roku`](apps/roku). It connects to any compatible Flux server, links through an expiring device code, uses server-driven profiles/discovery, and receives device-aware direct/remux/transcode playback sessions. See the [Roku setup guide](apps/roku/README.md), [API contract](docs/roku-api.md), and [hardware test matrix](docs/roku-testing.md).
+
+```bash
+npm run roku:check
+npm run roku:package
+```
 
 ## Prerequisites
 

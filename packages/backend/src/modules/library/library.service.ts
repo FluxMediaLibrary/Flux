@@ -8,6 +8,7 @@ import { prisma } from '../../lib/db.js';
 import { ApiError } from '../../lib/errors.js';
 import type {
   HomeRowsDTO,
+  HomeRowErrorDTO,
   MediaItemDTO,
   MediaItemDetailDTO,
   LibraryItemDTO,
@@ -18,11 +19,18 @@ import type {
   MediaType,
 } from '@flux/shared';
 import type { MediaItem, Episode, WatchProgress } from '@prisma/client';
+import { isProgressComplete } from './progress-policy.js';
 
 function metadataNumber(metadata: unknown, key: string): number | null {
   if (!metadata || typeof metadata !== 'object') return null;
   const value = (metadata as Record<string, unknown>)[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function metadataString(metadata: unknown, key: string): string | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 function uniqueItems(
@@ -62,6 +70,9 @@ export function mapMediaItemToDTO(row: MediaItem): MediaItemDTO {
     posterPath: row.posterPath,
     backdropPath: row.backdropPath,
     genres: row.genres,
+    runtimeMinutes: metadataNumber(row.metadata, 'runtime'),
+    contentRating: metadataString(row.metadata, 'certification'),
+    rating: metadataNumber(row.metadata, 'vote_average'),
     addedAt: row.addedAt.toISOString(),
   };
 }
@@ -100,22 +111,41 @@ export function mapProgressToDTO(row: WatchProgress): WatchProgressDTO {
  *   3. By Genre — top 6 genres by item count, up to 10 items each.
  */
 export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
-  // 1. Continue Watching
-  const progressRows = await prisma.watchProgress.findMany({
-    where: {
-      profileId,
-      completed: false,
-      positionSeconds: { gt: 0 },
-    },
-    include: {
-      mediaItem: true,
-      // Episode-level progress has no direct mediaItem — resolve it via the
-      // episode's parent so continue-watching can show the show.
-      episode: { include: { mediaItem: true } },
-    },
-    orderBy: { updatedAt: 'desc' },
-    take: 10,
-  });
+  const [progressResult, recentResult, releasesResult, discoveryResult] = await Promise.allSettled([
+    prisma.watchProgress.findMany({
+      where: { profileId, completed: false, positionSeconds: { gt: 0 } },
+      include: { mediaItem: true, episode: { include: { mediaItem: true } } },
+      orderBy: { updatedAt: 'desc' },
+      take: 10,
+    }),
+    prisma.mediaItem.findMany({ orderBy: { addedAt: 'desc' }, take: 20 }),
+    prisma.mediaItem.findMany({
+      where: { year: { not: null } },
+      orderBy: [{ year: 'desc' }, { addedAt: 'desc' }],
+      take: 24,
+    }),
+    prisma.mediaItem.findMany({ where: { genres: { isEmpty: false } } }),
+  ]);
+
+  const errors: HomeRowErrorDTO[] = [];
+  const errorIds = new Set<string>();
+  const addError = (id: string, title: string) => {
+    if (errorIds.has(id)) return;
+    errorIds.add(id);
+    errors.push({
+      id,
+      title,
+      code: 'HOME_ROW_UNAVAILABLE',
+      message: 'Flux could not load this row. Select Retry to try again.',
+      retryable: true,
+    });
+  };
+
+  const progressRows = progressResult.status === 'fulfilled' ? progressResult.value : [];
+  if (progressResult.status === 'rejected') {
+    addError('continue-watching', 'Continue Watching');
+    addError('recommended', 'Because You Watched');
+  }
 
   const continueWatching: ContinueWatchingItemDTO[] = progressRows.flatMap(
     (p) => {
@@ -131,25 +161,19 @@ export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
     },
   );
 
-  // 2. Recently Added
-  const recentRows = await prisma.mediaItem.findMany({
-    orderBy: { addedAt: 'desc' },
-    take: 20,
-  });
-
+  const recentRows = recentResult.status === 'fulfilled' ? recentResult.value : [];
+  if (recentResult.status === 'rejected') addError('recently-added', 'Recently Added');
   const recentlyAdded: MediaItemDTO[] = recentRows.map(mapMediaItemToDTO);
-
-  const newReleaseRows = await prisma.mediaItem.findMany({
-    where: { year: { not: null } },
-    orderBy: [{ year: 'desc' }, { addedAt: 'desc' }],
-    take: 24,
-  });
+  const newReleaseRows = releasesResult.status === 'fulfilled' ? releasesResult.value : [];
+  if (releasesResult.status === 'rejected') addError('new-releases', 'New Releases');
   const newReleases = uniqueItems(newReleaseRows, 16);
-
-  // 3. By Genre — aggregate genres from all library items, pick top 6 by count
-  const allItems = await prisma.mediaItem.findMany({
-    where: { genres: { isEmpty: false } },
-  });
+  const allItems = discoveryResult.status === 'fulfilled' ? discoveryResult.value : [];
+  if (discoveryResult.status === 'rejected') {
+    addError('top-rated', 'Top Rated');
+    addError('recommended', 'Because You Watched');
+    addError('random-picks', 'Random Picks');
+    addError('genres', 'Genres');
+  }
 
   const topRated = uniqueItems(
     [...allItems]
@@ -216,6 +240,7 @@ export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
     recommended,
     randomPicks,
     byGenre,
+    errors,
   };
 }
 
@@ -359,10 +384,7 @@ export async function saveProgress(
     );
   }
 
-  const completed =
-    data.durationSeconds != null
-      ? data.positionSeconds / data.durationSeconds >= 0.92
-      : false;
+  const completed = isProgressComplete(data.positionSeconds, data.durationSeconds);
 
   if (hasMedia) {
     const row = await prisma.watchProgress.upsert({
