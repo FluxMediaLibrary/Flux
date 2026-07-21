@@ -22,7 +22,6 @@ packages/backend/prisma/migrations/dev.db*
 # Runtime / media data (never commit user media or torrents)
 /data/
 media/
-downloads/
 transcode/
 *.torrent
 
