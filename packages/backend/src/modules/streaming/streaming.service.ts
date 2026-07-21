@@ -7,7 +7,7 @@
 import { prisma } from '../../lib/db.js';
 import { ApiError } from '../../lib/errors.js';
 import { config } from '../../config.js';
-import { safeJoin } from '../../lib/media-paths.js';
+import { safeJoin, resolveFilePath } from '../../lib/media-paths.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
@@ -482,7 +482,8 @@ export async function getMediaFilePath(
     if (!episode) throw ApiError.notFound('Episode not found');
     if (!episode.filePath) throw ApiError.notFound('Episode has no media file');
 
-    const filePath = safeJoin(config.MEDIA_ROOT, episode.filePath);
+    const filePath = await resolveFilePath(episode.filePath);
+    if (!filePath) throw ApiError.notFound('Episode media file not found on any drive');
     const size = (await fs.stat(filePath)).size;
     const mimeType = mimeTypeFromExt(path.extname(filePath));
 
@@ -495,7 +496,8 @@ export async function getMediaFilePath(
   if (!mediaItem) throw ApiError.notFound('Media item not found');
   if (!mediaItem.filePath) throw ApiError.notFound('Media item has no file');
 
-  const filePath = safeJoin(config.MEDIA_ROOT, mediaItem.filePath);
+  const filePath = await resolveFilePath(mediaItem.filePath);
+  if (!filePath) throw ApiError.notFound('Media file not found on any drive');
   const size = (await fs.stat(filePath)).size;
   const mimeType = mimeTypeFromExt(path.extname(filePath));
 

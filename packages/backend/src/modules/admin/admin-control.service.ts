@@ -113,7 +113,7 @@ export async function getAdminPlayback(limit = 12): Promise<AdminPlaybackSession
 
 async function storageUsage(): Promise<{ used: number | null; total: number | null; percent: number | null }> {
   try {
-    const stats = await fs.statfs(config.MEDIA_ROOT);
+    const stats = await fs.statfs(config.MEDIA_ROOTS[0]!);
     const total = stats.blocks * stats.bsize;
     const free = stats.bavail * stats.bsize;
     const used = Math.max(0, total - free);
