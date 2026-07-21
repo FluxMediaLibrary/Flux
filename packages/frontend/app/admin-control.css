@@ -345,7 +345,7 @@
 .control-center .admin-health-stat span { color: var(--control-dim); font-size: 9px; }
 .control-center .admin-health-stat strong { font-family: Bahnschrift,sans-serif; }
 .control-center .torrent-dashboard h2 { font: 600 14px Bahnschrift,sans-serif !important; }
-.control-center .torrents-page > .upload-confirm { margin-bottom: 24px; }
+.control-center .torrents-page > .torrent-upload { margin-bottom: 24px; }
 .control-center .settings-meta-grid div { border-color: var(--control-line); background: #141618; }
 .control-center .form-group h2 { font: 600 14px Bahnschrift,sans-serif; }
 @media(max-width:700px){.control-center .admin-health-grid{grid-template-columns:repeat(2,1fr)}.control-permissions{grid-template-columns:1fr}}

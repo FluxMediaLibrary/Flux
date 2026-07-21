@@ -1,4 +1,5 @@
 # Flux — single-VPS deployment. `docker compose up --build`.
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -55,8 +56,9 @@ services:
       - downloads:/data/downloads
       - transmission-config:/config
       - ./transmission-settings.json:/config/settings.json
+      - /storage/flux-extra:/data/extra
 
-    backend:
+  backend:
     build:
       context: .
       dockerfile: packages/backend/Dockerfile
@@ -77,10 +79,12 @@ services:
       BACKEND_PORT: ${BACKEND_PORT:-6948}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
       PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-}
+
       MEDIA_ROOT: ${MEDIA_ROOT}
       MEDIA_ROOTS: ${MEDIA_ROOTS:-${MEDIA_ROOT}}
       DOWNLOAD_ROOT: ${DOWNLOAD_ROOT}
       TRANSCODE_ROOT: ${TRANSCODE_ROOT}
+
       ANDROID_RELEASE_ROOT: /data/releases/android
       TRANSMISSION_RPC_URL: ${TRANSMISSION_RPC_URL:-http://localhost:9091/transmission/rpc}
       TRANSMISSION_USER: ${TRANSMISSION_USER:-admin}
@@ -93,7 +97,7 @@ services:
       - transcode:/data/transcode
       - /storage/flux-extra:/data/extra
       - ./releases/android:/data/releases/android:ro
-      
+
   frontend:
     build:
       context: .
