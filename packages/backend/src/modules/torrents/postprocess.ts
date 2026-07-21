@@ -112,7 +112,7 @@ export async function processTorrentPostprocess(
         a.length > b.length ? a : b,
       );
 
-      const placement = moviePlacement(
+      const placement = await moviePlacement(
         tmdbDetail.title,
         tmdbDetail.year,
         fileExtension(largestVideo.name),
@@ -223,7 +223,7 @@ export async function processTorrentPostprocess(
           .get(mapping.season)
           ?.find((episode) => episode.episodeNumber === mapping.episode);
 
-        const placement = episodePlacement(
+        const placement = await episodePlacement(
           tmdbDetail.title,
           mapping.season,
           mapping.episode,
@@ -280,7 +280,7 @@ export async function processTorrentPostprocess(
       const files = torrentData.files as unknown as TorrentFile[];
       const videoFiles = files.filter((f) => isVideoFile(f.name));
       const largestVideo = videoFiles.reduce((a, b) => a.length > b.length ? a : b);
-      const placement = moviePlacement(tmdbDetail.title, tmdbDetail.year, fileExtension(largestVideo.name));
+      const placement = await moviePlacement(tmdbDetail.title, tmdbDetail.year, fileExtension(largestVideo.name));
       analyzeMediaAssets(placement.file, { mediaItemId }).catch((err) => {
         console.error(`[PostProcess] Media analysis failed for movie ${mediaItemId}:`, err);
       });
