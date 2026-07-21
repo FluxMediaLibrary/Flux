@@ -37,13 +37,62 @@ function JoinUrl(baseUrl as String, route as String) as String
 end function
 
 function UrlEncode(value as String) as String
-    transfer = CreateObject("roUrlTransfer")
-    return transfer.Escape(value)
+    return value.EncodeUriComponent()
 end function
 
 function SafeJsonParse(value as String) as Dynamic
-    if value = "" then return invalid
-    return ParseJson(value)
+    normalized = value.Trim()
+    if normalized = "" then return invalid
+    firstCharacter = Left(normalized, 1)
+    if firstCharacter <> "{" and firstCharacter <> "[" then return invalid
+    return ParseJson(normalized)
+end function
+
+function CanonicalRequestKey(key as String) as String
+    keyMap = {
+        devicename: "deviceName"
+        deviceid: "deviceId"
+        appversion: "appVersion"
+        devicecode: "deviceCode"
+        profileid: "profileId"
+        refreshtoken: "refreshToken"
+        mediaitemid: "mediaItemId"
+        episodeid: "episodeId"
+        positionseconds: "positionSeconds"
+        durationseconds: "durationSeconds"
+        audiostreamindex: "audioStreamIndex"
+        subtitlestreamindex: "subtitleStreamIndex"
+        preferredaudiolanguage: "preferredAudioLanguage"
+        preferredsubtitlelanguage: "preferredSubtitleLanguage"
+        subtitlesenabled: "subtitlesEnabled"
+        supports4k: "supports4k"
+        supportshevc: "supportsHevc"
+        supportshdr10: "supportsHdr10"
+        maxbitrate: "maxBitrate"
+        sessionid: "sessionId"
+    }
+    normalized = LCase(key)
+    if keyMap[normalized] <> invalid then return keyMap[normalized]
+    return key
+end function
+
+function CanonicalizeRequestJson(value as Dynamic) as Dynamic
+    if IsAssociativeArray(value)
+        result = CreateObject("roAssociativeArray")
+        result.SetModeCaseSensitive()
+        for each key in value
+            result.AddReplace(CanonicalRequestKey(key), CanonicalizeRequestJson(value[key]))
+        end for
+        return result
+    end if
+    if GetInterface(value, "ifArray") <> invalid
+        result = []
+        for each item in value
+            result.Push(CanonicalizeRequestJson(item))
+        end for
+        return result
+    end if
+    return value
 end function
 
 function PerformJsonRequest(input as Object, timeoutMs as Integer) as Object
@@ -67,9 +116,12 @@ function PerformJsonRequest(input as Object, timeoutMs as Integer) as Object
     transfer.SetMinimumTransferRate(1, 10)
 
     body = ""
-    if input.body <> invalid
+    if input.bodyJson <> invalid and input.bodyJson <> ""
         transfer.AddHeader("Content-Type", "application/json")
-        body = FormatJson(input.body)
+        body = input.bodyJson
+    else if input.body <> invalid
+        transfer.AddHeader("Content-Type", "application/json")
+        body = FormatJson(CanonicalizeRequestJson(input.body))
     end if
 
     if body = ""
@@ -99,6 +151,10 @@ end function
 
 function IsAssociativeArray(value as Dynamic) as Boolean
     return GetInterface(value, "ifAssociativeArray") <> invalid
+end function
+
+function IsArray(value as Dynamic) as Boolean
+    return GetInterface(value, "ifArray") <> invalid
 end function
 
 function Clamp(value as Float, minimum as Float, maximum as Float) as Float

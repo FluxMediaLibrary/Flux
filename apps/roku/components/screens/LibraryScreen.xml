@@ -15,14 +15,17 @@
     <field id="focusIndex" type="integer" value="-1" onChange="restoreFocus" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/screens/LibraryScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Rectangle width="1920" height="1080" color="#0d0f12" />
-    <Poster uri="pkg:/images/logo.png" width="70" height="70" translation="[75,50]" loadDisplayMode="scaleToFit" />
-    <Label id="titleLabel" width="1350" height="70" translation="[175,54]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
-    <Label id="pageLabel" width="400" height="45" translation="[1430,72]" horizAlign="right" font="font:SmallSystemFont" color="#aaa9aa" />
-    <Label id="sortDisplay" width="800" height="38" translation="[90,132]" font="font:SmallSystemFont" color="#aaa9aa" />
-    <MarkupGrid id="items" translation="[90,180]" itemComponentName="MediaCard" numColumns="7" numRows="2" itemSize="[226,341]" itemSpacing="[28,40]" />
-    <Label id="empty" text="No titles match these library filters." width="900" height="65" translation="[90,240]" font="font:MediumSystemFont" color="#aaa9aa" visible="false" />
-    <LabelList id="emptyActions" translation="[90,325]" itemSize="[420,68]" numRows="1" focusBitmapUri="pkg:/images/focus.9.png" visible="false" />
+    <FluxBackground />
+    <Poster uri="pkg:/images/logo.png" width="48" height="48" translation="[72,40]" loadDisplayMode="scaleToFit" />
+    <Label id="titleLabel" width="1200" height="65" translation="[138,39]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Label id="pageLabel" width="400" height="40" translation="[1436,54]" horizAlign="right" font="font:SmallSystemFont" color="#AAA9AA" />
+    <Rectangle width="1776" height="88" translation="[72,130]" color="#171A1F" />
+    <Label id="sortDisplay" width="1680" height="42" translation="[100,154]" font="font:MediumSystemFont" color="#AAA9AA" />
+    <Label text="LIBRARY" width="400" height="34" translation="[72,254]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <MarkupGrid id="items" translation="[72,300]" itemComponentName="MediaCard" numColumns="6" numRows="2" itemSize="[248,372]" itemSpacing="[56,38]" />
+    <Label id="empty" text="No titles match these library filters." width="900" height="65" translation="[100,320]" font="font:MediumSystemFont" color="#AAA9AA" visible="false" />
+    <MarkupList id="emptyActions" translation="[100,412]" itemComponentName="FluxActionItem" itemSize="[420,64]" numRows="1" drawFocusFeedback="false" visible="false" />
   </children>
 </component>

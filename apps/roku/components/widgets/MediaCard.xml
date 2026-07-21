@@ -5,17 +5,19 @@
     <field id="focusPercent" type="float" onChange="renderFocus" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/widgets/MediaCard.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <script type="text/brightscript" uri="pkg:/source/Utils.brs" />
   <children>
-    <Rectangle id="focus" width="226" height="341" translation="[-5,-5]" color="#8b5cf6" visible="false" />
-    <Poster id="poster" width="216" height="324" loadDisplayMode="scaleToFill" />
-    <Rectangle id="watchedBadge" width="72" height="34" translation="[134,10]" color="#16a34a" visible="false" />
-    <Label id="watchedBadgeText" text="WATCHED" width="72" height="34" translation="[134,10]" horizAlign="center" vertAlign="center" font="font:SmallBoldSystemFont" color="#ffffff" visible="false" />
-    <Rectangle id="countBadge" width="130" height="34" translation="[10,10]" color="#7c3aed" visible="false" />
-    <Label id="countBadgeText" width="130" height="34" translation="[10,10]" horizAlign="center" vertAlign="center" font="font:SmallBoldSystemFont" color="#ffffff" visible="false" />
-    <Rectangle width="216" height="70" translation="[0,254]" color="#0d0f12" opacity="0.86" />
-    <Label id="title" width="196" height="58" translation="[10,262]" wrap="true" maxLines="2" font="font:SmallBoldSystemFont" color="#f4f4f5" />
-    <Rectangle id="progressTrack" width="216" height="8" translation="[0,316]" color="#52525b" visible="false" />
-    <Rectangle id="progressFill" width="0" height="8" translation="[0,316]" color="#8b5cf6" visible="false" />
+    <Rectangle id="focus" width="260" height="384" translation="[-6,-6]" color="#60A5FA" visible="false" />
+    <Rectangle width="248" height="372" color="#171A1F" />
+    <Poster id="poster" width="248" height="372" loadDisplayMode="scaleToFill" />
+    <Rectangle id="watchedBadge" width="86" height="30" translation="[152,12]" color="#22C55E" visible="false" />
+    <Label id="watchedBadgeText" text="WATCHED" width="86" height="30" translation="[152,12]" horizAlign="center" vertAlign="center" font="font:SmallBoldSystemFont" color="#0D0F12" visible="false" />
+    <Rectangle id="countBadge" width="140" height="30" translation="[12,12]" color="#21262D" opacity="0.94" visible="false" />
+    <Label id="countBadgeText" width="140" height="30" translation="[12,12]" horizAlign="center" vertAlign="center" font="font:SmallBoldSystemFont" color="#F4F4F5" visible="false" />
+    <Rectangle width="248" height="86" translation="[0,286]" color="#0D0F12" opacity="0.9" />
+    <Label id="title" width="222" height="62" translation="[13,296]" wrap="true" maxLines="2" font="font:SmallBoldSystemFont" color="#F4F4F5" />
+    <Rectangle id="progressTrack" width="248" height="6" translation="[0,366]" color="#2A3447" visible="false" />
+    <Rectangle id="progressFill" width="0" height="6" translation="[0,366]" color="#3B82F6" visible="false" />
   </children>
 </component>

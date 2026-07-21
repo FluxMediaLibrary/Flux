@@ -2,22 +2,25 @@
 <component name="HeroBanner" extends="Group" initialFocus="actions">
   <interface>
     <field id="heroData" type="assocarray" onChange="renderHero" />
-    <field id="accentColor" type="color" value="#8b5cf6" onChange="renderHero" />
+    <field id="accentColor" type="color" value="#3B82F6" onChange="renderHero" />
     <field id="actionSelected" type="assocarray" alwaysNotify="true" />
+    <field id="hasActions" type="boolean" value="false" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/widgets/HeroBanner.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Rectangle width="1480" height="300" color="#171a1f" />
-    <Poster id="backdrop" width="920" height="300" translation="[560,0]" loadDisplayMode="scaleToFill" opacity="0.72" />
-    <Rectangle width="880" height="300" color="#0d0f12" opacity="0.84" />
-    <Rectangle width="180" height="300" translation="[880,0]" color="#0d0f12" opacity="0.45" />
-    <Rectangle id="accent" width="8" height="220" translation="[34,40]" color="#8b5cf6" />
-    <Label id="eyebrow" width="460" height="34" translation="[70,25]" font="font:SmallBoldSystemFont" color="#aaa9aa" />
-    <Label id="title" width="760" height="64" translation="[70,57]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
-    <Label id="metadata" width="790" height="36" translation="[70,120]" font="font:SmallSystemFont" color="#d4d4d8" />
-    <Label id="overview" width="790" height="58" translation="[70,156]" wrap="true" maxLines="2" font="font:SmallSystemFont" color="#d4d4d8" />
-    <Rectangle id="progressTrack" width="620" height="8" translation="[70,218]" color="#3f3f46" visible="false" />
-    <Rectangle id="progressFill" width="0" height="8" translation="[70,218]" color="#8b5cf6" visible="false" />
-    <ButtonGroup id="actions" translation="[70,236]" minWidth="170" />
+    <Rectangle width="1776" height="390" color="#171A1F" />
+    <Poster id="backdrop" width="1776" height="390" loadDisplayMode="scaleToFill" opacity="0.78" />
+    <Rectangle width="1010" height="390" color="#0D0F12" opacity="0.88" />
+    <Rectangle width="470" height="390" translation="[750,0]" color="#0D0F12" opacity="0.42" />
+    <Rectangle width="1776" height="1" translation="[0,389]" color="#2A3447" />
+    <Rectangle id="accent" width="7" height="250" translation="[58,70]" color="#3B82F6" />
+    <Label id="eyebrow" width="650" height="32" translation="[94,60]" font="font:SmallBoldSystemFont" color="#60A5FA" />
+    <Label id="title" width="850" height="82" translation="[94,96]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Label id="metadata" width="810" height="34" translation="[94,188]" font="font:SmallSystemFont" color="#AAA9AA" />
+    <Label id="overview" width="770" height="76" translation="[94,226]" wrap="true" maxLines="3" font="font:SmallSystemFont" color="#F4F4F5" />
+    <Rectangle id="progressTrack" width="650" height="7" translation="[94,308]" color="#2A3447" visible="false" />
+    <Rectangle id="progressFill" width="0" height="7" translation="[94,308]" color="#3B82F6" visible="false" />
+    <MarkupGrid id="actions" translation="[94,328]" itemComponentName="FluxActionItem" itemSize="[252,48]" itemSpacing="[12,0]" numColumns="3" numRows="1" drawFocusFeedback="false" />
   </children>
 </component>

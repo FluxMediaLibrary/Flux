@@ -62,7 +62,21 @@ const envSchema = z.object({
   DEVICE_SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(90),
   ROKU_PLAYBACK_SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(14400),
 
-  MEDIA_ROOT: z.string().min(1).default('/data/media'),
+  /**
+   * Comma-separated media root directories. Files placed during post-processing
+   * go to the first root; playback and admin lookups search all roots.
+   *
+   * Defaults to MEDIA_ROOT env var (single path) for backward compatibility.
+   */
+  MEDIA_ROOTS: z.preprocess((value) => {
+    if (typeof value === 'string' && value.trim()) {
+      return value.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    if (typeof process.env.MEDIA_ROOT === 'string' && process.env.MEDIA_ROOT.trim()) {
+      return [process.env.MEDIA_ROOT.trim()];
+    }
+    return ['/data/media'];
+  }, z.array(z.string().min(1)).min(1)),
   DOWNLOAD_ROOT: z.string().min(1).default('/data/downloads'),
   TRANSCODE_ROOT: z.string().min(1).default('/data/transcode'),
 

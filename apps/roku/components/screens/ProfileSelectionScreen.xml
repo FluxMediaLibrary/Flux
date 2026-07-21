@@ -5,9 +5,17 @@
     <field id="profileSelected" type="string" alwaysNotify="true" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/screens/ProfileSelectionScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
+  <script type="text/brightscript" uri="pkg:/source/Utils.brs" />
   <children>
-    <Label text="Who's watching?" width="1920" height="90" translation="[0,150]" horizAlign="center" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
-    <MarkupGrid id="profileList" translation="[360,340]" itemComponentName="ProfileCard" numColumns="4" numRows="1" itemSize="[300,380]" itemSpacing="[40,0]" />
+    <FluxBackground />
+    <Rectangle width="1920" height="385" color="#171A1F" opacity="0.72" />
+    <Poster uri="pkg:/images/logo.png" width="68" height="68" translation="[84,86]" loadDisplayMode="scaleToFit" />
+    <Label text="Flux" width="400" height="54" translation="[172,94]" font="font:LargeBoldSystemFont" color="#F4F4F5" />
+    <Label text="Choose your profile" width="1300" height="84" translation="[72,212]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Label text="Continue your own watch history, preferences, and requests." width="1150" height="44" translation="[76,310]" font="font:MediumSystemFont" color="#AAA9AA" />
+    <Label text="WHO'S WATCHING" width="700" height="36" translation="[72,462]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <MarkupGrid id="profileList" translation="[72,522]" itemComponentName="ProfileCard" numColumns="5" numRows="1" itemSize="[300,380]" itemSpacing="[58,0]" />
   </children>
 </component>
 

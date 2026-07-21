@@ -41,6 +41,13 @@ sub restoreQuery()
     m.keyboard.text = m.top.initialQuery
 end sub
 
+sub applyVoiceQuery()
+    query = m.top.voiceQuery.Trim()
+    if query = "" then return
+    ' Keep voice input on the same validated keyboard/debounce path as remote input.
+    m.keyboard.text = query
+end sub
+
 sub onDebounce()
     m.top.queryChanged = m.keyboard.text.Trim()
 end sub
@@ -53,10 +60,14 @@ sub renderResults()
     addResultRow(root, "Shows", data.shows)
     addResultRow(root, "Episodes", data.episodes)
     m.resultRows.content = root
+    hasResults = root.GetChildCount() > 0
+    m.resultRows.visible = hasResults
+    if not hasResults and m.resultRows.HasFocus() then m.keyboard.SetFocus(true)
     if root.GetChildCount() = 0 then m.top.findNode("hint").text = "No results for “" + data.query + "”" else m.top.findNode("hint").text = "Results for “" + data.query + "”"
 end sub
 
 sub onRecentSelected()
+    if m.recent.content = invalid then return
     item = m.recent.content.GetChild(m.recent.itemSelected)
     if item <> invalid then m.top.recentSelected = item.title
 end sub
@@ -70,7 +81,7 @@ sub addResultRow(root as Object, title as String, items as Object)
         item.id = media.id
         item.title = media.title
         item.description = media.overview
-        item.hdPosterUrl = media.artwork.poster
+        item.hdPosterUrl = FluxArtworkUrl(media, "poster", "pkg:/images/placeholder-poster.png")
         item.addFields({ mediaType: media.mediaType, parentMediaId: media.parentMediaId, progress: media.progress, watched: media.watched, unplayedCount: media.unplayedCount })
     end for
 end sub
@@ -78,7 +89,11 @@ end sub
 sub onSelected()
     indices = m.resultRows.rowItemSelected
     if indices.Count() <> 2 then return
-    item = m.resultRows.content.GetChild(indices[0]).GetChild(indices[1])
+    if m.resultRows.content = invalid then return
+    row = m.resultRows.content.GetChild(indices[0])
+    if row = invalid then return
+    item = row.GetChild(indices[1])
+    if item = invalid then return
     m.top.mediaSelected = { id: item.id, mediaType: item.mediaType, parentMediaId: item.parentMediaId }
 end sub
 

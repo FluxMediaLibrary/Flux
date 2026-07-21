@@ -8,6 +8,10 @@ sub renderRequests()
     if data = invalid then return
     content = CreateObject("roSGNode", "ContentNode")
     for each request in data.requests
+        if not IsAssociativeArray(request) then continue for
+        if request.id = invalid then continue for
+        if request.title = invalid or request.title = "" then request.title = "Untitled request"
+        if request.status = invalid or request.status = "" then request.status = "Unknown status"
         item = content.CreateChild("ContentNode")
         scope = ""
         if request.season <> invalid then scope = " · Season " + request.season.ToStr()
@@ -31,6 +35,7 @@ sub renderRequests()
 end sub
 
 sub onSelected()
+    if m.requests.content = invalid then return
     item = m.requests.content.GetChild(m.requests.itemSelected)
     if item <> invalid and item.id = "back" then m.top.backRequested = true
 end sub

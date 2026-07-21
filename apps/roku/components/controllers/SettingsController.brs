@@ -8,6 +8,10 @@ sub showSettings()
     screen.serverVersion = m.bootstrap.serverVersion
     if m.account <> invalid then screen.accountLabel = m.account.email else screen.accountLabel = "Linked account"
     if m.currentProfile <> invalid then screen.profileLabel = m.currentProfile.name else screen.profileLabel = "Selected profile"
+    if m.settingsCategory <> invalid and m.settingsCategory <> ""
+        screen.initialCategory = m.settingsCategory
+        m.settingsCategory = invalid
+    end if
     screen.preferences = m.registry.preferences
     screen.observeField("actionSelected", "onSettingsAction")
 end sub
@@ -76,6 +80,9 @@ sub onSettingsAction(event as Object)
         screen.message = "Server: " + m.bootstrap.serverVersion + "  ·  Roku app: " + AppVersion() + "  ·  Device: " + CreateObject("roDeviceInfo").GetModel() + Chr(10) + Chr(10) + ReadLocalLogText(6)
         screen.actions = ["Back"]
         screen.observeField("actionSelected", "showSettings")
+    else if action = "clear_diagnostics"
+        ClearLocalLogs()
+        showInfoMessage("Diagnostics cleared", "The local Roku diagnostic log has been cleared.", "showSettings")
     else if action = "profiles"
         loadProfiles()
     else if action = "retry"

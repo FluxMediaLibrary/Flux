@@ -6,22 +6,24 @@ This mapping is derived from `packages/frontend/app/globals.css`, the member lib
 
 | Website token | Website value | Roku token and use |
 | --- | --- | --- |
-| `--bg` | `#0d0f12` | `backgroundColor`; full scene and player chrome. |
-| `--bg-elev` | `#171a1f` | `surfaceColor`; cards, menus, and dialogs. |
-| `--bg-elev-2` | `#21262d` | `raisedSurfaceColor`; selected panels and secondary buttons. |
-| `--text` | `#f4f4f5` | `primaryTextColor`; headings and focused labels. |
-| `--text-muted` | white at 66% | `secondaryTextColor` approximated as `#aaa9aa`. |
-| `--text-dim` | white at 42% | `tertiaryTextColor` approximated as `#6b6b6c`. |
-| `--accent` | `#3b82f6` | `accentColor`; primary action and progress. Server branding may override it after validation. |
-| `--accent-2` | `#60a5fa` | `focusColor`; focused borders and active metadata. |
-| `--ok` | `#22c55e` | Success/watched state, always paired with a label or icon. |
-| `--warn` | `#f59e0b` | Warning state. |
-| `--danger` | `#ef4444` | Destructive/error state. |
+| `--bg` | `#0D0F12` | `backgroundColor`; full scene and player chrome. |
+| `--bg-elev` | `#171A1F` | `surfaceColor`; cards, menus, and dialogs. |
+| `--bg-elev-2` | `#21262D` | `raisedSurfaceColor`; selected panels and secondary buttons. |
+| `--text` | `#F4F4F5` | `primaryTextColor`; headings and focused labels. |
+| `--text-muted` | `#AAA9AA` | `secondaryTextColor`. |
+| `--text-dim` | `#6B6B6C` | `tertiaryTextColor`. |
+| `--accent` | `#3B82F6` | `accentColor`; primary action and progress. Server branding may override it after validation. |
+| `--accent-2` | `#60A5FA` | `focusColor`; focused borders and active metadata. |
+| `--ok` | `#22C55E` | Success/watched state, always paired with a label or icon. |
+| `--warn` | `#F59E0B` | Warning state. |
+| `--danger` | `#EF4444` | Destructive/error state. |
 | `--radius` | 12 px | 12 design pixels at 1080p for panels. |
 | `--radius-sm` | 8 px | 8 design pixels for controls. |
 | `--shadow` | black 35%, 12/32 | Prefer border plus modest elevation; avoid expensive live blur. |
 
 Flux's admin console has a separate amber-accent palette. It is not the member-client identity and should not drive Roku.
+
+`components/widgets/FluxTheme.brs` is the executable token source for reusable Roku widgets, while `FluxBackground.xml` provides the common scene canvas. Screen XML keeps explicit fallback values so an individual component remains safe to render during partial SceneGraph initialization.
 
 ## Resolution, safe area, and scale
 
@@ -50,10 +52,10 @@ The detail layout maps to:
 
 - Full-bleed backdrop on the upper/right area.
 - Opaque-to-transparent left and bottom gradients rendered as static gradient assets or SceneGraph rectangles, not live blur.
-- Title, metadata, actions, and overview anchored on the left.
+- Title, metadata, overview, and up to three equal-width `FluxActionItem` actions anchored on the left. A trailer action is rendered only when the authenticated Roku detail API supplies a Flux-owned web destination.
 - Seasons and episodes below the hero in horizontally or vertically navigable groups with explicit focus neighbors.
 
-The home layout maps to one hero plus server-ordered rows. Continue Watching uses landscape cards with a 6-8 px progress rail. Movies and shows use posters. Episodes use landscape stills. Unfocused cards show art and minimal labels; focus reveals title and useful metadata.
+The home layout maps to one hero plus server-ordered rows. Continue Watching uses landscape cards with a 6-8 px progress rail. Movies and shows use posters. Episodes use landscape stills. Unfocused cards show art and minimal labels; focus reveals title and useful metadata. Missing artwork and remote image-load failures both fall back to packaged Flux art.
 
 ## Focus and interaction states
 
@@ -73,14 +75,18 @@ The website primarily uses hover, outline, brightness, and small scale changes. 
 
 | Website surface | Roku component |
 | --- | --- |
-| Navbar/tabs | Persistent left sidebar with Home, Movies, Shows, optional Requests, Search, Settings. |
+| Navbar/tabs | Persistent left sidebar with Home, Movies, Shows, Continue Watching, optional Requests, Search, Profiles, Server, and Settings. |
 | Home rails | `ContentRow` with poster, landscape, or episode card renderer. |
-| Cinematic detail hero | `HeroBanner` plus native buttons and metadata. |
+| Cinematic detail hero | Backdrop/poster detail composition plus `FluxActionItem` actions and metadata. |
 | PosterCard | `PosterCard`; same 2:3 ratio and progress/watched badges. |
-| Search overlay | Dedicated Search screen using Roku keyboard input and 300 ms debounce. |
+| Menu, settings, and recovery actions | `FluxActionItem` inside `MarkupList`; focused items gain the shared Flux surface and accent rail rather than Roku's generic list treatment. |
+| Settings information architecture | Account, Server, Playback, Appearance, Developer, Debug, About, and Advanced are separate categories. Debug contains local diagnostic inspection and reset controls. |
+| Foreground requests | `AppScene.loadingOverlay`; a non-focusable loading panel preserves context while API work is in progress. |
+| Search overlay | Dedicated Search screen using Roku keyboard input and debounce. Its `voiceQuery` field routes future platform voice input through that same path. |
 | Profile picker | Large avatar grid with name labels and deterministic D-pad neighbors. |
 | Web modal | Centered native dialog, focus trapped within dialog and restored on close. |
-| Web player chrome | Native `Video` node plus Flux overlays for metadata, tracks, skip, Up Next, and errors. |
+| Web player chrome | Native `Video` node without stock UI; a focusable but invisible input-capture node prevents `Video` from consuming transport keys. Flux chrome supplies progress, elapsed/duration, pause/resume, seeking, D-pad audio/captions/stream-quality controls, a non-focusable buffering indicator, Skip Intro, Up Next, and errors. |
+| Web trailer embed | A backend-provided Flux web destination. Roku never attempts to send a YouTube embed page to the native `Video` node. |
 
 ## Loading, empty, dialog, and error states
 

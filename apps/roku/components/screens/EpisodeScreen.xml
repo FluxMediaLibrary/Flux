@@ -6,17 +6,20 @@
     <field id="backRequested" type="boolean" alwaysNotify="true" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/screens/EpisodeScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Rectangle width="1920" height="1080" color="#0d0f12" />
-    <Poster id="backdrop" width="1920" height="1080" opacity="0.22" loadDisplayMode="scaleToFill" />
-    <Rectangle width="1920" height="1080" color="#0d0f12" opacity="0.42" />
-    <Poster id="thumbnail" width="620" height="350" translation="[95,150]" loadDisplayMode="scaleToFill" />
-    <Label id="showTitle" width="1000" height="46" translation="[780,135]" font="font:MediumBoldSystemFont" color="#8b5cf6" />
-    <Label id="title" width="1040" height="92" translation="[775,185]" wrap="true" maxLines="2" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
-    <Label id="metadata" width="1000" height="46" translation="[780,285]" font="font:MediumSystemFont" color="#aaa9aa" />
-    <Label id="overview" width="1000" height="190" translation="[780,350]" wrap="true" maxLines="5" font="font:MediumSystemFont" color="#f4f4f5" />
-    <Label id="progress" width="1000" height="46" translation="[780,545]" font="font:SmallSystemFont" color="#aaa9aa" />
-    <Label id="availability" text="This episode is not currently available to play." width="900" height="58" translation="[780,610]" font="font:MediumBoldSystemFont" color="#f59e0b" visible="false" />
-    <LabelList id="actions" translation="[780,610]" itemSize="[560,70]" numRows="3" focusBitmapUri="pkg:/images/focus.9.png" />
+    <FluxBackground />
+    <Poster id="backdrop" width="1920" height="560" opacity="0.56" loadDisplayMode="scaleToFill" />
+    <Rectangle width="1920" height="560" color="#0D0F12" opacity="0.58" />
+    <Rectangle width="1920" height="1" translation="[0,560]" color="#2A3447" />
+    <Poster id="thumbnail" width="760" height="428" translation="[72,166]" loadDisplayMode="scaleToFill" />
+    <Rectangle width="760" height="428" translation="[72,166]" color="#2A3447" opacity="0.12" />
+    <Label id="showTitle" width="820" height="42" translation="[900,168]" font="font:MediumBoldSystemFont" color="#60A5FA" />
+    <Label id="title" width="850" height="100" translation="[896,214]" wrap="true" maxLines="2" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Label id="metadata" width="820" height="44" translation="[900,330]" font="font:MediumSystemFont" color="#AAA9AA" />
+    <Label id="overview" width="800" height="140" translation="[900,390]" wrap="true" maxLines="4" font="font:MediumSystemFont" color="#F4F4F5" />
+    <Label id="progress" width="1000" height="42" translation="[900,616]" font="font:SmallSystemFont" color="#AAA9AA" />
+    <Label id="availability" text="This episode is not currently available to play." width="900" height="58" translation="[900,676]" font="font:MediumBoldSystemFont" color="#F59E0B" visible="false" />
+    <MarkupGrid id="actions" translation="[72,662]" itemComponentName="FluxActionItem" itemSize="[310,62]" itemSpacing="[16,0]" numColumns="3" numRows="1" drawFocusFeedback="false" />
   </children>
 </component>

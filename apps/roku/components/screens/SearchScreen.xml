@@ -3,6 +3,7 @@
   <interface>
     <field id="results" type="assocarray" onChange="renderResults" />
     <field id="initialQuery" type="string" onChange="restoreQuery" />
+    <field id="voiceQuery" type="string" onChange="applyVoiceQuery" />
     <field id="recentSearches" type="array" onChange="renderRecent" />
     <field id="recentSelected" type="string" alwaysNotify="true" />
     <field id="loading" type="boolean" onChange="renderState" />
@@ -11,14 +12,19 @@
     <field id="mediaSelected" type="assocarray" alwaysNotify="true" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/screens/SearchScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Rectangle width="1920" height="1080" color="#0d0f12" />
-    <Label text="Search Flux" width="800" height="70" translation="[70,45]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
-    <Keyboard id="keyboard" translation="[70,145]" showTextEditBox="true" showMiniKeyboard="false" />
-    <Label text="Recent searches" width="620" height="42" translation="[70,725]" font="font:MediumBoldSystemFont" color="#f4f4f5" />
-    <LabelList id="recent" translation="[70,775]" itemSize="[620,48]" numRows="5" focusBitmapUri="pkg:/images/focus.9.png" />
-    <Label id="hint" text="Enter at least two characters" width="1050" height="50" translation="[760,72]" font="font:SmallSystemFont" color="#aaa9aa" />
-    <RowList id="resultRows" translation="[760,125]" numRows="3" rowLabelOffset="[0,18]" itemSize="[1080,300]" rowItemSize="[[185,278]]" rowItemSpacing="[[24,0]]" showRowLabel="true" focusBitmapUri="pkg:/images/focus.9.png" />
+    <FluxBackground />
+    <Label text="Search Flux" width="800" height="64" translation="[72,42]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Label id="hint" text="Enter at least two characters" width="900" height="42" translation="[930,54]" horizAlign="right" font="font:SmallSystemFont" color="#AAA9AA" />
+    <Rectangle width="810" height="500" translation="[72,142]" color="#171A1F" />
+    <Rectangle width="810" height="4" translation="[72,142]" color="#3B82F6" />
+    <Label text="TYPE OR SPEAK" width="680" height="32" translation="[104,170]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <Keyboard id="keyboard" translation="[104,210]" showTextEditBox="true" showMiniKeyboard="false" />
+    <Label text="RECENT SEARCHES" width="760" height="34" translation="[72,690]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <MarkupList id="recent" translation="[72,734]" itemComponentName="FluxActionItem" itemSize="[810,52]" itemSpacing="[0,5]" numRows="4" drawFocusFeedback="false" />
+    <Label text="DISCOVER" width="900" height="34" translation="[944,150]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <RowList id="resultRows" translation="[944,196]" numRows="2" rowLabelOffset="[[0,16]]" itemSize="[900,430]" rowItemSize="[[248,372]]" rowItemSpacing="[[28,0]]" itemComponentName="MediaCard" showRowLabel="[true]" focusBitmapUri="pkg:/images/focus.9.png" />
     <Timer id="debounce" duration="0.45" repeat="false" />
   </children>
 </component>

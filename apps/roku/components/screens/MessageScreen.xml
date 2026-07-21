@@ -7,10 +7,16 @@
     <field id="actionSelected" type="integer" alwaysNotify="true" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/screens/MessageScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Label id="titleLabel" width="1500" height="90" translation="[210,250]" horizAlign="center" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
-    <Label id="messageLabel" width="1300" height="190" translation="[310,385]" horizAlign="center" wrap="true" font="font:MediumSystemFont" color="#aaa9aa" />
-    <LabelList id="actionsList" translation="[650,650]" itemSize="[620,70]" numRows="3" focusBitmapUri="pkg:/images/focus.9.png" />
+    <FluxBackground />
+    <Rectangle width="660" height="1080" color="#171A1F" opacity="0.78" />
+    <Rectangle width="8" height="1080" color="#3B82F6" />
+    <Label text="FLUX" width="400" height="42" translation="[72,84]" font="font:MediumBoldSystemFont" color="#60A5FA" />
+    <Label id="titleLabel" width="520" height="210" translation="[72,188]" wrap="true" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Label id="messageLabel" width="520" height="290" translation="[72,454]" wrap="true" font="font:MediumSystemFont" color="#AAA9AA" />
+    <Label text="NEXT STEP" width="940" height="36" translation="[786,220]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <MarkupList id="actionsList" translation="[786,278]" itemComponentName="FluxActionItem" itemSize="[900,82]" itemSpacing="[0,10]" numRows="3" drawFocusFeedback="false" />
   </children>
 </component>
 

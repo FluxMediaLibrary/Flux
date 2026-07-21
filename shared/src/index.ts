@@ -275,6 +275,16 @@ export interface RokuSeasonDTO {
   artwork: RokuArtworkDTO;
 }
 
+/**
+ * A trailer is intentionally represented as a Flux-owned web destination.
+ * Roku Video cannot safely play provider embed pages such as YouTube, so the
+ * channel must not treat an external provider key as a playable stream.
+ */
+export interface RokuTrailerDTO {
+  provider: 'youtube';
+  webUrl: string;
+}
+
 export interface RokuMediaDetailDTO extends RokuMediaItemDTO {
   runtimeMinutes: number | null;
   contentRating: string | null;
@@ -282,7 +292,7 @@ export interface RokuMediaDetailDTO extends RokuMediaItemDTO {
   tagline: string | null;
   cast: TmdbCastMember[];
   directors: string[];
-  trailerYoutubeKey: string | null;
+  trailer: RokuTrailerDTO | null;
   similar: RokuMediaItemDTO[];
   seasons: RokuSeasonDTO[];
   episodes: RokuMediaItemDTO[];
@@ -978,7 +988,7 @@ export interface AdminInfoDTO {
     cpuLoad: number[];
   };
   storage: {
-    mediaRoot: StorageRootDTO;
+    mediaRoots: StorageRootDTO[];
     downloadRoot: StorageRootDTO;
     transcodeRoot: StorageRootDTO;
   };

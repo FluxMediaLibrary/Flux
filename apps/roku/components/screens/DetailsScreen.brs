@@ -1,6 +1,12 @@
 sub init()
     m.actions = m.top.findNode("actions")
     m.episodes = m.top.findNode("episodes")
+    m.poster = m.top.findNode("poster")
+    m.backdrop = m.top.findNode("backdrop")
+    m.posterFallback = "pkg:/images/placeholder-poster.png"
+    m.backdropFallback = "pkg:/images/placeholder-backdrop.png"
+    m.poster.observeField("loadStatus", "onPosterLoadStatus")
+    m.backdrop.observeField("loadStatus", "onBackdropLoadStatus")
     m.actions.observeField("itemSelected", "onAction")
     m.episodes.observeField("rowItemSelected", "onEpisode")
 end sub
@@ -9,12 +15,10 @@ sub renderDetail()
     detail = m.top.detail
     if detail = invalid then return
     m.top.findNode("title").text = detail.title
-    posterUrl = detail.artwork.poster
-    if posterUrl = invalid or posterUrl = "" then posterUrl = "pkg:/images/placeholder-poster.png"
-    backdropUrl = detail.artwork.backdrop
-    if backdropUrl = invalid or backdropUrl = "" then backdropUrl = "pkg:/images/placeholder-backdrop.png"
-    m.top.findNode("poster").uri = posterUrl
-    m.top.findNode("backdrop").uri = backdropUrl
+    posterUrl = FluxArtworkUrl(detail, "poster", "pkg:/images/placeholder-poster.png")
+    backdropUrl = FluxArtworkUrl(detail, "backdrop", "pkg:/images/placeholder-backdrop.png")
+    m.poster.uri = posterUrl
+    m.backdrop.uri = backdropUrl
     m.top.findNode("overview").text = detail.overview
     metadata = ""
     if detail.year <> invalid then metadata = detail.year.ToStr()
@@ -50,6 +54,16 @@ sub renderDetail()
         restart = actions.CreateChild("ContentNode")
         restart.title = "Restart from beginning"
         restart.id = "restart"
+    else
+        back = actions.CreateChild("ContentNode")
+        back.title = "Back to Home"
+        back.id = "back"
+    end if
+    if detail.trailer <> invalid and detail.trailer.webUrl <> invalid and detail.trailer.webUrl <> ""
+        trailer = actions.CreateChild("ContentNode")
+        trailer.title = "Watch trailer"
+        trailer.id = "trailer"
+        trailer.addFields({ trailerUrl: detail.trailer.webUrl })
     end if
     m.actions.content = actions
     m.top.findNode("availability").visible = not detail.available
@@ -75,13 +89,13 @@ sub renderDetail()
                 item.id = related.season.ToStr()
                 item.title = related.title
                 item.description = related.availableCount.ToStr() + " available episodes"
-                item.hdPosterUrl = related.artwork.backdrop
+                item.hdPosterUrl = FluxArtworkUrl(related, "backdrop", "pkg:/images/placeholder-backdrop.png")
                 item.addFields({ contentKind: "season", mediaType: "show", parentMediaId: detail.id, seasonNumber: related.season, watched: related.unplayedCount = 0, unplayedCount: related.unplayedCount, progress: invalid })
             else
                 item.id = related.id
                 item.title = related.title
                 item.description = related.overview
-                item.hdPosterUrl = related.artwork.poster
+                item.hdPosterUrl = FluxArtworkUrl(related, "poster", "pkg:/images/placeholder-poster.png")
                 item.addFields({ contentKind: "media", mediaType: related.mediaType, parentMediaId: related.parentMediaId, seasonNumber: -1, watched: related.watched, unplayedCount: related.unplayedCount, progress: related.progress })
             end if
         end for
@@ -97,15 +111,28 @@ sub renderDetail()
     end if
 end sub
 
+sub onPosterLoadStatus()
+    if m.poster.loadStatus = "failed" and m.poster.uri <> m.posterFallback then m.poster.uri = m.posterFallback
+end sub
+
+sub onBackdropLoadStatus()
+    if m.backdrop.loadStatus = "failed" and m.backdrop.uri <> m.backdropFallback then m.backdrop.uri = m.backdropFallback
+end sub
+
 function appendMetadata(current as String, value as String) as String
     if current = "" then return value
     return current + "  |  " + value
 end function
 
 sub onAction()
+    if m.actions.content = invalid then return
     action = m.actions.content.GetChild(m.actions.itemSelected)
     if action = invalid then return
-    if action.id = "play" or action.id = "restart"
+    if action.id = "back"
+        m.top.backRequested = true
+    else if action.id = "trailer"
+        m.top.trailerRequested = { title: m.top.detail.title, url: action.trailerUrl }
+    else if action.id = "play" or action.id = "restart"
         m.top.playSelected = { id: m.top.detail.id, mediaType: m.top.detail.mediaType, parentMediaId: m.top.detail.parentMediaId, restart: action.id = "restart" }
     end if
 end sub
@@ -113,7 +140,11 @@ end sub
 sub onEpisode()
     indices = m.episodes.rowItemSelected
     if indices.Count() <> 2 then return
-    item = m.episodes.content.GetChild(indices[0]).GetChild(indices[1])
+    if m.episodes.content = invalid then return
+    row = m.episodes.content.GetChild(indices[0])
+    if row = invalid then return
+    item = row.GetChild(indices[1])
+    if item = invalid then return
     if item.contentKind = "season"
         m.top.seasonSelected = { mediaId: item.parentMediaId, season: item.seasonNumber, title: m.top.detail.title }
     else

@@ -13,26 +13,26 @@ try {
   npm run roku:check
   if ($LASTEXITCODE -ne 0) { throw "Roku validation failed" }
 
+  # Compress-Archive records Windows backslashes in ZIP entry names. Roku's
+  # Linux-based developer installer rejects those archives with HTTP 400.
+  # The Python packager emits the required POSIX entry names and verifies them.
+  $python = Get-Command python -ErrorAction SilentlyContinue
+  if ($null -eq $python) { throw "Python is required to create a Roku-compatible archive. Install Python 3 and retry." }
+
+  & $python.Source (Join-Path $appRoot "package.py")
+  if ($LASTEXITCODE -ne 0) { throw "Roku archive creation failed" }
+
   $manifest = @{}
   Get-Content (Join-Path $appRoot "manifest") | ForEach-Object {
     if ($_ -match '^([^#=]+)=(.*)$') { $manifest[$matches[1].Trim()] = $matches[2].Trim() }
   }
   $version = "$($manifest.major_version).$($manifest.minor_version).$($manifest.build_version)"
+  $builtZipPath = Join-Path $appRoot "dist\flux-roku-$version.zip"
+  if (-not (Test-Path -LiteralPath $builtZipPath)) { throw "Roku archive was not created at $builtZipPath" }
   New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
   $zipPath = Join-Path $OutputDirectory "flux-roku-$version.zip"
-  if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath }
-
-  $staging = Join-Path $OutputDirectory "staging-$([guid]::NewGuid().ToString('N'))"
-  New-Item -ItemType Directory -Path $staging | Out-Null
-  try {
-    Copy-Item -LiteralPath (Join-Path $appRoot "manifest") -Destination $staging
-    foreach ($folder in @("source", "components", "images", "locale")) {
-      $candidate = Join-Path $appRoot $folder
-      if (Test-Path -LiteralPath $candidate) { Copy-Item -Recurse -LiteralPath $candidate -Destination $staging }
-    }
-    Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $zipPath -CompressionLevel Optimal
-  } finally {
-    if (Test-Path -LiteralPath $staging) { Remove-Item -Recurse -Force -LiteralPath $staging }
+  if ((Resolve-Path $OutputDirectory).Path -ne (Resolve-Path (Join-Path $appRoot "dist")).Path) {
+    Copy-Item -LiteralPath $builtZipPath -Destination $zipPath -Force
   }
   Write-Output $zipPath
 } finally {

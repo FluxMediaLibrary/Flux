@@ -49,6 +49,10 @@ end sub
 sub onBootstrapLoaded(event as Object)
     response = event.GetData()
     data = response.data
+    if not IsAssociativeArray(data)
+        showCompatibility("This server returned invalid Flux Roku bootstrap data.")
+        return
+    end if
     incompatibleApi = data.apiVersion = invalid
     if data.apiVersion <> invalid
         if data.apiVersion < 1 then incompatibleApi = true
@@ -62,7 +66,10 @@ sub onBootstrapLoaded(event as Object)
     m.bootstrap = data
     LogEvent("info", "server", "validation_succeeded", { serverId: data.serverId, version: data.serverVersion })
     if data.branding <> invalid
-        if data.branding.backgroundColor <> invalid then m.top.findNode("background").color = data.branding.backgroundColor
+        if data.branding.backgroundColor <> invalid
+            canvas = m.top.findNode("background").findNode("canvas")
+            if canvas <> invalid then canvas.color = data.branding.backgroundColor
+        end if
         if data.branding.accentColor <> invalid then m.accentColor = data.branding.accentColor
     end if
     WriteServerState({ url: m.registry.serverUrl, id: data.serverId, name: data.serverName })
@@ -77,9 +84,14 @@ sub onBootstrapFailed(event as Object)
 end sub
 
 sub onVersionLoaded(event as Object)
-    decision = EvaluateVersion(event.GetData().data)
+    data = event.GetData().data
+    if not IsAssociativeArray(data)
+        showError("Version check unavailable", "Flux returned invalid Roku version data. Try again.", true, "retryStartup")
+        return
+    end if
+    decision = EvaluateVersion(data)
     m.versionDecision = decision
-    m.versionData = event.GetData().data
+    m.versionData = data
     LogEvent("info", "version", "version_checked", { required: decision.required, available: decision.available })
     if decision.required
         screen = showScreen("MessageScreen")
@@ -101,7 +113,13 @@ sub loadClientConfig()
 end sub
 
 sub onClientConfigLoaded(event as Object)
-    m.clientConfig = event.GetData().data
+    data = event.GetData().data
+    if not IsAssociativeArray(data)
+        m.clientConfig = invalid
+        validateAuthentication()
+        return
+    end if
+    m.clientConfig = data
     if m.clientConfig.features <> invalid then m.bootstrap.features = m.clientConfig.features
     if m.clientConfig.minimumServerVersion <> invalid and CompareSemanticVersions(m.bootstrap.serverVersion, m.clientConfig.minimumServerVersion) < 0
         showCompatibility("This Flux server is too old for the Roku client. Update the server and try again.")
@@ -138,6 +156,10 @@ end sub
 
 sub onDeviceCode(event as Object)
     data = event.GetData().data
+    if not IsAssociativeArray(data) or data.deviceCode = invalid or data.userCode = invalid or data.verificationUrl = invalid
+        showError("Device link unavailable", "Flux returned incomplete device-link data. Try again.", true, "retryDeviceLink")
+        return
+    end if
     LogEvent("info", "authentication", "device_link_started", { expiresIn: data.expiresIn })
     screen = showScreen("DeviceLinkScreen")
     screen.linkData = data
@@ -191,7 +213,16 @@ end sub
 
 sub onProfilesLoaded(event as Object)
     payload = event.GetData().data
+    if not IsAssociativeArray(payload) or not IsArray(payload.profiles)
+        showError("Profiles unavailable", "Flux returned incomplete profile data. Try again.", true, "loadProfiles")
+        return
+    end if
     profiles = payload.profiles
+    if profiles = invalid or profiles.Count() = 0
+        LogEvent("warn", "authentication", "profiles_empty", {})
+        showError("No profiles available", "This Flux account has no available profiles. Check the account on the Flux server, then try again.", true, "loadProfiles")
+        return
+    end if
     m.account = payload.account
     m.profiles = profiles
     LogEvent("info", "authentication", "profiles_loaded", { count: profiles.Count() })
@@ -214,6 +245,10 @@ end sub
 
 sub onProfileActivated(event as Object)
     data = event.GetData().data
+    if not IsAssociativeArray(data) or data.accessToken = invalid or data.refreshToken = invalid or not IsAssociativeArray(data.profile) or data.profile.id = invalid
+        showError("Profile setup failed", "Flux returned incomplete profile activation data. Try selecting the profile again.", true, "loadProfiles")
+        return
+    end if
     if data.accessToken <> invalid then m.registry.accessToken = data.accessToken
     if data.refreshToken <> invalid then m.registry.refreshToken = data.refreshToken
     m.registry.profileId = data.profile.id
@@ -259,6 +294,10 @@ end sub
 
 sub onAuthenticationRefreshed(event as Object)
     data = event.GetData().data
+    if not IsAssociativeArray(data) or data.accessToken = invalid or data.refreshToken = invalid
+        onRefreshFailed(event)
+        return
+    end if
     m.registry.accessToken = data.accessToken
     m.registry.refreshToken = data.refreshToken
     WriteAuthState(data.accessToken, data.refreshToken)

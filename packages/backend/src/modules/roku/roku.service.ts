@@ -15,8 +15,10 @@ import type {
 import type { Episode, MediaItem, Prisma, WatchProgress } from '@prisma/client';
 import { prisma } from '../../lib/db.js';
 import { ApiError } from '../../lib/errors.js';
+import { config } from '../../config.js';
 import { getHomepage, getMediaItemDetail } from '../library/library.service.js';
 import { getDetail } from '../tmdb/tmdb.service.js';
+import { createRokuTrailer } from './roku-trailer.js';
 
 const TMDB_IMAGE_ROOT = 'https://image.tmdb.org/t/p';
 
@@ -331,7 +333,7 @@ export async function getRokuMediaDetail(profileId: string, id: string): Promise
     tagline: remote?.tagline ?? metadataString(item.metadata, 'tagline'),
     cast: remote?.cast ?? [],
     directors,
-    trailerYoutubeKey: remote?.trailerYoutubeKey ?? null,
+    trailer: createRokuTrailer(item.id, remote?.trailerYoutubeKey, config.FRONTEND_ORIGIN),
     similar,
     seasons,
     episodes,

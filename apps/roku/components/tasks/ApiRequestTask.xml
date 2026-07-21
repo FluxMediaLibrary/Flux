@@ -3,6 +3,7 @@
   <interface>
     <field id="requestId" type="integer" />
     <field id="request" type="assocarray" />
+    <field id="bodyJson" type="string" />
     <field id="response" type="assocarray" alwaysNotify="true" />
     <field id="failure" type="assocarray" alwaysNotify="true" />
   </interface>

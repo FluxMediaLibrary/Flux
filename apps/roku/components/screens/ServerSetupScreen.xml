@@ -5,12 +5,18 @@
   </interface>
   <script type="text/brightscript" uri="pkg:/source/Utils.brs" />
   <script type="text/brightscript" uri="pkg:/components/screens/ServerSetupScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Poster uri="pkg:/images/logo.png" width="140" height="140" translation="[140,100]" loadDisplayMode="scaleToFit" />
-    <Label text="Connect to Flux" width="900" height="80" translation="[140,285]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
-    <Label text="Enter the address of your Flux server. Local HTTP and public HTTPS servers are supported." width="1080" height="100" translation="[140,380]" wrap="true" font="font:MediumSystemFont" color="#aaa9aa" />
-    <LabelList id="actions" translation="[140,535]" itemSize="[720,70]" numRows="2" focusBitmapUri="pkg:/images/focus.9.png" />
-    <Label id="errorLabel" width="1200" height="60" translation="[140,740]" font="font:SmallSystemFont" color="#ef4444" />
+    <FluxBackground />
+    <Rectangle width="720" height="1080" color="#171A1F" opacity="0.76" />
+    <Poster uri="pkg:/images/logo.png" width="92" height="92" translation="[72,112]" loadDisplayMode="scaleToFit" />
+    <Label text="Connect&#10;to Flux" width="540" height="152" translation="[72,254]" wrap="true" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Label text="Your library.&#10;Every screen." width="540" height="100" translation="[72,456]" wrap="true" font="font:LargeBoldSystemFont" color="#60A5FA" />
+    <Label text="Connect this Roku to a local or public Flux server." width="540" height="100" translation="[72,614]" wrap="true" font="font:MediumSystemFont" color="#AAA9AA" />
+    <Label text="SERVER ADDRESS" width="780" height="36" translation="[834,204]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <Rectangle width="900" height="440" translation="[834,252]" color="#171A1F" />
+    <MarkupList id="actions" translation="[870,304]" itemComponentName="FluxActionItem" itemSize="[828,72]" itemSpacing="[0,10]" numRows="2" drawFocusFeedback="false" />
+    <Label id="errorLabel" width="828" height="90" translation="[870,530]" wrap="true" font="font:SmallSystemFont" color="#EF4444" />
   </children>
 </component>
 

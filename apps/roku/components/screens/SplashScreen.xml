@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <component name="SplashScreen" extends="Group">
   <script type="text/brightscript" uri="pkg:/components/screens/SplashScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Poster uri="pkg:/images/logo.png" width="220" height="220" translation="[850,350]" loadDisplayMode="scaleToFit" />
-    <Label text="FLUX" width="1920" height="80" translation="[0,590]" horizAlign="center" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
-    <Label id="tagline" text="Your media. Your server." width="1920" height="50" translation="[0,675]" horizAlign="center" font="font:MediumSystemFont" color="#aaa9aa" />
+    <FluxBackground />
+    <Rectangle width="610" height="1080" color="#171A1F" opacity="0.72" />
+    <Rectangle width="7" height="1080" color="#3B82F6" />
+    <Poster uri="pkg:/images/logo.png" width="144" height="144" translation="[72,188]" loadDisplayMode="scaleToFit" />
+    <Label text="FLUX" width="460" height="96" translation="[72,398]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Label id="tagline" text="Your media. Your server." width="460" height="90" translation="[76,510]" wrap="true" font="font:LargeBoldSystemFont" color="#AAA9AA" />
+    <Label text="PREPARING YOUR LIBRARY" width="900" height="42" translation="[760,468]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <Rectangle width="900" height="3" translation="[760,542]" color="#2A3447" />
+    <Rectangle width="270" height="3" translation="[760,542]" color="#3B82F6" />
   </children>
 </component>

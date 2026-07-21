@@ -5,7 +5,7 @@
     <field id="serverName" type="string" onChange="renderHeader" />
     <field id="requestsEnabled" type="boolean" onChange="renderNavigation" />
     <field id="homeStatus" type="string" onChange="renderStatus" />
-    <field id="accentColor" type="color" value="#8b5cf6" onChange="renderBranding" />
+    <field id="accentColor" type="color" value="#3B82F6" onChange="renderBranding" />
     <field id="logoUrl" type="string" onChange="renderBranding" />
     <field id="focusIndex" type="array" onChange="restoreFocus" />
     <field id="heroRotationSeconds" type="integer" value="0" onChange="configureHeroRotation" />
@@ -13,17 +13,21 @@
     <field id="heroActionSelected" type="assocarray" alwaysNotify="true" />
     <field id="destinationSelected" type="string" alwaysNotify="true" />
     <field id="rowRetryRequested" type="string" alwaysNotify="true" />
+    <field id="focusContinueWatching" type="boolean" alwaysNotify="true" onChange="focusContinueWatching" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/screens/HomeScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Rectangle width="1920" height="1080" color="#0d0f12" />
-    <Poster id="logo" uri="pkg:/images/logo.png" width="80" height="80" translation="[70,45]" loadDisplayMode="scaleToFit" />
-    <Label id="header" width="1200" height="60" translation="[175,55]" font="font:LargeBoldSystemFont" color="#f4f4f5" />
-    <Label id="status" width="550" height="45" translation="[1280,70]" horizAlign="right" font="font:SmallSystemFont" color="#f59e0b" />
-    <LabelList id="navigation" translation="[70,180]" itemSize="[260,74]" numRows="7" focusBitmapUri="pkg:/images/focus.9.png" />
-    <HeroBanner id="hero" translation="[370,145]" />
+    <FluxBackground />
+    <Poster id="logo" uri="pkg:/images/logo.png" width="48" height="48" translation="[72,38]" loadDisplayMode="scaleToFit" />
+    <Label id="header" width="920" height="52" translation="[138,42]" font="font:LargeBoldSystemFont" color="#F4F4F5" />
+    <Label id="status" width="420" height="34" translation="[1424,52]" horizAlign="right" font="font:SmallSystemFont" color="#F59E0B" />
+    <Rectangle width="1776" height="1" translation="[72,108]" color="#2A3447" />
+    <Label text="EXPLORE" width="160" height="28" translation="[72,126]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <MarkupGrid id="navigation" translation="[72,158]" itemComponentName="FluxActionItem" itemSize="[184,48]" itemSpacing="[14,0]" numColumns="9" numRows="1" drawFocusFeedback="false" />
+    <HeroBanner id="hero" translation="[72,238]" />
     <Timer id="heroTimer" repeat="true" duration="8" />
-    <Label id="empty" text="Your Flux library is empty. Add media on the server, then return here to refresh." width="1320" height="90" translation="[410,520]" wrap="true" font="font:MediumSystemFont" color="#aaa9aa" visible="false" />
-    <RowList id="rows" translation="[370,480]" numRows="2" rowLabelOffset="[0,18]" itemSize="[1480,265]" rowItemSize="[[170,255]]" rowItemSpacing="[[24,0]]" showRowLabel="true" focusBitmapUri="pkg:/images/focus.9.png" />
+    <Label id="empty" text="Your Flux library is ready for its first title. Add media on the server, then refresh this screen." width="1120" height="90" translation="[96,690]" wrap="true" font="font:MediumSystemFont" color="#AAA9AA" visible="false" />
+    <RowList id="rows" translation="[72,675]" numRows="1" rowLabelOffset="[[0,16]]" itemSize="[1776,438]" rowItemSize="[[248,372]]" rowItemSpacing="[[28,0]]" itemComponentName="MediaCard" showRowLabel="[true]" focusBitmapUri="pkg:/images/focus.9.png" />
   </children>
 </component>

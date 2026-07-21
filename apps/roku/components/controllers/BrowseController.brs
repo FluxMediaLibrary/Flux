@@ -1,7 +1,6 @@
 sub loadHome()
     m.state = "LOADING_HOME"
     cached = m.cachedHome
-    if cached = invalid then cached = SafeJsonParse(ReadAsciiFile("tmp:/flux-home.json"))
     if cached <> invalid
         showHome(cached, "Refreshing library…")
         m.state = "LOADING_HOME"
@@ -11,6 +10,10 @@ end sub
 
 sub onHomeLoaded(event as Object)
     data = event.GetData().data
+    if not IsAssociativeArray(data) or not IsArray(data.rows)
+        showError("Library data unavailable", "Flux returned incomplete Home data. Try loading your library again.", true, "loadHome")
+        return
+    end if
     m.cachedHome = data
     LogEvent("info", "network", "home_loaded", { rowCount: data.rows.Count() })
     WriteAsciiFile("tmp:/flux-home.json", FormatJson(data))
@@ -59,7 +62,12 @@ sub onHomeRowRetry(event as Object)
 end sub
 
 sub onHomeRowLoaded(event as Object)
-    updated = event.GetData().data.row
+    payload = event.GetData().data
+    if not IsAssociativeArray(payload) or not IsAssociativeArray(payload.row)
+        if m.cachedHome <> invalid then showHome(m.cachedHome, "That row returned incomplete data. Try Retry again.") else loadHome()
+        return
+    end if
+    updated = payload.row
     if m.cachedHome = invalid
         loadHome()
         return
@@ -92,7 +100,6 @@ sub onHomeFailed(event as Object)
         return
     end if
     cached = m.cachedHome
-    if cached = invalid then cached = SafeJsonParse(ReadAsciiFile("tmp:/flux-home.json"))
     if cached <> invalid
         showHome(cached, "Offline · showing cached rows")
     else
@@ -105,6 +112,8 @@ sub onDestinationSelected(event as Object)
     LogEvent("info", "navigation", "destination_selected", { destination: destination })
     if destination = "home"
         loadHome()
+    else if destination = "continue watching"
+        if m.currentScreen <> invalid then m.currentScreen.focusContinueWatching = true
     else if destination = "movies" or destination = "shows"
         loadLibrary(destination, 1)
     else if destination = "search"
@@ -113,6 +122,9 @@ sub onDestinationSelected(event as Object)
         loadRequests()
     else if destination = "profiles"
         loadProfiles()
+    else if destination = "server"
+        m.settingsCategory = "server"
+        showSettings()
     else if destination = "settings"
         showSettings()
     end if
@@ -125,9 +137,14 @@ sub loadRequests()
 end sub
 
 sub onRequestsLoaded(event as Object)
+    data = event.GetData().data
+    if not IsAssociativeArray(data) or not IsArray(data.requests)
+        showError("Requests unavailable", "Flux returned incomplete request data. Try again.", true, "loadRequests")
+        return
+    end if
     m.state = "READY"
     screen = showScreen("RequestsScreen")
-    screen.requestData = event.GetData().data
+    screen.requestData = data
     screen.observeField("backRequested", "showCachedHome")
 end sub
 
@@ -144,11 +161,17 @@ sub loadLibrary(destination as String, page as Integer)
 end sub
 
 sub onLibraryLoaded(event as Object)
+    data = event.GetData().data
+    if not IsAssociativeArray(data) or not IsArray(data.items)
+        showError("Library data unavailable", "Flux returned incomplete library data. Try again.", true, "retryLibrary")
+        return
+    end if
     m.state = "READY"
     screen = showScreen("LibraryScreen")
     if m.currentDestination = "movies" then screen.title = "Movies" else screen.title = "Shows"
-    screen.pageData = event.GetData().data
-    m.libraryGenres = screen.pageData.availableGenres
+    screen.pageData = data
+    m.libraryGenres = data.availableGenres
+    if not IsArray(m.libraryGenres) then m.libraryGenres = []
     if m.librarySort = "recent" then screen.sortLabel = "Recently added" else if m.librarySort = "year" then screen.sortLabel = "Newest year" else screen.sortLabel = "Title A-Z"
     if m.libraryWatched = "all" then screen.watchedLabel = "All" else if m.libraryWatched = "true" then screen.watchedLabel = "Watched" else screen.watchedLabel = "Unwatched"
     if m.libraryGenre = "" then screen.genreLabel = "All genres" else screen.genreLabel = m.libraryGenre
@@ -160,6 +183,10 @@ sub onLibraryLoaded(event as Object)
     screen.observeField("watchedRequested", "onLibraryWatchedRequested")
     screen.observeField("genreRequested", "onLibraryGenreRequested")
     screen.observeField("backRequested", "showCachedHome")
+end sub
+
+sub retryLibrary()
+    loadLibrary(m.currentDestination, m.libraryPage)
 end sub
 
 sub onLibraryPageChange(event as Object)
@@ -235,7 +262,13 @@ end sub
 
 sub onSearchLoaded(event as Object)
     if m.currentDestination = "search" and m.currentScreen <> invalid
-        m.searchResults = event.GetData().data
+        data = event.GetData().data
+        if not IsAssociativeArray(data) or not IsArray(data.movies) or not IsArray(data.shows) or not IsArray(data.episodes)
+            m.currentScreen.loading = false
+            m.currentScreen.errorMessage = "Flux returned incomplete search data. Try again."
+            return
+        end if
+        m.searchResults = data
         m.recentSearches = AddRecentSearch(m.searchResults.query)
         m.currentScreen.recentSearches = m.recentSearches
         m.currentScreen.loading = false
@@ -269,14 +302,24 @@ end sub
 
 sub loadMediaDetail(id as String)
     m.state = "LOADING_DETAIL"
+    m.pendingDetailId = id
     if m.currentDestination <> "detail" and m.currentDestination <> "season" then m.returnDestination = m.currentDestination
     url = JoinUrl(m.registry.serverUrl, m.routes.media + "/" + UrlEncode(id))
     runRequest({ url: url, method: "GET", token: m.registry.accessToken }, "onMediaDetailLoaded", "onAuthorizedFailure")
 end sub
 
 sub onMediaDetailLoaded(event as Object)
-    m.currentDetailData = event.GetData().data
+    data = event.GetData().data
+    if not IsAssociativeArray(data) or data.id = invalid or data.title = invalid
+        showError("Title unavailable", "Flux returned incomplete title data. Try again.", true, "retryCurrentDetail")
+        return
+    end if
+    m.currentDetailData = data
     showDetailFromCache()
+end sub
+
+sub retryCurrentDetail()
+    if m.pendingDetailId <> invalid and m.pendingDetailId <> "" then loadMediaDetail(m.pendingDetailId) else showCachedHome()
 end sub
 
 sub showDetailFromCache()
@@ -287,6 +330,18 @@ sub showDetailFromCache()
     screen.observeField("playSelected", "onPlaySelected")
     screen.observeField("mediaSelected", "onMediaSelected")
     screen.observeField("seasonSelected", "onSeasonSelected")
+    screen.observeField("backRequested", "showCachedHome")
+    screen.observeField("trailerRequested", "onTrailerRequested")
+end sub
+
+sub onTrailerRequested(event as Object)
+    trailer = event.GetData()
+    if trailer = invalid or trailer.url = invalid or trailer.url = "" then return
+    screen = showScreen("MessageScreen")
+    screen.title = "Trailer available"
+    screen.message = trailer.title + " has a trailer on the Flux web app:" + Chr(10) + Chr(10) + trailer.url + Chr(10) + Chr(10) + "Roku does not support provider embed pages in the Flux player."
+    screen.actions = ["Back to details"]
+    screen.observeField("actionSelected", "showDetailFromCache")
 end sub
 
 sub onSeasonSelected(event as Object)
@@ -299,8 +354,20 @@ sub onSeasonSelected(event as Object)
 end sub
 
 sub onSeasonLoaded(event as Object)
-    m.currentSeasonEpisodes = event.GetData().data
+    data = event.GetData().data
+    if not IsArray(data)
+        showError("Season unavailable", "Flux returned incomplete episode data. Try again.", true, "retrySelectedSeason")
+        return
+    end if
+    m.currentSeasonEpisodes = data
     showSeasonFromCache()
+end sub
+
+sub retrySelectedSeason()
+    if m.selectedSeason = invalid then return
+    m.state = "LOADING_SEASON"
+    url = JoinUrl(m.registry.serverUrl, m.routes.shows + "/" + UrlEncode(m.selectedSeason.mediaId) + "/seasons/" + m.selectedSeason.season.ToStr() + "/episodes")
+    runRequest({ url: url, method: "GET", token: m.registry.accessToken }, "onSeasonLoaded", "onAuthorizedFailure")
 end sub
 
 sub showSeasonFromCache()
@@ -318,6 +385,7 @@ end sub
 
 sub onEpisodeSelected(event as Object)
     selection = event.GetData()
+    m.selectedEpisode = selection
     m.seasonFocus = selection.focusIndex
     m.state = "LOADING_EPISODE"
     url = JoinUrl(m.registry.serverUrl, m.routes.episodes + "/" + UrlEncode(selection.id))
@@ -325,8 +393,20 @@ sub onEpisodeSelected(event as Object)
 end sub
 
 sub onEpisodeLoaded(event as Object)
-    m.currentEpisodeData = event.GetData().data
+    data = event.GetData().data
+    if not IsAssociativeArray(data) or data.id = invalid
+        showError("Episode unavailable", "Flux returned incomplete episode data. Try again.", true, "retrySelectedEpisode")
+        return
+    end if
+    m.currentEpisodeData = data
     showEpisodeFromCache()
+end sub
+
+sub retrySelectedEpisode()
+    if m.selectedEpisode = invalid then return
+    m.state = "LOADING_EPISODE"
+    url = JoinUrl(m.registry.serverUrl, m.routes.episodes + "/" + UrlEncode(m.selectedEpisode.id))
+    runRequest({ url: url, method: "GET", token: m.registry.accessToken }, "onEpisodeLoaded", "onAuthorizedFailure")
 end sub
 
 sub showEpisodeFromCache()
