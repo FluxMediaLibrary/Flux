@@ -7,7 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { prisma } from '../../lib/db.js';
 import { config } from '../../config.js';
-import { safeJoin } from '../../lib/media-paths.js';
+import { safeJoin, resolveFilePath } from '../../lib/media-paths.js';
 import { analyzeAndStoreMedia } from '../../lib/media-analyzer.js';
 import { ensureTrickplay } from '../../lib/trickplay-generator.js';
 import { ApiError } from '../../lib/errors.js';
@@ -26,12 +26,13 @@ import type {
   AdminLibraryRequestDTO,
   AdminLibraryRepairResultDTO,
   AdminMediaAnalyzeResultDTO,
+  StorageRootDTO,
 } from '@flux/shared';
 import type { TorrentStatus, RequestStatus } from '@flux/shared';
 
 const ADMIN_HEALTH_METADATA_REFRESH_LIMIT = 6;
 
-async function getStorageRoot(path: string): Promise<AdminInfoDTO['storage']['mediaRoot']> {
+async function getStorageRoot(path: string): Promise<StorageRootDTO> {
   try {
     const stats = await fs.statfs(path);
     const totalBytes = stats.blocks * stats.bsize;
@@ -368,14 +369,14 @@ export async function getAdminInfo(): Promise<AdminInfoDTO> {
   };
 
   // ── Storage roots (paths only; disk usage via df in container) ─────────
-  const [mediaRoot, downloadRoot, transcodeRoot] = await Promise.all([
-    getStorageRoot(config.MEDIA_ROOT),
+  const [mediaRoots, downloadRoot, transcodeRoot] = await Promise.all([
+    Promise.all(config.MEDIA_ROOTS.map((r) => getStorageRoot(r))),
     getStorageRoot(config.DOWNLOAD_ROOT),
     getStorageRoot(config.TRANSCODE_ROOT),
   ]);
 
   const storage: AdminInfoDTO['storage'] = {
-    mediaRoot,
+    mediaRoots,
     downloadRoot,
     transcodeRoot,
   };
@@ -450,10 +451,10 @@ export async function getAdminInfo(): Promise<AdminInfoDTO> {
   const fileChecks = await Promise.all([
     ...mediaForHealth
       .filter((item) => item.filePath)
-      .map((item) => pathExists(safeJoin(config.MEDIA_ROOT, item.filePath!))),
+      .map(async (item) => pathExists((await resolveFilePath(item.filePath!)) ?? '')),
     ...episodesForHealth
       .filter((episode) => episode.filePath)
-      .map((episode) => pathExists(safeJoin(config.MEDIA_ROOT, episode.filePath!))),
+      .map(async (episode) => pathExists((await resolveFilePath(episode.filePath!)) ?? '')),
   ]);
   const brokenFiles = fileChecks.filter((exists) => !exists).length;
   const missingMetadata = mediaForHealth.filter((item) => item.metadata == null).length;
@@ -619,7 +620,7 @@ export async function getAdminLibraryHealth(): Promise<AdminLibraryHealthDTO> {
         if (!item.filePath) {
           issues.push('No movie file');
         } else {
-          fileExists = await pathExists(safeJoin(config.MEDIA_ROOT, item.filePath));
+          fileExists = await resolveFilePath(item.filePath).then((p) => p !== null && pathExists(p));
           if (!fileExists) issues.push('Movie file missing on disk');
         }
         if (item.filePath && !item.mediaInfo) issues.push('Missing media analysis');
@@ -631,7 +632,7 @@ export async function getAdminLibraryHealth(): Promise<AdminLibraryHealthDTO> {
           if (!episode.filePath) {
             missingEpisodes += 1;
           } else {
-            episodeFileExists = await pathExists(safeJoin(config.MEDIA_ROOT, episode.filePath));
+            episodeFileExists = await resolveFilePath(episode.filePath).then((p) => p !== null && pathExists(p));
             if (!episodeFileExists) brokenEpisodes += 1;
           }
 
@@ -902,8 +903,8 @@ export async function analyzeLibraryItem(
       return;
     }
 
-    const resolved = safeJoin(config.MEDIA_ROOT, filePath);
-    if (!(await pathExists(resolved))) {
+    const resolved = await resolveFilePath(filePath);
+    if (!resolved) {
       skipped += 1;
       return;
     }
@@ -951,8 +952,8 @@ export async function clearMissingLibraryFile(
     return { mediaItemId: item.id, episodeId: null, cleared: false };
   }
 
-  const resolved = safeJoin(config.MEDIA_ROOT, item.filePath);
-  if (await pathExists(resolved)) {
+  const resolved = await resolveFilePath(item.filePath);
+  if (resolved && await pathExists(resolved)) {
     throw ApiError.badRequest('The referenced movie file still exists on disk', 'FILE_STILL_EXISTS');
   }
 
@@ -983,8 +984,8 @@ export async function clearMissingEpisodeFile(
     return { mediaItemId: episode.mediaItemId, episodeId: episode.id, cleared: false };
   }
 
-  const resolved = safeJoin(config.MEDIA_ROOT, episode.filePath);
-  if (await pathExists(resolved)) {
+  const resolved = await resolveFilePath(episode.filePath);
+  if (resolved && await pathExists(resolved)) {
     throw ApiError.badRequest('The referenced episode file still exists on disk', 'FILE_STILL_EXISTS');
   }
 
