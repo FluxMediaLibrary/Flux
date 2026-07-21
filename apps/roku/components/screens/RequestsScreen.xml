@@ -5,10 +5,17 @@
     <field id="backRequested" type="boolean" alwaysNotify="true" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/screens/RequestsScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
+  <script type="text/brightscript" uri="pkg:/source/Utils.brs" />
   <children>
-    <Rectangle width="1920" height="1080" color="#0d0f12" />
-    <Label text="Requests" width="1000" height="90" translation="[100,85]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
-    <Label id="empty" text="No requests yet." width="1200" height="70" translation="[105,235]" font="font:MediumSystemFont" color="#aaa9aa" visible="false" />
-    <LabelList id="requests" translation="[100,220]" itemSize="[1250,82]" numRows="8" focusBitmapUri="pkg:/images/focus.9.png" />
+    <FluxBackground />
+    <Rectangle width="604" height="1080" color="#171A1F" opacity="0.72" />
+    <Label text="Requests" width="470" height="70" translation="[72,120]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Label text="Availability, in one place." width="430" height="72" translation="[76,210]" wrap="true" font="font:LargeBoldSystemFont" color="#60A5FA" />
+    <Label text="Requests you make from Flux appear here as they move into your library." width="430" height="120" translation="[76,322]" wrap="true" font="font:MediumSystemFont" color="#AAA9AA" />
+    <Rectangle width="1250" height="1" translation="[604,164]" color="#2A3447" />
+    <Label text="YOUR QUEUE" width="700" height="36" translation="[682,100]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <Label id="empty" text="No requests yet. Requests you make from Flux will appear here." width="1000" height="70" translation="[682,244]" font="font:MediumSystemFont" color="#AAA9AA" visible="false" />
+    <MarkupList id="requests" translation="[682,190]" itemComponentName="FluxActionItem" itemSize="[1080,88]" itemSpacing="[0,10]" numRows="8" drawFocusFeedback="false" />
   </children>
 </component>

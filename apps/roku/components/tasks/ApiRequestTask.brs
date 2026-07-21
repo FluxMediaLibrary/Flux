@@ -13,8 +13,14 @@ sub executeRequest()
     result = PerformJsonRequest(input, 12000)
     status = result.status
     parsed = result.data
-    if status >= 200 and status < 300 and parsed <> invalid
-        m.top.response = { status: status, data: parsed }
+    if status >= 200 and status < 300
+        if IsAssociativeArray(parsed)
+            m.top.response = { status: status, data: parsed }
+            return
+        end if
+        failure = { status: status, code: "RESPONSE_INVALID", message: "Flux returned an invalid response. Try again.", retryable: true }
+        LogEvent("error", "network", "response_invalid", { status: status })
+        m.top.failure = failure
         return
     end if
 

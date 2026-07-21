@@ -10,12 +10,16 @@
     <field id="focusIndex" type="array" onChange="restoreFocus" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/screens/SeasonScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Rectangle width="1920" height="1080" color="#0d0f12" />
-    <Poster uri="pkg:/images/logo.png" width="70" height="70" translation="[75,50]" loadDisplayMode="scaleToFit" />
-    <Label id="header" width="1500" height="75" translation="[175,52]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
-    <Label id="empty" text="No episodes are available in this season." width="1300" height="70" translation="[95,225]" font="font:MediumSystemFont" color="#aaa9aa" visible="false" />
-    <LabelList id="emptyActions" translation="[95,315]" itemSize="[480,68]" numRows="1" focusBitmapUri="pkg:/images/focus.9.png" visible="false" />
-    <RowList id="episodes" translation="[95,180]" numRows="3" rowLabelOffset="[[0,18]]" itemSize="[1730,270]" rowItemSize="[[360,210]]" rowItemSpacing="[[28,0]]" showRowLabel="[false]" focusBitmapUri="pkg:/images/focus.9.png" />
+    <FluxBackground />
+    <Rectangle width="1920" height="270" color="#171A1F" opacity="0.74" />
+    <Poster uri="pkg:/images/logo.png" width="52" height="52" translation="[72,62]" loadDisplayMode="scaleToFit" />
+    <Label text="SEASON" width="500" height="32" translation="[144,62]" font="font:SmallBoldSystemFont" color="#60A5FA" />
+    <Label id="header" width="1500" height="65" translation="[72,138]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Label text="EPISODES" width="500" height="36" translation="[72,336]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <Label id="empty" text="No episodes are available in this season." width="1300" height="70" translation="[72,414]" font="font:MediumSystemFont" color="#AAA9AA" visible="false" />
+    <MarkupList id="emptyActions" translation="[72,506]" itemComponentName="FluxActionItem" itemSize="[480,64]" numRows="1" drawFocusFeedback="false" visible="false" />
+    <RowList id="episodes" translation="[72,390]" numRows="1" rowLabelOffset="[[0,14]]" itemSize="[1776,438]" rowItemSize="[[248,372]]" rowItemSpacing="[[28,0]]" itemComponentName="MediaCard" showRowLabel="[false]" focusBitmapUri="pkg:/images/focus.9.png" />
   </children>
 </component>

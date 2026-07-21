@@ -23,7 +23,7 @@ sub renderItems()
         item.id = media.id
         item.title = media.title
         item.description = media.overview
-        item.hdPosterUrl = media.artwork.poster
+        item.hdPosterUrl = FluxArtworkUrl(media, "poster", "pkg:/images/placeholder-poster.png")
         item.addFields({ mediaType: media.mediaType, parentMediaId: media.parentMediaId, progress: media.progress, watched: media.watched, unplayedCount: media.unplayedCount })
     end for
     m.items.content = root
@@ -39,8 +39,15 @@ sub renderItems()
         emptyActions.content = actions
         emptyActions.SetFocus(true)
     end if
-    pageCount = Int((data.total + data.limit - 1) / data.limit)
-    m.pageLabel.text = "Page " + data.page.ToStr() + " of " + pageCount.ToStr()
+    total = data.total
+    if total = invalid or total < 0 then total = 0
+    limit = data.limit
+    if limit = invalid or limit <= 0 then limit = 1
+    page = data.page
+    if page = invalid or page < 1 then page = 1
+    pageCount = Int((total + limit - 1) / limit)
+    if pageCount < 1 then pageCount = 1
+    m.pageLabel.text = "Page " + page.ToStr() + " of " + pageCount.ToStr()
     if not empty then m.items.SetFocus(true)
 end sub
 
@@ -49,6 +56,7 @@ sub onEmptyAction()
 end sub
 
 sub onSelected()
+    if m.items.content = invalid then return
     item = m.items.content.GetChild(m.items.itemSelected)
     if item = invalid then return
     m.top.mediaSelected = { id: item.id, mediaType: item.mediaType, parentMediaId: item.parentMediaId, focusIndex: m.items.itemSelected }

@@ -1,7 +1,10 @@
 sub init()
+    m.theme = FluxTheme()
+    m.backdrop = m.top.findNode("backdrop")
+    m.backdropFallback = "pkg:/images/placeholder-backdrop.png"
+    m.backdrop.observeField("loadStatus", "onBackdropLoadStatus")
     m.actions = m.top.findNode("actions")
-    m.actionIds = []
-    m.actions.observeField("buttonSelected", "onActionSelected")
+    m.actions.observeField("itemSelected", "onActionSelected")
 end sub
 
 sub renderHero()
@@ -9,7 +12,7 @@ sub renderHero()
     if data = invalid then return
     backdropUrl = data.backdropUrl
     if backdropUrl = invalid or backdropUrl = "" then backdropUrl = "pkg:/images/placeholder-backdrop.png"
-    m.top.findNode("backdrop").uri = backdropUrl
+    m.backdrop.uri = backdropUrl
     m.top.findNode("title").text = data.title
     m.top.findNode("overview").text = data.overview
     eyebrow = "FEATURED"
@@ -24,8 +27,10 @@ sub renderHero()
     if metadata = "" and data.subtitle <> invalid then metadata = data.subtitle
     if data.mediaType <> invalid then metadata = appendHeroMetadata(metadata, UCase(data.mediaType))
     m.top.findNode("metadata").text = metadata
-    m.top.findNode("accent").color = m.top.accentColor
-    m.top.findNode("progressFill").color = m.top.accentColor
+    accent = m.top.accentColor
+    if accent = invalid then accent = m.theme.accent
+    m.top.findNode("accent").color = accent
+    m.top.findNode("progressFill").color = accent
 
     hasProgress = data.progress <> invalid and data.progress.percent <> invalid and data.progress.percent > 0 and not data.progress.completed
     m.top.findNode("progressTrack").visible = hasProgress
@@ -33,20 +38,22 @@ sub renderHero()
     if hasProgress
         percent = data.progress.percent
         if percent > 1 then percent = 1
-        m.top.findNode("progressFill").width = Int(620 * percent)
+        m.top.findNode("progressFill").width = Int(650 * percent)
     end if
 
-    buttons = []
-    m.actionIds = []
+    actions = CreateObject("roSGNode", "ContentNode")
     if data.available
-        if hasProgress then buttons.Push("Resume") else buttons.Push("Play")
-        m.actionIds.Push("play")
+        play = actions.CreateChild("ContentNode")
+        if hasProgress then play.title = "Resume" else play.title = "Play"
+        play.addFields({ id: "play" })
     end if
     if data.mediaType <> "retry"
-        buttons.Push("Details")
-        m.actionIds.Push("details")
+        details = actions.CreateChild("ContentNode")
+        details.title = "Details"
+        details.addFields({ id: "details" })
     end if
-    m.actions.buttons = buttons
+    m.actions.content = actions
+    m.top.hasActions = actions.GetChildCount() > 0
 end sub
 
 function appendHeroMetadata(current as String, value as String) as String
@@ -56,7 +63,13 @@ function appendHeroMetadata(current as String, value as String) as String
 end function
 
 sub onActionSelected()
-    index = m.actions.buttonSelected
-    if index < 0 or index >= m.actionIds.Count() then return
-    m.top.actionSelected = { action: m.actionIds[index], item: m.top.heroData }
+    if m.actions.content = invalid then return
+    index = m.actions.itemSelected
+    item = m.actions.content.GetChild(index)
+    if item = invalid then return
+    m.top.actionSelected = { action: item.id, item: m.top.heroData }
+end sub
+
+sub onBackdropLoadStatus()
+    if m.backdrop.loadStatus = "failed" and m.backdrop.uri <> m.backdropFallback then m.backdrop.uri = m.backdropFallback
 end sub

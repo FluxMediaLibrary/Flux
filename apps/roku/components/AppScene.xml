@@ -17,9 +17,16 @@
   <script type="text/brightscript" uri="pkg:/components/controllers/SettingsController.brs" />
   <script type="text/brightscript" uri="pkg:/components/AppScene.brs" />
   <children>
-    <Rectangle id="background" width="1920" height="1080" color="#0d0f12" />
+    <FluxBackground id="background" />
     <Group id="contentHost" focusable="true" />
-    <BusySpinner id="spinner" translation="[930,510]" uri="pkg:/images/spinner.png" visible="false" />
+    <Group id="loadingOverlay" visible="false">
+      <Rectangle width="1920" height="1080" color="#0D0F12" opacity="0.84" />
+      <Rectangle id="loadingPanel" translation="[710,422]" width="500" height="236" color="#171A1F" />
+      <Rectangle translation="[710,422]" width="500" height="5" color="#3B82F6" />
+      <Label translation="[774,474]" width="372" height="42" text="Loading Flux" horizAlign="center" vertAlign="center" font="font:MediumBoldSystemFont" color="#F4F4F5" />
+      <Label translation="[774,524]" width="372" height="34" text="Connecting to your library" horizAlign="center" vertAlign="center" font="font:SmallSystemFont" color="#AAA9AA" />
+      <BusySpinner id="spinner" translation="[930,574]" uri="pkg:/images/spinner.png" visible="false" />
+    </Group>
     <Timer id="startupWatchdog" repeat="false" duration="15" />
   </children>
 </component>

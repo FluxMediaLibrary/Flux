@@ -5,20 +5,26 @@
     <field id="playSelected" type="assocarray" alwaysNotify="true" />
     <field id="mediaSelected" type="assocarray" alwaysNotify="true" />
     <field id="seasonSelected" type="assocarray" alwaysNotify="true" />
+    <field id="backRequested" type="boolean" alwaysNotify="true" />
+    <field id="trailerRequested" type="assocarray" alwaysNotify="true" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/screens/DetailsScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Rectangle width="1920" height="1080" color="#0d0f12" />
-    <Poster id="backdrop" width="1920" height="1080" opacity="0.24" loadDisplayMode="scaleToFill" />
-    <Rectangle width="1920" height="1080" color="#0d0f12" opacity="0.32" />
-    <Poster id="poster" width="330" height="495" translation="[95,135]" loadDisplayMode="scaleToFill" />
-    <Label id="title" width="1280" height="90" translation="[485,125]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
-    <Label id="metadata" width="1220" height="55" translation="[490,220]" font="font:MediumSystemFont" color="#aaa9aa" />
-    <Label id="overview" width="1220" height="190" translation="[490,295]" wrap="true" maxLines="5" font="font:MediumSystemFont" color="#f4f4f5" />
-    <Label id="credits" width="1220" height="46" translation="[490,480]" font="font:SmallSystemFont" color="#aaa9aa" />
-    <LabelList id="actions" translation="[490,535]" itemSize="[520,68]" numRows="3" focusBitmapUri="pkg:/images/focus.9.png" />
-    <Label id="availability" text="Not currently available to play" width="700" height="60" translation="[490,545]" font="font:MediumBoldSystemFont" color="#f59e0b" visible="false" />
-    <Label id="episodeHeader" width="500" height="50" translation="[95,690]" font="font:LargeBoldSystemFont" color="#f4f4f5" visible="false" />
-    <RowList id="episodes" translation="[95,750]" numRows="1" itemSize="[1725,240]" rowItemSize="[[300,190]]" rowItemSpacing="[[28,0]]" showRowLabel="[false]" focusBitmapUri="pkg:/images/focus.9.png" visible="false" />
+    <FluxBackground />
+    <Poster id="backdrop" width="1920" height="590" opacity="0.66" loadDisplayMode="scaleToFill" />
+    <Rectangle width="1920" height="590" color="#0D0F12" opacity="0.56" />
+    <Rectangle width="1920" height="360" translation="[0,590]" color="#0D0F12" opacity="0.96" />
+    <Rectangle width="1920" height="1" translation="[0,590]" color="#2A3447" />
+    <Poster id="poster" width="270" height="405" translation="[92,286]" loadDisplayMode="scaleToFill" />
+    <Rectangle width="270" height="405" translation="[92,286]" color="#2A3447" opacity="0.16" />
+    <Label id="title" width="1250" height="84" translation="[420,182]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Label id="metadata" width="1180" height="42" translation="[424,278]" font="font:MediumSystemFont" color="#AAA9AA" />
+    <Label id="overview" width="1040" height="152" translation="[424,336]" wrap="true" maxLines="4" font="font:MediumSystemFont" color="#F4F4F5" />
+    <Label id="credits" width="1110" height="42" translation="[424,502]" font="font:SmallSystemFont" color="#AAA9AA" />
+    <MarkupGrid id="actions" translation="[424,626]" itemComponentName="FluxActionItem" itemSize="[276,56]" itemSpacing="[14,0]" numColumns="4" numRows="1" />
+    <Label id="availability" text="Not currently available to play" width="700" height="48" translation="[424,700]" font="font:MediumBoldSystemFont" color="#F59E0B" visible="false" />
+    <Label id="episodeHeader" width="700" height="48" translation="[72,770]" font="font:LargeBoldSystemFont" color="#F4F4F5" visible="false" />
+    <RowList id="episodes" translation="[72,824]" numRows="1" itemSize="[1776,400]" rowItemSize="[[248,372]]" rowItemSpacing="[[28,0]]" itemComponentName="MediaCard" showRowLabel="[false]" focusBitmapUri="pkg:/images/focus.9.png" visible="false" />
   </children>
 </component>

@@ -5,10 +5,12 @@
     <field id="focusPercent" type="float" onChange="renderFocus" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/widgets/ProfileCard.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Rectangle id="focusBorder" width="260" height="260" translation="[20,0]" color="#60a5fa" visible="false" />
-    <Poster id="avatar" width="244" height="244" translation="[28,8]" loadDisplayMode="scaleToFill" />
-    <Label id="name" width="300" height="60" translation="[0,285]" horizAlign="center" font="font:LargeBoldSystemFont" color="#f4f4f5" />
+    <Rectangle id="focusBorder" width="272" height="272" translation="[14,-4]" color="#60A5FA" visible="false" />
+    <Rectangle width="260" height="260" translation="[20,2]" color="#171A1F" />
+    <Poster id="avatar" width="252" height="252" translation="[24,6]" loadDisplayMode="scaleToFill" />
+    <Label id="name" width="300" height="60" translation="[0,285]" horizAlign="center" font="font:LargeBoldSystemFont" color="#F4F4F5" />
   </children>
 </component>
 

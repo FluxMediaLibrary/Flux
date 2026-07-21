@@ -3,12 +3,21 @@ function RokuDeviceCapabilities() as Object
     resolution = ResolutionName(info.GetVideoMode())
     return {
         model: info.GetModel()
-        firmware: info.GetVersion()
+        firmware: RokuOsVersion(info)
         supports4k: resolution = "2160p"
         supportsHevc: resolution = "2160p"
         supportsHdr10: false
         maxBitrate: 20000000
     }
+end function
+
+function RokuOsVersion(info as Object) as String
+    version = info.GetOsVersion()
+    if version = invalid then return "unknown"
+    result = version.major + "." + version.minor
+    if version.revision <> invalid and version.revision <> "" then result = result + "." + version.revision
+    if version.build <> invalid and version.build <> "" then result = result + " (" + version.build + ")"
+    return result
 end function
 
 function ResolutionName(videoMode as String) as String

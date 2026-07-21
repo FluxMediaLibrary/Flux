@@ -2,9 +2,14 @@ sub init()
     m.instructions = m.top.findNode("instructions")
     m.userCode = m.top.findNode("userCode")
     m.verificationUrl = m.top.findNode("verificationUrl")
-    m.retryButton = m.top.findNode("retryButton")
-    m.retryButton.observeField("buttonSelected", "onRetry")
-    m.retryButton.SetFocus(true)
+    m.retryActions = m.top.findNode("retryActions")
+    actions = CreateObject("roSGNode", "ContentNode")
+    retry = actions.CreateChild("ContentNode")
+    retry.title = "Get a new code"
+    retry.addFields({ id: "retry" })
+    m.retryActions.content = actions
+    m.retryActions.observeField("itemSelected", "onRetry")
+    m.retryActions.SetFocus(true)
 end sub
 
 sub render()

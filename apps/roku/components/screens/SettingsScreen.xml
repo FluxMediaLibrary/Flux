@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<component name="SettingsScreen" extends="Group" initialFocus="actions">
+<component name="SettingsScreen" extends="Group" initialFocus="categories">
   <interface>
     <field id="serverName" type="string" onChange="render" />
     <field id="serverUrl" type="string" onChange="render" />
@@ -8,15 +8,22 @@
     <field id="serverVersion" type="string" onChange="render" />
     <field id="accountLabel" type="string" onChange="render" />
     <field id="profileLabel" type="string" onChange="render" />
+    <field id="initialCategory" type="string" onChange="applyInitialCategory" />
     <field id="actionSelected" type="string" alwaysNotify="true" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/screens/SettingsScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Rectangle width="1920" height="1080" color="#0d0f12" />
-    <Label text="Settings" width="1000" height="90" translation="[110,100]" font="font:ExtraLargeBoldSystemFont" color="#f4f4f5" />
-    <Label id="server" width="1500" height="90" translation="[110,210]" wrap="true" font="font:MediumSystemFont" color="#aaa9aa" />
-    <Label id="identity" width="1500" height="55" translation="[110,310]" font="font:SmallSystemFont" color="#d4d4d8" />
-    <Label id="version" width="1100" height="45" translation="[110,365]" font="font:SmallSystemFont" color="#aaa9aa" />
-    <LabelList id="actions" translation="[110,435]" itemSize="[850,66]" numRows="8" focusBitmapUri="pkg:/images/focus.9.png" />
+    <FluxBackground />
+    <Label text="Settings" width="1000" height="70" translation="[72,42]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Rectangle width="1776" height="134" translation="[72,128]" color="#171A1F" />
+    <Label id="server" width="1120" height="76" translation="[104,150]" wrap="true" font="font:MediumSystemFont" color="#F4F4F5" />
+    <Label id="identity" width="560" height="42" translation="[1258,154]" wrap="true" font="font:SmallSystemFont" color="#AAA9AA" />
+    <Label id="version" width="560" height="40" translation="[1258,208]" font="font:SmallSystemFont" color="#6B6B6C" />
+    <Label text="SETTINGS AREAS" width="700" height="36" translation="[72,314]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <MarkupGrid id="categories" translation="[72,360]" itemComponentName="FluxActionItem" itemSize="[410,62]" itemSpacing="[18,10]" numColumns="4" numRows="2" drawFocusFeedback="false" />
+    <Rectangle width="1776" height="1" translation="[72,526]" color="#2A3447" />
+    <Label id="sectionTitle" width="960" height="36" translation="[72,568]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <MarkupList id="actions" translation="[72,618]" itemComponentName="FluxActionItem" itemSize="[1776,72]" itemSpacing="[0,8]" numRows="5" drawFocusFeedback="false" />
   </children>
 </component>

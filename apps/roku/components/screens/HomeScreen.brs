@@ -16,9 +16,9 @@ end sub
 
 sub renderNavigation()
     navigation = CreateObject("roSGNode", "ContentNode")
-    destinations = ["Home", "Movies", "Shows"]
+    destinations = ["Home", "Movies", "Shows", "Continue Watching"]
     if m.top.requestsEnabled then destinations.Push("Requests")
-    destinations.Append(["Search", "Profiles", "Settings"])
+    destinations.Append(["Search", "Profiles", "Server", "Settings"])
     for each destination in destinations
         item = navigation.CreateChild("ContentNode")
         item.title = destination
@@ -43,8 +43,12 @@ end sub
 sub renderHome()
     root = CreateObject("roSGNode", "ContentNode")
     if m.top.homeData = invalid then return
-    for each rowData in m.top.homeData.rows
-        if rowData.items.Count() = 0 and rowData.error = invalid then continue for
+    homeRows = m.top.homeData.rows
+    if homeRows = invalid then homeRows = []
+    for each rowData in homeRows
+        rowItems = rowData.items
+        if rowItems = invalid then rowItems = []
+        if rowItems.Count() = 0 and rowData.error = invalid then continue for
         row = root.CreateChild("ContentNode")
         row.title = rowData.title
         row.id = rowData.id
@@ -56,18 +60,23 @@ sub renderHome()
             item.hdPosterUrl = "pkg:/images/placeholder-poster.png"
             item.addFields({ retryRowId: rowData.id, mediaType: "retry", progress: invalid, watched: false, unplayedCount: invalid, parentMediaId: invalid, backdropUrl: "pkg:/images/placeholder-backdrop.png", subtitle: "Row unavailable", year: invalid, runtimeMinutes: invalid, contentRating: invalid, rating: invalid, genres: [], available: false })
         else
-            for each media in rowData.items
+            for each media in rowItems
                 item = row.CreateChild("ContentNode")
                 item.id = media.id
                 item.title = media.title
                 item.description = media.overview
-                item.hdPosterUrl = media.artwork.poster
-                item.addFields({ retryRowId: "", mediaType: media.mediaType, progress: media.progress, watched: media.watched, unplayedCount: media.unplayedCount, parentMediaId: media.parentMediaId, backdropUrl: media.artwork.backdrop, subtitle: media.subtitle, year: media.year, runtimeMinutes: media.runtimeMinutes, contentRating: media.contentRating, rating: media.rating, genres: media.genres, available: media.available })
+                item.hdPosterUrl = FluxArtworkUrl(media, "poster", "pkg:/images/placeholder-poster.png")
+                item.addFields({ retryRowId: "", mediaType: media.mediaType, progress: media.progress, watched: media.watched, unplayedCount: media.unplayedCount, parentMediaId: media.parentMediaId, backdropUrl: FluxArtworkUrl(media, "backdrop", "pkg:/images/placeholder-backdrop.png"), subtitle: media.subtitle, year: media.year, runtimeMinutes: media.runtimeMinutes, contentRating: media.contentRating, rating: media.rating, genres: media.genres, available: media.available })
             end for
         end if
     end for
     m.rows.content = root
-    hasContent = root.GetChildCount() > 0 and root.GetChild(0).GetChildCount() > 0
+    hasContent = false
+    firstRow = invalid
+    if root.GetChildCount() > 0
+        firstRow = root.GetChild(0)
+        if firstRow <> invalid and firstRow.GetChildCount() > 0 then hasContent = true
+    end if
     m.top.findNode("empty").visible = not hasContent
     m.rows.visible = hasContent
     m.hero.visible = hasContent
@@ -75,7 +84,7 @@ sub renderHome()
         if m.top.homeData.hero <> invalid and m.top.homeData.hero.Count() > 0
             showHeroData(m.top.homeData.hero[0])
         else
-            showHero(root.GetChild(0).GetChild(0))
+            showHero(firstRow.GetChild(0))
         end if
         configureHeroRotation()
         m.rows.SetFocus(true)
@@ -87,7 +96,9 @@ end sub
 sub onFocused()
     indices = m.rows.rowItemFocused
     if indices.Count() <> 2 or m.rows.content = invalid then return
-    item = m.rows.content.GetChild(indices[0]).GetChild(indices[1])
+    row = m.rows.content.GetChild(indices[0])
+    if row = invalid then return
+    item = row.GetChild(indices[1])
     if item <> invalid then showHero(item)
 end sub
 
@@ -96,7 +107,7 @@ sub showHero(item as Object)
 end sub
 
 sub showHeroData(item as Object)
-    m.hero.heroData = { id: item.id, title: item.title, overview: item.overview, mediaType: item.mediaType, backdropUrl: item.artwork.backdrop, subtitle: item.subtitle, year: item.year, runtimeMinutes: item.runtimeMinutes, contentRating: item.contentRating, rating: item.rating, genres: item.genres, progress: item.progress, available: item.available, parentMediaId: item.parentMediaId }
+    m.hero.heroData = { id: item.id, title: item.title, overview: item.overview, mediaType: item.mediaType, backdropUrl: FluxArtworkUrl(item, "backdrop", "pkg:/images/placeholder-backdrop.png"), subtitle: item.subtitle, year: item.year, runtimeMinutes: item.runtimeMinutes, contentRating: item.contentRating, rating: item.rating, genres: item.genres, progress: item.progress, available: item.available, parentMediaId: item.parentMediaId }
 end sub
 
 sub configureHeroRotation()
@@ -136,7 +147,11 @@ end sub
 sub onSelected()
     indices = m.rows.rowItemSelected
     if indices.Count() <> 2 then return
-    item = m.rows.content.GetChild(indices[0]).GetChild(indices[1])
+    if m.rows.content = invalid then return
+    row = m.rows.content.GetChild(indices[0])
+    if row = invalid then return
+    item = row.GetChild(indices[1])
+    if item = invalid then return
     if item.retryRowId <> invalid and item.retryRowId <> ""
         m.top.rowRetryRequested = item.retryRowId
         return
@@ -145,23 +160,36 @@ sub onSelected()
 end sub
 
 sub onDestinationSelected()
+    if m.navigation.content = invalid then return
     selected = m.navigation.content.GetChild(m.navigation.itemSelected)
     if selected <> invalid then m.top.destinationSelected = selected.id
+end sub
+
+sub focusContinueWatching()
+    if not m.top.focusContinueWatching or m.rows.content = invalid then return
+    for rowIndex = 0 to m.rows.content.GetChildCount() - 1
+        row = m.rows.content.GetChild(rowIndex)
+        if row <> invalid and LCase(row.title) = "continue watching" and row.GetChildCount() > 0
+            m.rows.jumpToRowItem = [rowIndex, 0]
+            m.rows.SetFocus(true)
+            return
+        end if
+    end for
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
     pauseHeroRotation()
-    if key = "up" and m.rows.HasFocus()
+    if key = "up" and m.rows.HasFocus() and m.hero.hasActions
+        m.hero.SetFocus(true)
+        return true
+    else if key = "up" and m.hero.IsInFocusChain()
+        m.navigation.SetFocus(true)
+        return true
+    else if key = "down" and m.navigation.IsInFocusChain() and m.hero.hasActions
         m.hero.SetFocus(true)
         return true
     else if key = "down" and m.hero.IsInFocusChain()
-        m.rows.SetFocus(true)
-        return true
-    else if key = "left" and m.rows.HasFocus()
-        m.navigation.SetFocus(true)
-        return true
-    else if key = "right" and m.navigation.HasFocus()
         m.rows.SetFocus(true)
         return true
     end if

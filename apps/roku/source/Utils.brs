@@ -153,6 +153,10 @@ function IsAssociativeArray(value as Dynamic) as Boolean
     return GetInterface(value, "ifAssociativeArray") <> invalid
 end function
 
+function IsArray(value as Dynamic) as Boolean
+    return GetInterface(value, "ifArray") <> invalid
+end function
+
 function Clamp(value as Float, minimum as Float, maximum as Float) as Float
     if value < minimum then return minimum
     if value > maximum then return maximum

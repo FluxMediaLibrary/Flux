@@ -1,5 +1,6 @@
 sub init()
     m.contentHost = m.top.findNode("contentHost")
+    m.loadingOverlay = m.top.findNode("loadingOverlay")
     m.spinner = m.top.findNode("spinner")
     m.watchdog = m.top.findNode("startupWatchdog")
     m.state = "INITIALIZING"
@@ -28,6 +29,7 @@ sub onStartupTimeout(event as Object)
     if m.state = "READY" or m.state = "ERROR" then return
     LogEvent("warn", "startup", "watchdog_triggered", { state: m.state })
     if m.requestTask <> invalid and m.requestTask.state = "run" then m.requestTask.control = "STOP"
+    m.loadingOverlay.visible = false
     m.spinner.visible = false
     m.state = "ERROR"
     if m.registry.serverUrl = ""
@@ -92,6 +94,7 @@ end function
 
 sub runRequest(request as Object, successCallback as String, failureCallback as String)
     if m.requestTask <> invalid and m.requestTask.state = "run" then m.requestTask.control = "STOP"
+    m.loadingOverlay.visible = true
     m.spinner.visible = true
     m.requestGeneration++
     task = CreateObject("roSGNode", "ApiRequestTask")
@@ -121,6 +124,7 @@ sub onRequestState(event as Object)
     if requestNode.requestId <> m.activeRequestId then return
     state = event.GetData()
     if state = "done" or state = "stop"
+        m.loadingOverlay.visible = false
         m.spinner.visible = false
         ' Detect silent task death: completed without setting response or failure
         if m.requestTask.response = invalid and m.requestTask.failure = invalid

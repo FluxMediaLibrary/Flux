@@ -1,20 +1,32 @@
 sub init()
     m.actions = m.top.findNode("actions")
+    m.backdrop = m.top.findNode("backdrop")
+    m.thumbnail = m.top.findNode("thumbnail")
+    m.backdropFallback = "pkg:/images/placeholder-backdrop.png"
+    m.thumbnailFallback = "pkg:/images/placeholder-backdrop.png"
+    m.backdrop.observeField("loadStatus", "onBackdropLoadStatus")
+    m.thumbnail.observeField("loadStatus", "onThumbnailLoadStatus")
     m.actions.observeField("itemSelected", "onAction")
 end sub
 
 sub renderEpisode()
     episode = m.top.episode
     if episode = invalid then return
-    backdropUrl = episode.artwork.backdrop
-    if backdropUrl = invalid or backdropUrl = "" then backdropUrl = "pkg:/images/placeholder-backdrop.png"
-    thumbnailUrl = episode.artwork.thumbnail
-    if thumbnailUrl = invalid or thumbnailUrl = "" then thumbnailUrl = "pkg:/images/placeholder-backdrop.png"
-    m.top.findNode("backdrop").uri = backdropUrl
-    m.top.findNode("thumbnail").uri = thumbnailUrl
-    m.top.findNode("showTitle").text = episode.showTitle
-    m.top.findNode("title").text = episode.title
-    metadata = "S" + episode.season.ToStr() + " E" + episode.episode.ToStr()
+    backdropUrl = FluxArtworkUrl(episode, "backdrop", "pkg:/images/placeholder-backdrop.png")
+    thumbnailUrl = FluxArtworkUrl(episode, "thumbnail", "pkg:/images/placeholder-backdrop.png")
+    m.backdrop.uri = backdropUrl
+    m.thumbnail.uri = thumbnailUrl
+    showTitle = episode.showTitle
+    if showTitle = invalid or showTitle = "" then showTitle = "Flux"
+    episodeTitle = episode.title
+    if episodeTitle = invalid or episodeTitle = "" then episodeTitle = "Untitled episode"
+    seasonNumber = "?"
+    episodeNumber = "?"
+    if episode.season <> invalid then seasonNumber = episode.season.ToStr()
+    if episode.episode <> invalid then episodeNumber = episode.episode.ToStr()
+    m.top.findNode("showTitle").text = showTitle
+    m.top.findNode("title").text = episodeTitle
+    metadata = "S" + seasonNumber + " E" + episodeNumber
     if episode.runtimeMinutes <> invalid then metadata = metadata + "  |  " + episode.runtimeMinutes.ToStr() + " min"
     if episode.airDate <> invalid and episode.airDate <> "" then metadata = metadata + "  |  " + episode.airDate
     m.top.findNode("metadata").text = metadata
@@ -48,6 +60,14 @@ sub renderEpisode()
     m.actions.SetFocus(true)
 end sub
 
+sub onBackdropLoadStatus()
+    if m.backdrop.loadStatus = "failed" and m.backdrop.uri <> m.backdropFallback then m.backdrop.uri = m.backdropFallback
+end sub
+
+sub onThumbnailLoadStatus()
+    if m.thumbnail.loadStatus = "failed" and m.thumbnail.uri <> m.thumbnailFallback then m.thumbnail.uri = m.thumbnailFallback
+end sub
+
 function FormatTime(seconds as Float) as String
     total = Int(seconds)
     minutes = Int(total / 60)
@@ -58,6 +78,7 @@ function FormatTime(seconds as Float) as String
 end function
 
 sub onAction()
+    if m.actions.content = invalid then return
     action = m.actions.content.GetChild(m.actions.itemSelected)
     if action = invalid then return
     if action.id = "back"
