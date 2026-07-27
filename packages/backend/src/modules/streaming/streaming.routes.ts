@@ -14,6 +14,7 @@ import {
   getPlaybackInfo,
 } from './streaming.service.js';
 import { buildAdaptiveHlsArgs } from '../../lib/adaptive-hls.js';
+import { preferHlsStartAtBeginning } from '../../lib/hls-manifest.js';
 import {
   ensureTrickplay,
   trickplayAssetPath,
@@ -122,8 +123,9 @@ function tokenizeManifest(
   startTimeSeconds = 0,
   forceAdaptive = false,
 ): string {
-  if (!token) return manifest;
-  return manifest
+  const preparedManifest = preferHlsStartAtBeginning(manifest);
+  if (!token) return preparedManifest;
+  return preparedManifest
     .split('\n')
     .map((line) => {
       const trimmed = line.trim();
