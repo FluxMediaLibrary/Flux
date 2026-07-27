@@ -454,6 +454,7 @@ export const api = {
     audioStreamIndex?: number | null,
     startTimeSeconds = 0,
     reloadNonce = 0,
+    forceAdaptive = false,
   ): string {
     if (typeof window === 'undefined') return '';
     const qs = new URLSearchParams();
@@ -461,6 +462,7 @@ export const api = {
     if (typeof audioStreamIndex === 'number') qs.set('audioStream', String(audioStreamIndex));
     if (startTimeSeconds > 0) qs.set('startTime', startTimeSeconds.toFixed(3));
     if (reloadNonce > 0) qs.set('reload', String(reloadNonce));
+    if (forceAdaptive) qs.set('adaptive', '1');
     const token = getToken();
     if (token) qs.set('token', token);
     const q = qs.toString();
