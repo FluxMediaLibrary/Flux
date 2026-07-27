@@ -16,8 +16,8 @@ android {
         applicationId = "xyz.deadstudios.flux"
         minSdk = 21
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.1.3"
+        versionCode = 9
+        versionName = "1.1.4"
     }
 
     buildFeatures {
