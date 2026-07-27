@@ -1,15 +1,15 @@
 ﻿{
-    "versionCode":  8,
-    "versionName":  "1.1.3",
+    "versionCode":  9,
+    "versionName":  "1.1.4",
     "minimumSupportedVersionCode":  4,
     "mandatory":  false,
-    "releaseDate":  "2026-07-17T21:28:37.2401086Z",
+    "releaseDate":  "2026-07-27T06:50:13.9545930Z",
     "releaseNotes":  [
-                         "Updated the Android app icon to match the Flux web icon",
+                         "Respected Android rotation lock while preserving normal auto-rotate behavior",
                          "Kept update checks in the profile menu",
                          "Kept Cast in the media player controls"
                      ],
-    "apkUrl":  "/api/app/android/download/Flux-Android-v1.1.3.apk",
-    "sha256":  "3ea3430f400a532cf85cefc93fbe16aa36f36a9df7adaa6fbf8642353fda228f",
-    "fileSize":  4956237
+    "apkUrl":  "/api/app/android/download/Flux-Android-v1.1.4.apk",
+    "sha256":  "93696a9c55f4eb1f5f68918b7a31696de6ee142fd99bf71900feb8249b24229b",
+    "fileSize":  4956259
 }
