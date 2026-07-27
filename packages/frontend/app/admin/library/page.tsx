@@ -9,10 +9,11 @@ import type {
   AdminLibraryItemDTO,
   AdminLibraryRequestDTO,
   AdminLibrarySeasonDTO,
+  AdminMediaDeleteResultDTO,
   MediaType,
 } from '@flux/shared';
 import { api, FluxApiError } from '@/lib/api';
-import { PageHeader } from '@/components/admin/AdminUI';
+import { ConfirmDialog, PageHeader } from '@/components/admin/AdminUI';
 
 const TMDB_POSTER = 'https://image.tmdb.org/t/p/w92';
 
@@ -21,6 +22,10 @@ type IssueFilter = 'ALL' | 'ISSUES' | 'MISSING_FILES' | 'BROKEN' | 'METADATA' | 
 type RepairTarget = AdminLibraryAcquisitionTargetDTO & {
   item: AdminLibraryItemDTO;
   href: string;
+};
+type DeleteTarget = {
+  item: AdminLibraryItemDTO;
+  episode?: AdminLibraryEpisodeDTO;
 };
 
 const TYPE_LABEL: Record<TypeFilter, string> = {
@@ -159,6 +164,27 @@ function buildRepairTargets(items: AdminLibraryItemDTO[]): RepairTarget[] {
     .slice(0, 8);
 }
 
+function formatDeleteNotice(result: AdminMediaDeleteResultDTO, label: string): string {
+  return (
+    `Deleted ${label}: ${result.deletedRecords.toLocaleString()} record${result.deletedRecords === 1 ? '' : 's'}, ` +
+    `${result.deletedFiles.toLocaleString()} file${result.deletedFiles === 1 ? '' : 's'}, ` +
+    `${formatBytesForNotice(result.deletedBytes)} freed.` +
+    (result.skippedFiles.length > 0 ? ` ${result.skippedFiles.length.toLocaleString()} file path${result.skippedFiles.length === 1 ? '' : 's'} skipped.` : '')
+  );
+}
+
+function formatBytesForNotice(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let unit = units[0]!;
+  for (let i = 1; i < units.length && value >= 1024; i += 1) {
+    value /= 1024;
+    unit = units[i]!;
+  }
+  return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${unit}`;
+}
+
 export default function AdminLibraryPage() {
   const searchParams = useSearchParams();
   const queryTypeFilter = parseTypeFilter(searchParams.get('type'));
@@ -173,6 +199,8 @@ export default function AdminLibraryPage() {
   const [syncingTarget, setSyncingTarget] = useState<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [clearingTarget, setClearingTarget] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [deletingTarget, setDeletingTarget] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<'sync' | 'analyze' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -288,6 +316,32 @@ export default function AdminLibraryPage() {
       );
     } finally {
       setClearingTarget(null);
+    }
+  }
+
+  async function deleteSelectedMedia() {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    const targetKey = target.episode ? `episode:${target.episode.id}` : `item:${target.item.id}`;
+    setDeletingTarget(targetKey);
+    setNotice(null);
+    setError(null);
+    try {
+      const result = target.episode
+        ? await api.deleteAdminEpisode(target.episode.id)
+        : await api.deleteAdminMedia(target.item.id);
+      const label = target.episode
+        ? `${target.item.title} S${target.episode.season} E${target.episode.episode}`
+        : target.item.title;
+      setNotice(formatDeleteNotice(result, label));
+      setDeleteTarget(null);
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof FluxApiError ? err.message : 'Failed to delete media.',
+      );
+    } finally {
+      setDeletingTarget(null);
     }
   }
 
@@ -433,16 +487,32 @@ export default function AdminLibraryPage() {
                   syncingTarget={syncingTarget}
                   analyzing={analyzingId === item.id}
                   clearingTarget={clearingTarget}
+                  deletingTarget={deletingTarget}
                   onToggle={() => toggleExpanded(item.id)}
                   onSync={(season) => void syncEpisodes(item, season)}
                   onAnalyze={() => void analyzeMedia(item)}
                   onClearMissing={(episode) => void clearMissingFile(item, episode)}
+                  onDelete={(episode) => setDeleteTarget({ item, episode })}
                 />
               ))}
             </div>
           )}
         </>
       )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={deleteTarget?.episode ? 'Delete this episode?' : 'Delete this title?'}
+        description={deleteTarget?.episode
+          ? `This removes ${deleteTarget.item.title} S${deleteTarget.episode.season} E${deleteTarget.episode.episode} from Flux and deletes its media file when it is inside a configured media root.`
+          : `This removes ${deleteTarget?.item.title ?? 'this title'} from Flux and deletes its movie or episode files when they are inside configured media roots.`}
+        confirmLabel={deleteTarget?.episode ? 'Delete episode' : 'Delete title'}
+        dangerous
+        busy={deletingTarget !== null}
+        onClose={() => {
+          if (deletingTarget === null) setDeleteTarget(null);
+        }}
+        onConfirm={() => void deleteSelectedMedia()}
+      />
     </div>
   );
 }
@@ -556,20 +626,24 @@ function LibraryHealthRow({
   syncingTarget,
   analyzing,
   clearingTarget,
+  deletingTarget,
   onToggle,
   onSync,
   onAnalyze,
   onClearMissing,
+  onDelete,
 }: {
   item: AdminLibraryItemDTO;
   expanded: boolean;
   syncingTarget: string | null;
   analyzing: boolean;
   clearingTarget: string | null;
+  deletingTarget: string | null;
   onToggle: () => void;
   onSync: (season?: number) => void;
   onAnalyze: () => void;
   onClearMissing: (episode?: AdminLibraryEpisodeDTO) => void;
+  onDelete: (episode?: AdminLibraryEpisodeDTO) => void;
 }) {
   const tone = issueTone(item);
   const issues = item.issues.length > 0 ? item.issues : ['Healthy'];
@@ -639,6 +713,14 @@ function LibraryHealthRow({
               {clearingTarget === `item:${item.id}` ? 'Clearing...' : 'Clear stale path'}
             </button>
           )}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm danger"
+            onClick={() => onDelete()}
+            disabled={deletingTarget === `item:${item.id}`}
+          >
+            {deletingTarget === `item:${item.id}` ? 'Deleting...' : 'Delete title'}
+          </button>
           {item.type === 'SHOW' && (
             <>
             <button
@@ -753,47 +835,53 @@ function LibraryHealthRow({
                     )}
                   </div>
                 )}
-                {(missing || !episode.analyzed) && (
-                  <div className="admin-episode-actions">
-                    {missing ? (
-                      <>
-                        <button
-                          type="button"
-                          className="admin-episode-action"
-                          onClick={() => onSync(episode.season)}
-                          disabled={syncingSeason}
-                        >
-                          {syncingSeason ? 'Syncing' : 'Sync season'}
-                        </button>
-                        <a
-                          className="admin-episode-action"
-                          href={torrentPrefillHref(item, episode.season, episode.episode)}
-                        >
-                          Add torrent
-                        </a>
-                        {episode.fileExists === false && (
-                          <button
-                            type="button"
-                            className="admin-episode-action"
-                            onClick={() => onClearMissing(episode)}
-                            disabled={clearingTarget === `episode:${episode.id}`}
-                          >
-                            {clearingTarget === `episode:${episode.id}` ? 'Clearing' : 'Clear stale path'}
-                          </button>
-                        )}
-                      </>
-                    ) : (
+                <div className="admin-episode-actions">
+                  {missing ? (
+                    <>
                       <button
                         type="button"
                         className="admin-episode-action"
-                        onClick={onAnalyze}
-                        disabled={analyzing}
+                        onClick={() => onSync(episode.season)}
+                        disabled={syncingSeason}
                       >
-                        {analyzing ? 'Analyzing' : 'Analyze'}
+                        {syncingSeason ? 'Syncing' : 'Sync season'}
                       </button>
-                    )}
-                  </div>
-                )}
+                      <a
+                        className="admin-episode-action"
+                        href={torrentPrefillHref(item, episode.season, episode.episode)}
+                      >
+                        Add torrent
+                      </a>
+                      {episode.fileExists === false && (
+                        <button
+                          type="button"
+                          className="admin-episode-action"
+                          onClick={() => onClearMissing(episode)}
+                          disabled={clearingTarget === `episode:${episode.id}`}
+                        >
+                          {clearingTarget === `episode:${episode.id}` ? 'Clearing' : 'Clear stale path'}
+                        </button>
+                      )}
+                    </>
+                  ) : !episode.analyzed ? (
+                    <button
+                      type="button"
+                      className="admin-episode-action"
+                      onClick={onAnalyze}
+                      disabled={analyzing}
+                    >
+                      {analyzing ? 'Analyzing' : 'Analyze'}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="admin-episode-action danger"
+                    onClick={() => onDelete(episode)}
+                    disabled={deletingTarget === `episode:${episode.id}`}
+                  >
+                    {deletingTarget === `episode:${episode.id}` ? 'Deleting' : 'Delete episode'}
+                  </button>
+                </div>
               </div>
             );
           })}

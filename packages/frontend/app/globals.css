@@ -1505,6 +1505,15 @@ table.data tr:last-child td {
   color: #fff;
   outline: none;
 }
+.admin-episode-action.danger {
+  border-color: rgba(239,68,68,.32);
+  color: var(--danger);
+}
+.admin-episode-action.danger:hover,
+.admin-episode-action.danger:focus-visible {
+  background: rgba(239,68,68,.16);
+  color: #fecaca;
+}
 .admin-episode-action:disabled {
   color: var(--text-dim);
   cursor: wait;
