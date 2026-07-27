@@ -24,7 +24,7 @@ declare global {
     };
   }
 }
-import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
+import type { MediaStreamDTO, PlaybackInfoDTO, PlaybackMarkerDTO } from '@flux/shared';
 import { ControlBar } from './player/ControlBar';
 import { DebugOverlay } from './player/DebugOverlay';
 import { ErrorOverlay } from './player/ErrorOverlay';
@@ -36,6 +36,7 @@ import {
   canSwitchQualityInPlace,
   requiresAdaptiveTranscode,
 } from './player/quality-selection';
+import { shouldShowNextEpisodePrompt } from './player/next-episode';
 
 interface FluxPlayerProps {
   mediaItemId: string;
@@ -47,6 +48,12 @@ interface FluxPlayerProps {
   onProgress?: (positionSeconds: number, durationSeconds: number) => void;
   onBack?: () => void;
   onNearEnd?: () => void;
+  nextEpisode?: {
+    title: string;
+    subtitle: string;
+  } | null;
+  nextEpisodeMarkers?: PlaybackMarkerDTO[];
+  onNextEpisode?: () => void;
 }
 
 interface PlayerSource {
@@ -246,6 +253,9 @@ function FluxMediaPlayer({
   onProgress,
   onBack,
   onNearEnd,
+  nextEpisode,
+  nextEpisodeMarkers,
+  onNextEpisode,
   source,
   onQualityChange,
   onAudioStreamChange,
@@ -426,6 +436,9 @@ function FluxMediaPlayer({
         onBack={onBack}
         onProgress={onProgress}
         onNearEnd={onNearEnd}
+        nextEpisode={nextEpisode}
+        nextEpisodeMarkers={nextEpisodeMarkers}
+        onNextEpisode={onNextEpisode}
         playerRef={playerRef}
         debugOpen={debugOpen}
         methodLabel={methodLabel}
@@ -481,6 +494,9 @@ function FluxPlayerChrome({
   onBack,
   onProgress,
   onNearEnd,
+  nextEpisode,
+  nextEpisodeMarkers,
+  onNextEpisode,
   playerRef,
   debugOpen,
   methodLabel,
@@ -508,6 +524,9 @@ function FluxPlayerChrome({
   | 'onBack'
   | 'onProgress'
   | 'onNearEnd'
+  | 'nextEpisode'
+  | 'nextEpisodeMarkers'
+  | 'onNextEpisode'
 > & {
   playerRef: RefObject<MediaPlayerInstance | null>;
   debugOpen: boolean;
@@ -552,6 +571,15 @@ function FluxPlayerChrome({
       ? duration
       : 0;
   const absoluteCurrentTime = timelineOffset + (Number.isFinite(currentTime) ? currentTime : 0);
+  const showNextEpisode = Boolean(
+    nextEpisode &&
+    onNextEpisode &&
+    shouldShowNextEpisodePrompt({
+      currentTimeSeconds: absoluteCurrentTime,
+      durationSeconds: stableDuration,
+      markers: nextEpisodeMarkers,
+    }),
+  );
 
   // Android owns the single Cast sender. The WebView only publishes the
   // selected media and current position; it never renders a second Cast button.
@@ -749,24 +777,45 @@ function FluxPlayerChrome({
       startTimer();
     };
 
-    const handleLeave = () => {
+    const handleLeave = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') {
+        startTimer();
+        return;
+      }
       if (idleTimer) clearTimeout(idleTimer);
       if (!pausedRef.current) setIdle(true);
     };
 
     root.addEventListener('pointermove', wake);
+    root.addEventListener('pointerdown', wake);
+    root.addEventListener('pointerup', wake);
     root.addEventListener('pointerenter', wake);
     root.addEventListener('pointerleave', handleLeave);
+    root.addEventListener('touchstart', wake, { passive: true });
+    root.addEventListener('click', wake);
 
     startTimer();
 
     return () => {
       root.removeEventListener('pointermove', wake);
+      root.removeEventListener('pointerdown', wake);
+      root.removeEventListener('pointerup', wake);
       root.removeEventListener('pointerenter', wake);
       root.removeEventListener('pointerleave', handleLeave);
+      root.removeEventListener('touchstart', wake);
+      root.removeEventListener('click', wake);
       if (idleTimer) clearTimeout(idleTimer);
     };
   }, []);
+
+  useEffect(() => {
+    if (paused) {
+      setIdle(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setIdle(true), 2600);
+    return () => window.clearTimeout(timer);
+  }, [paused]);
 
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) => {
@@ -836,6 +885,21 @@ function FluxPlayerChrome({
         positionOffset={timelineOffset}
         onSeek={seekTo}
       />
+      {nextEpisode && onNextEpisode && showNextEpisode && (
+        <button
+          className="fx-next-episode"
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            reportProgress();
+            onNextEpisode();
+          }}
+        >
+          <span>Next Episode</span>
+          <strong>{nextEpisode.title}</strong>
+          <small>{nextEpisode.subtitle}</small>
+        </button>
+      )}
       <ControlBar
         durationSeconds={stableDuration || null}
         positionOffset={timelineOffset}

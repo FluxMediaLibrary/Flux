@@ -1,11 +1,25 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { FluxPlayer } from '@/components/FluxPlayer';
-import type { MediaItemDetailDTO } from '@flux/shared';
+import type { EpisodeDTO, MediaItemDetailDTO } from '@flux/shared';
+
+function episodeSubtitle(episode: Pick<EpisodeDTO, 'season' | 'episode'>): string {
+  return `S${episode.season} E${episode.episode}`;
+}
+
+function findNextPlayableEpisode(
+  episodes: EpisodeDTO[] | undefined,
+  currentEpisodeId: string | undefined,
+): EpisodeDTO | null {
+  if (!episodes || !currentEpisodeId) return null;
+  const currentIndex = episodes.findIndex((episode) => episode.id === currentEpisodeId);
+  if (currentIndex < 0) return null;
+  return episodes.slice(currentIndex + 1).find((episode) => episode.available) ?? null;
+}
 
 export default function WatchPage() {
   const { id } = useParams<{ id: string }>();
@@ -17,7 +31,6 @@ export default function WatchPage() {
   const [target, setTarget] = useState<{ episodeId?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Load metadata
   useEffect(() => {
     let cancelled = false;
     api.getMediaItem(id).then(
@@ -27,55 +40,44 @@ export default function WatchPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  // Resolve what to play. A show opened at its root (no ?episode=) has no
-  // movie-level file, so play its first available episode instead of 404-ing.
   useEffect(() => {
-    if (episodeParam) { setTarget({ episodeId: episodeParam }); return; }
+    if (episodeParam) {
+      setTarget({ episodeId: episodeParam });
+      return;
+    }
     if (!item) return;
-    if (item.type === 'MOVIE') { setTarget({}); return; }
-    const firstPlayable = item.episodes?.find((e) => e.available);
+    if (item.type === 'MOVIE') {
+      setTarget({});
+      return;
+    }
+    const firstPlayable = item.episodes?.find((episode) => episode.available);
     if (firstPlayable) setTarget({ episodeId: firstPlayable.id });
     else setError('No episodes are available to play yet.');
   }, [item, episodeParam]);
 
   const activeEpisodeId = target?.episodeId;
   const activeEpisode = activeEpisodeId
-    ? item?.episodes?.find((e) => e.id === activeEpisodeId)
+    ? item?.episodes?.find((episode) => episode.id === activeEpisodeId)
     : undefined;
+  const nextEpisode = findNextPlayableEpisode(item?.episodes, activeEpisodeId);
+  const nextEpisodePrompt = nextEpisode
+    ? {
+        title: nextEpisode.title || `Episode ${nextEpisode.episode}`,
+        subtitle: episodeSubtitle(nextEpisode),
+      }
+    : null;
 
-  const handleProgress = useCallback(
-    (position: number, durationSeconds: number) => {
-      if (!Number.isFinite(position) || position <= 0) return;
-      // HLS reports Infinity/NaN for duration — omit it rather than send a
-      // value that serializes to null and 400s the whole save.
-      const duration =
-        Number.isFinite(durationSeconds) && durationSeconds > 0
-          ? durationSeconds
-          : undefined;
-      api.saveProgress({
-        mediaItemId: activeEpisodeId ? undefined : id,
-        episodeId: activeEpisodeId,
-        positionSeconds: position,
-        durationSeconds: duration,
-      }).catch(() => { /* best-effort */ });
-    },
-    [id, activeEpisodeId],
-  );
-
-  // Preload next episode when near the end of the current one.
   const handleNearEnd = useCallback(() => {
     if (!item || !activeEpisodeId) return;
-    const eps = item.episodes ?? [];
-    const idx = eps.findIndex((e) => e.id === activeEpisodeId);
-    const next = eps[idx + 1];
-    if (next?.id) {
-      // Warm the playback-info cache so the next episode starts instantly.
-      api.getPlaybackInfo(id, next.id).catch(() => {});
-    }
+    const next = findNextPlayableEpisode(item.episodes, activeEpisodeId);
+    if (next?.id) api.getPlaybackInfo(id, next.id).catch(() => {});
   }, [id, item, activeEpisodeId]);
 
-  // Resume position: episode-level for shows, movie-level otherwise. Skip when
-  // the last session already completed the title (start fresh from 0).
+  const handleNextEpisode = useCallback(() => {
+    if (!nextEpisode) return;
+    router.replace(`/watch/${id}?episode=${encodeURIComponent(nextEpisode.id)}`);
+  }, [id, nextEpisode, router]);
+
   const resumeProgress = activeEpisodeId ? activeEpisode?.progress : item?.progress;
   const startPosition =
     resumeProgress && !resumeProgress.completed
@@ -100,7 +102,7 @@ export default function WatchPage() {
     return (
       <div className="centered-viewport">
         <div className="spinner" />
-        <p className="muted">Loading…</p>
+        <p className="muted">Loading...</p>
       </div>
     );
   }
@@ -114,12 +116,15 @@ export default function WatchPage() {
         title={item?.title ?? 'Now playing'}
         subtitle={
           activeEpisode
-            ? `S${activeEpisode.season} · E${activeEpisode.episode}${activeEpisode.title ? ` · ${activeEpisode.title}` : ''}`
+            ? `${episodeSubtitle(activeEpisode)}${activeEpisode.title ? ` - ${activeEpisode.title}` : ''}`
             : undefined
         }
         startPositionSeconds={startPosition}
         fill
         onNearEnd={handleNearEnd}
+        nextEpisode={nextEpisodePrompt}
+        nextEpisodeMarkers={activeEpisode?.playbackMarkers ?? item?.playbackMarkers}
+        onNextEpisode={nextEpisode ? handleNextEpisode : undefined}
         onBack={() => router.push(`/library/${id}`)}
       />
     </div>

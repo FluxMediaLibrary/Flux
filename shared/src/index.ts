@@ -688,6 +688,12 @@ export interface MediaItemDTO {
   addedAt: string;
 }
 
+export interface PlaybackMarkerDTO {
+  type: 'intro' | 'credits';
+  startSeconds: number;
+  endSeconds: number;
+}
+
 export interface EpisodeDTO {
   id: string;
   season: number;
@@ -696,6 +702,7 @@ export interface EpisodeDTO {
   overview: string | null;
   runtime: number | null;
   available: boolean; // has a file
+  playbackMarkers?: PlaybackMarkerDTO[];
   /** Per-profile watch progress for this episode (present on detail views). */
   progress?: WatchProgressDTO | null;
 }
@@ -703,6 +710,7 @@ export interface EpisodeDTO {
 export interface MediaItemDetailDTO extends MediaItemDTO {
   episodes?: EpisodeDTO[];
   progress?: WatchProgressDTO | null;
+  playbackMarkers?: PlaybackMarkerDTO[];
 }
 
 /**
