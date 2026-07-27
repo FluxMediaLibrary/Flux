@@ -1154,11 +1154,29 @@ export interface AdminLibraryRepairResultDTO {
   cleared: boolean;
 }
 
+export interface AdminMediaDeleteResultDTO {
+  mediaItemId: string;
+  episodeId: string | null;
+  deletedRecords: number;
+  deletedFiles: number;
+  deletedBytes: number;
+  skippedFiles: string[];
+}
+
 export interface AdminBulkMediaAnalyzeResultDTO {
   items: number;
   analyzed: number;
   skipped: number;
   failed: number;
+}
+
+export interface AdminStorageCleanupResultDTO {
+  root: string;
+  maxAgeSeconds: number;
+  scannedEntries: number;
+  deletedEntries: number;
+  deletedBytes: number;
+  skippedEntries: string[];
 }
 
 export type AdminHealthStatus = 'HEALTHY' | 'DEGRADED' | 'UNHEALTHY';

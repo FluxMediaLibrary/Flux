@@ -11,10 +11,13 @@ import { ApiError } from '../../lib/errors.js';
 import {
   analyzeMissingLibraryMedia,
   analyzeLibraryItem,
+  deleteLibraryEpisode,
+  deleteLibraryMediaItem,
   clearMissingEpisodeFile,
   clearMissingLibraryFile,
   getAdminInfo,
   getAdminLibraryHealth,
+  pruneTranscodeCache,
   syncMissingShowEpisodes,
   syncShowEpisodes,
 } from './admin.service.js';
@@ -45,6 +48,9 @@ const playbackMarkersSchema = z.object({
     startSeconds: z.number().finite().min(0),
     endSeconds: z.number().finite().positive(),
   }).refine((marker) => marker.endSeconds > marker.startSeconds, 'Marker end must be after its start')).max(2),
+});
+const pruneTranscodeCacheSchema = z.object({
+  maxAgeSeconds: z.number().int().min(0).max(30 * 24 * 60 * 60).optional(),
 });
 
 export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
@@ -93,6 +99,13 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.get('/storage', { preHandler: [app.requirePermission('VIEW_SYSTEM')] }, async () => {
     const info = await getAdminInfo();
     return info.storage;
+  });
+
+  app.post('/storage/transcode-cache/prune', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const body = pruneTranscodeCacheSchema.parse(request.body ?? {});
+    const result = await pruneTranscodeCache(body.maxAgeSeconds);
+    await writeAuditEvent({ actorId: request.account!.id, action: 'TRANSCODE_CACHE_PRUNED', targetType: 'STORAGE', targetLabel: result.root, details: result });
+    return result;
   });
 
   app.get('/playback', { preHandler: [app.requirePermission('VIEW_SYSTEM')] }, async () => {
@@ -200,6 +213,13 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     return result;
   });
 
+  app.delete('/library/episodes/:episodeId', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const { episodeId } = request.params as { episodeId: string };
+    const result = await deleteLibraryEpisode(episodeId);
+    await writeAuditEvent({ actorId: request.account!.id, action: 'EPISODE_DELETED', targetType: 'EPISODE', targetId: episodeId, details: result });
+    return result;
+  });
+
   app.post('/library/:id/sync-episodes', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
     const { id } = request.params as { id: string };
     const result = await syncShowEpisodes(id);
@@ -229,6 +249,13 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     const { id } = request.params as { id: string };
     const result = await clearMissingLibraryFile(id);
     await writeAuditEvent({ actorId: request.account!.id, action: 'MISSING_MEDIA_PATH_CLEARED', targetType: 'MEDIA_ITEM', targetId: id, details: result });
+    return result;
+  });
+
+  app.delete('/library/:id', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const { id } = request.params as { id: string };
+    const result = await deleteLibraryMediaItem(id);
+    await writeAuditEvent({ actorId: request.account!.id, action: 'MEDIA_DELETED', targetType: 'MEDIA_ITEM', targetId: id, details: result });
     return result;
   });
 };

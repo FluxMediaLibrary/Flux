@@ -308,6 +308,11 @@
 .control-storage-breakdown > div:last-child { border-right: 0; }
 .control-storage-breakdown span,.control-storage-breakdown small { display: block; color: var(--control-dim); font-size: 9px; }
 .control-storage-breakdown strong { display: block; margin: 7px 0 3px; font: 600 19px Bahnschrift,sans-serif; }
+.control-cleanup-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px; }
+.control-cleanup-row strong, .control-cleanup-row small { display: block; }
+.control-cleanup-row strong { font-size: 12px; }
+.control-cleanup-row small { margin-top: 5px; color: var(--control-dim); font-size: 10px; }
+.control-cleanup-actions { display: flex; flex-wrap: wrap; gap: 9px; justify-content: flex-end; }
 .control-service-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
 .control-service { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px; }
 .control-service strong,.control-service small { display: block; }
@@ -318,6 +323,7 @@
 .control-system-error strong,.control-system-error small { display: block; }
 .control-system-error strong { font-size: 11px; }.control-system-error small,.control-system-error time { margin-top: 2px; color: var(--control-dim); font-size: 9px; }
 @media(max-width:1000px){.control-storage-grid,.control-service-grid{grid-template-columns:1fr}.control-storage-breakdown{grid-template-columns:repeat(2,1fr)}.control-storage-breakdown>div{border-bottom:1px solid var(--control-line-soft)}}
+@media(max-width:700px){.control-cleanup-row{align-items:flex-start;flex-direction:column}.control-cleanup-actions{justify-content:flex-start}}
 
 /* Existing operational surfaces inherit the control-center system while they
    are split into smaller reusable components. */
