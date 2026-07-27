@@ -13,12 +13,13 @@ import type {
   MediaItemDetailDTO,
   LibraryItemDTO,
   EpisodeDTO,
+  PlaybackMarkerDTO,
   WatchProgressDTO,
   SaveProgressRequest,
   ContinueWatchingItemDTO,
   MediaType,
 } from '@flux/shared';
-import type { MediaItem, Episode, WatchProgress } from '@prisma/client';
+import type { MediaItem, Episode, PlaybackMarker, WatchProgress } from '@prisma/client';
 import { isProgressComplete } from './progress-policy.js';
 
 function metadataNumber(metadata: unknown, key: string): number | null {
@@ -78,7 +79,17 @@ export function mapMediaItemToDTO(row: MediaItem): MediaItemDTO {
 }
 
 /** Map a Prisma Episode row to the EpisodeDTO wire shape. */
-export function mapEpisodeToDTO(row: Episode): EpisodeDTO {
+export function mapPlaybackMarkerToDTO(row: PlaybackMarker): PlaybackMarkerDTO {
+  return {
+    type: row.type as PlaybackMarkerDTO['type'],
+    startSeconds: row.startSeconds,
+    endSeconds: row.endSeconds,
+  };
+}
+
+/** Map a Prisma Episode row to the EpisodeDTO wire shape. */
+export function mapEpisodeToDTO(row: Episode & { playbackMarkers?: PlaybackMarker[] }): EpisodeDTO {
+  const markers = row.playbackMarkers?.map(mapPlaybackMarkerToDTO);
   return {
     id: row.id,
     season: row.season,
@@ -87,6 +98,7 @@ export function mapEpisodeToDTO(row: Episode): EpisodeDTO {
     overview: row.overview,
     runtime: row.runtime,
     available: row.filePath != null,
+    ...(markers ? { playbackMarkers: markers } : {}),
   };
 }
 
@@ -320,7 +332,13 @@ export async function getMediaItemDetail(
   const item = await prisma.mediaItem.findUnique({
     where: { id },
     include: {
-      episodes: { orderBy: [{ season: 'asc' }, { episode: 'asc' }] },
+      playbackMarkers: { orderBy: { startSeconds: 'asc' } },
+      episodes: {
+        orderBy: [{ season: 'asc' }, { episode: 'asc' }],
+        include: {
+          playbackMarkers: { orderBy: { startSeconds: 'asc' } },
+        },
+      },
     },
   });
 
@@ -331,6 +349,7 @@ export async function getMediaItemDetail(
   const dto: MediaItemDetailDTO = {
     ...mapMediaItemToDTO(item),
     episodes: item.episodes.map(mapEpisodeToDTO),
+    playbackMarkers: item.playbackMarkers.map(mapPlaybackMarkerToDTO),
   };
 
   if (profileId) {
