@@ -9,7 +9,8 @@ interface SettingsPanelProps {
   onClose: () => void;
   qualityOptions: PlaybackInfoDTO['qualities'];
   selectedQuality: PlaybackInfoDTO['qualities'][number]['label'];
-  onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label']) => void;
+  onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label'], positionSeconds?: number) => void;
+  currentPositionSeconds: number;
   audioStreams: MediaStreamDTO[];
   selectedAudioStreamIndex: number | null;
   onAudioStreamChange: (streamIndex: number | null) => void;
@@ -47,6 +48,7 @@ export function SettingsPanel({
   qualityOptions,
   selectedQuality,
   onQualityChange,
+  currentPositionSeconds,
   audioStreams,
   selectedAudioStreamIndex,
   onAudioStreamChange,
@@ -133,7 +135,7 @@ export function SettingsPanel({
                 aria-checked={selected}
                 onClick={() =>
                   runAndClose(() => {
-                    onQualityChange(quality.label);
+                    onQualityChange(quality.label, currentPositionSeconds);
                     if (quality.label === 'Auto' && playbackMethod === 'hls') {
                       remote.changeQuality(-1);
                     } else if (quality.height && playbackMethod === 'hls') {
