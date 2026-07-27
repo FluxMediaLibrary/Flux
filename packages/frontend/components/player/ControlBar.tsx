@@ -40,7 +40,7 @@ interface ControlBarProps {
   onTogglePlayback: (trigger?: Event) => void;
   qualityOptions: PlaybackInfoDTO['qualities'];
   selectedQuality: PlaybackInfoDTO['qualities'][number]['label'];
-  onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label']) => void;
+  onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label'], positionSeconds?: number) => void;
   audioStreams: MediaStreamDTO[];
   selectedAudioStreamIndex: number | null;
   onAudioStreamChange: (streamIndex: number | null) => void;
@@ -213,6 +213,7 @@ export function ControlBar({
             qualityOptions={qualityOptions}
             selectedQuality={selectedQuality}
             onQualityChange={onQualityChange}
+            currentPositionSeconds={displayCurrentTime}
             audioStreams={audioStreams}
             selectedAudioStreamIndex={selectedAudioStreamIndex}
             onAudioStreamChange={onAudioStreamChange}
