@@ -136,12 +136,6 @@ export function SettingsPanel({
                 onClick={() =>
                   runAndClose(() => {
                     onQualityChange(quality.label, currentPositionSeconds);
-                    if (quality.label === 'Auto' && playbackMethod === 'hls') {
-                      remote.changeQuality(-1);
-                    } else if (quality.height && playbackMethod === 'hls') {
-                      const index = qualityList.findIndex((item) => item?.height === quality.height);
-                      if (index >= 0) remote.changeQuality(index);
-                    }
                   })
                 }
               >
