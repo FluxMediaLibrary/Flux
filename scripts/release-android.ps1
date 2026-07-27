@@ -28,7 +28,7 @@ New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
 Copy-Item -LiteralPath $apk -Destination $destination -Force
 $hash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
 $size = (Get-Item -LiteralPath $destination).Length
-$releaseNotes = @('Updated the Android app icon to match the Flux web icon', 'Kept update checks in the profile menu', 'Kept Cast in the media player controls')
+$releaseNotes = @('Respected Android rotation lock while preserving normal auto-rotate behavior', 'Kept update checks in the profile menu', 'Kept Cast in the media player controls')
 $releaseDate = [DateTime]::UtcNow.ToString('o')
 $manifest = [ordered]@{
   versionCode = $code; versionName = $Version; minimumSupportedVersionCode = $MinimumSupportedVersionCode

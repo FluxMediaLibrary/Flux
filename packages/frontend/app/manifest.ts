@@ -14,7 +14,6 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/library',
     scope: '/',
     display: 'standalone',
-    orientation: 'any',
     background_color: '#0b1116',
     theme_color: '#0b1116',
     icons: [
