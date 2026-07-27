@@ -54,20 +54,25 @@ export async function resolveFilePath(filePath: string): Promise<string | null> 
 
 /**
  * Select the best media root for placing a new file.
- * Picks the first root with at least `minFreeBytes` free space.
- * If none meet the threshold, picks the root with the most free space.
+ * Picks the writable root with the most free space above `minFreeBytes`.
+ * If none meet the threshold, picks the writable root with the most free space.
  */
 export async function selectMediaRoot(
   minFreeBytes: number = config.MEDIA_SPILLOVER_THRESHOLD_BYTES,
 ): Promise<string> {
   let best = MEDIA_ROOTS[0]!;
   let bestFree = 0;
+  let bestAboveThreshold: string | null = null;
+  let bestAboveThresholdFree = 0;
 
   for (const root of MEDIA_ROOTS) {
     try {
       const stats = await fs.statfs(root);
       const free = stats.bavail * stats.bsize;
-      if (free >= minFreeBytes) return root; // first root with enough space wins
+      if (free >= minFreeBytes && free > bestAboveThresholdFree) {
+        bestAboveThreshold = root;
+        bestAboveThresholdFree = free;
+      }
       if (free > bestFree) {
         bestFree = free;
         best = root;
@@ -77,7 +82,7 @@ export async function selectMediaRoot(
     }
   }
 
-  return best;
+  return bestAboveThreshold ?? best;
 }
 
 /** Strip characters illegal on common filesystems; collapse whitespace. */

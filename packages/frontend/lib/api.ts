@@ -12,8 +12,10 @@ import type {
   AdminSignalDTO,
   AdminUserDTO,
   AdminLibraryHealthDTO,
+  AdminMediaDeleteResultDTO,
   AdminLibraryRepairResultDTO,
   AdminMediaAnalyzeResultDTO,
+  AdminStorageCleanupResultDTO,
   ApiError,
   AuthResponse,
   ConfirmTorrentRequest,
@@ -513,6 +515,11 @@ export const api = {
   getAdminStorage() {
     return request<AdminInfoDTO['storage']>('/api/admin/storage');
   },
+  pruneTranscodeCache(maxAgeSeconds?: number) {
+    return request<AdminStorageCleanupResultDTO>('/api/admin/storage/transcode-cache/prune', {
+      body: { maxAgeSeconds },
+    });
+  },
   getAdminPlayback() {
     return request<AdminPlaybackSessionDTO[]>('/api/admin/playback');
   },
@@ -563,6 +570,18 @@ export const api = {
     return request<AdminLibraryRepairResultDTO>(
       `/api/admin/library/episodes/${encodeURIComponent(episodeId)}/clear-missing-file`,
       { method: 'POST' },
+    );
+  },
+  deleteAdminMedia(mediaItemId: string) {
+    return request<AdminMediaDeleteResultDTO>(
+      `/api/admin/library/${encodeURIComponent(mediaItemId)}`,
+      { method: 'DELETE' },
+    );
+  },
+  deleteAdminEpisode(episodeId: string) {
+    return request<AdminMediaDeleteResultDTO>(
+      `/api/admin/library/episodes/${encodeURIComponent(episodeId)}`,
+      { method: 'DELETE' },
     );
   },
 };

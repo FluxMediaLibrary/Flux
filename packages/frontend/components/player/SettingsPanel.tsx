@@ -117,7 +117,9 @@ export function SettingsPanel({
             const bitrate = liveQuality?.bitrate || quality.bitrate
               ? `${Math.round((liveQuality?.bitrate ?? quality.bitrate ?? 0) / 1000)} kbps`
               : '';
-            const detail = quality.source === 'direct'
+            const detail = quality.label === 'Auto' && playbackMethod === 'direct'
+              ? 'Direct Play'
+              : quality.source === 'direct'
               ? 'Direct Play'
               : quality.label === 'Auto'
                 ? 'Adaptive'

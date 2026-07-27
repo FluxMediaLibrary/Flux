@@ -92,7 +92,10 @@ export function FluxPlayer(props: FluxPlayerProps) {
           ? audioStreamIndex
           : null;
         if (validAudioStreamIndex !== audioStreamIndex) setAudioStreamIndex(null);
-        const direct = qualityLabel === 'Original' && info.directPlay && validAudioStreamIndex === null;
+        const direct =
+          (qualityLabel === 'Original' || qualityLabel === 'Auto') &&
+          info.directPlay &&
+          validAudioStreamIndex === null;
         const timelineOffset = direct ? 0 : Math.max(0, hlsStartTime);
         setSource({
           src: direct
@@ -572,6 +575,7 @@ function FluxPlayerChrome({
   const reportProgress = useCallback(() => {
     const player = playerRef.current;
     if (!player) return;
+    if (!started || (waiting && !playing)) return;
 
     const position = timelineOffset + player.currentTime;
     const totalDuration = stableDuration > 0
@@ -602,7 +606,7 @@ function FluxPlayerChrome({
         }
       });
     onProgress?.(position, totalDuration);
-  }, [episodeId, mediaItemId, onProgress, playerRef, stableDuration, timelineOffset]);
+  }, [episodeId, mediaItemId, onProgress, playerRef, playing, stableDuration, started, timelineOffset, waiting]);
 
   useEffect(() => {
     const interval = window.setInterval(reportProgress, 5000);
