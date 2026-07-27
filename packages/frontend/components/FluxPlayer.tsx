@@ -31,6 +31,11 @@ import { ErrorOverlay } from './player/ErrorOverlay';
 import { Spinner } from './player/Spinner';
 import { Timeline } from './player/Timeline';
 import { TitleOverlay } from './player/TitleOverlay';
+import {
+  getMediaTimeOrigin,
+  toAbsolutePlaybackTime,
+  toLocalPlaybackTime,
+} from './player/playback-clock';
 
 interface FluxPlayerProps {
   mediaItemId: string;
@@ -219,6 +224,7 @@ function FluxMediaPlayer({
   const recoverableErrorRef = useRef(false);
   const hlsRecoveryRef = useRef({ time: 0, at: 0 });
   const hlsInitialSeekRef = useRef(false);
+  const hlsMediaTimeOriginRef = useRef(0);
 
   useEffect(() => {
     setPlaybackReady(false);
@@ -230,6 +236,7 @@ function FluxMediaPlayer({
     recoverableErrorRef.current = false;
     hlsRecoveryRef.current = { time: 0, at: 0 };
     hlsInitialSeekRef.current = false;
+    hlsMediaTimeOriginRef.current = 0;
   }, [source.src]);
 
   const handlePlayerError = useCallback(() => {
@@ -250,7 +257,11 @@ function FluxMediaPlayer({
 
     if (source.method === 'hls') {
       const localTime = Number.isFinite(player?.currentTime) ? player?.currentTime ?? 0 : 0;
-      const absoluteTime = Math.max(0, source.timelineOffset + localTime);
+      const absoluteTime = toAbsolutePlaybackTime(
+        localTime,
+        source.timelineOffset,
+        hlsMediaTimeOriginRef.current,
+      );
 
       if (idlePipeline) {
         recoverableErrorRef.current = true;
@@ -294,7 +305,11 @@ function FluxMediaPlayer({
         const player = playerRef.current;
         const currentTime = Number.isFinite(player?.currentTime) ? player?.currentTime ?? 0 : 0;
         recoverableErrorRef.current = false;
-        onTranscodeSeek(source.timelineOffset + currentTime);
+        onTranscodeSeek(toAbsolutePlaybackTime(
+          currentTime,
+          source.timelineOffset,
+          hlsMediaTimeOriginRef.current,
+        ));
       }
     };
 
@@ -339,8 +354,12 @@ function FluxMediaPlayer({
         if (source.method === 'hls' && !hlsInitialSeekRef.current) {
           hlsInitialSeekRef.current = true;
           const player = playerRef.current;
-          if (player && Number.isFinite(player.currentTime) && player.currentTime > 1) {
-            player.currentTime = 0;
+          if (
+            player &&
+            Number.isFinite(player.currentTime) &&
+            player.currentTime > hlsMediaTimeOriginRef.current + 1
+          ) {
+            player.currentTime = hlsMediaTimeOriginRef.current;
           }
         }
       }}
@@ -388,6 +407,7 @@ function FluxMediaPlayer({
         onAudioStreamChange={onAudioStreamChange}
         playbackMethod={source.method}
         timelineOffset={source.timelineOffset}
+        mediaTimeOriginRef={hlsMediaTimeOriginRef}
         onTranscodeSeek={onTranscodeSeek}
         onPlaybackIntent={(wantsPlayback) => {
           playRequestedRef.current = wantsPlayback;
@@ -398,7 +418,11 @@ function FluxMediaPlayer({
               const player = playerRef.current;
               const currentTime = Number.isFinite(player?.currentTime) ? player?.currentTime ?? 0 : 0;
               recoverableErrorRef.current = false;
-              onTranscodeSeek(source.timelineOffset + currentTime);
+              onTranscodeSeek(toAbsolutePlaybackTime(
+                currentTime,
+                source.timelineOffset,
+                hlsMediaTimeOriginRef.current,
+              ));
             }
           } else {
             pausedByUserRef.current = true;
@@ -443,6 +467,7 @@ function FluxPlayerChrome({
   onAudioStreamChange,
   playbackMethod,
   timelineOffset,
+  mediaTimeOriginRef,
   onTranscodeSeek,
   onPlaybackIntent,
   onPlaybackStateChange,
@@ -471,6 +496,7 @@ function FluxPlayerChrome({
   onAudioStreamChange: (streamIndex: number | null) => void;
   playbackMethod: PlayerSource['method'];
   timelineOffset: number;
+  mediaTimeOriginRef: RefObject<number>;
   onTranscodeSeek: (time: number) => void;
   onPlaybackIntent: (wantsPlayback: boolean) => void;
   onPlaybackStateChange: (state: { paused: boolean; started: boolean }) => void;
@@ -499,7 +525,17 @@ function FluxPlayerChrome({
     : typeof duration === 'number' && Number.isFinite(duration) && duration > 0
       ? duration
       : 0;
-  const absoluteCurrentTime = timelineOffset + (Number.isFinite(currentTime) ? currentTime : 0);
+  const mediaTimeOrigin = getMediaTimeOrigin(playbackMethod, seekableStart);
+  const positionOffset = timelineOffset - mediaTimeOrigin;
+  const absoluteCurrentTime = toAbsolutePlaybackTime(
+    currentTime,
+    timelineOffset,
+    mediaTimeOrigin,
+  );
+
+  useEffect(() => {
+    mediaTimeOriginRef.current = mediaTimeOrigin;
+  }, [mediaTimeOrigin, mediaTimeOriginRef]);
 
   // Android owns the single Cast sender. The WebView only publishes the
   // selected media and current position; it never renders a second Cast button.
@@ -539,7 +575,9 @@ function FluxPlayerChrome({
       const hardMax = stableDuration > 0 ? stableDuration : Number.POSITIVE_INFINITY;
       const target = Math.max(0, Math.min(time, hardMax));
       const player = playerRef.current;
-      const localTarget = playbackMethod === 'hls' ? target - timelineOffset : target;
+      const localTarget = playbackMethod === 'hls'
+        ? toLocalPlaybackTime(target, timelineOffset, mediaTimeOrigin)
+        : target;
       const localSeekStart = Number.isFinite(seekableStart) ? seekableStart : 0;
       const localSeekEnd = Number.isFinite(seekableEnd) ? seekableEnd : 0;
       const outsideGeneratedWindow = playbackMethod === 'hls' && (
@@ -563,6 +601,7 @@ function FluxPlayerChrome({
       playbackMethod,
       playerRef,
       remote,
+      mediaTimeOrigin,
       seekableEnd,
       seekableStart,
       stableDuration,
@@ -606,7 +645,11 @@ function FluxPlayerChrome({
     if (!player) return;
     if (!started || (waiting && !playing)) return;
 
-    const position = timelineOffset + player.currentTime;
+    const position = toAbsolutePlaybackTime(
+      player.currentTime,
+      timelineOffset,
+      mediaTimeOrigin,
+    );
     const totalDuration = stableDuration > 0
       ? stableDuration
       : Number.isFinite(player.duration) ? player.duration : 0;
@@ -635,7 +678,18 @@ function FluxPlayerChrome({
         }
       });
     onProgress?.(position, totalDuration);
-  }, [episodeId, mediaItemId, onProgress, playerRef, playing, stableDuration, started, timelineOffset, waiting]);
+  }, [
+    episodeId,
+    mediaItemId,
+    mediaTimeOrigin,
+    onProgress,
+    playerRef,
+    playing,
+    stableDuration,
+    started,
+    timelineOffset,
+    waiting,
+  ]);
 
   useEffect(() => {
     const interval = window.setInterval(reportProgress, 5000);
@@ -781,12 +835,12 @@ function FluxPlayerChrome({
         mediaItemId={mediaItemId}
         episodeId={episodeId}
         durationSeconds={stableDuration || null}
-        positionOffset={timelineOffset}
+        positionOffset={positionOffset}
         onSeek={seekTo}
       />
       <ControlBar
         durationSeconds={stableDuration || null}
-        positionOffset={timelineOffset}
+        positionOffset={positionOffset}
         onSeek={seekTo}
         onTogglePlayback={togglePlayback}
         qualityOptions={qualityOptions}
@@ -803,7 +857,7 @@ function FluxPlayerChrome({
         videoCodec={videoCodec}
         audioCodec={audioCodec}
         durationSeconds={durationSeconds}
-        positionOffset={timelineOffset}
+        positionOffset={positionOffset}
       />
     </div>
   );
