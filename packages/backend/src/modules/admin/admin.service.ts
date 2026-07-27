@@ -25,7 +25,9 @@ import type {
   AdminLibraryItemDTO,
   AdminLibraryRequestDTO,
   AdminLibraryRepairResultDTO,
+  AdminMediaDeleteResultDTO,
   AdminMediaAnalyzeResultDTO,
+  AdminStorageCleanupResultDTO,
   StorageRootDTO,
 } from '@flux/shared';
 import type { TorrentStatus, RequestStatus } from '@flux/shared';
@@ -80,6 +82,89 @@ async function directorySize(dir: string): Promise<number> {
   } catch {
     return 0;
   }
+}
+
+function containingMediaRoot(filePath: string): string | null {
+  const resolved = path.resolve(filePath);
+  for (const root of config.MEDIA_ROOTS.map((entry) => path.resolve(entry))) {
+    const rel = path.relative(root, resolved);
+    if (rel === '' || rel === '.' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
+      return root;
+    }
+  }
+  return null;
+}
+
+async function resolveDeletableMediaPath(filePath: string): Promise<{ filePath: string; root: string } | null> {
+  const resolved = await resolveFilePath(filePath);
+  if (!resolved) return null;
+  const root = containingMediaRoot(resolved);
+  if (!root) {
+    throw ApiError.badRequest(
+      'Refusing to delete a media file outside configured media roots',
+      'MEDIA_DELETE_OUTSIDE_ROOT',
+    );
+  }
+  return { filePath: resolved, root };
+}
+
+async function removeEmptyParents(filePath: string, root: string): Promise<void> {
+  let dir = path.dirname(filePath);
+  const resolvedRoot = path.resolve(root);
+  while (dir !== resolvedRoot) {
+    const rel = path.relative(resolvedRoot, dir);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return;
+    try {
+      await fs.rmdir(dir);
+    } catch {
+      return;
+    }
+    dir = path.dirname(dir);
+  }
+}
+
+async function deletePreparedFiles(
+  files: { filePath: string; root: string }[],
+): Promise<{ deletedFiles: number; deletedBytes: number; skippedFiles: string[] }> {
+  let deletedFiles = 0;
+  let deletedBytes = 0;
+  const skippedFiles: string[] = [];
+  const uniqueFiles = [...new Map(files.map((file) => [file.filePath, file])).values()];
+
+  for (const file of uniqueFiles) {
+    try {
+      const stat = await fs.stat(file.filePath);
+      if (!stat.isFile()) {
+        skippedFiles.push(file.filePath);
+        continue;
+      }
+      await fs.rm(file.filePath, { force: true });
+      await removeEmptyParents(file.filePath, file.root);
+      deletedFiles += 1;
+      deletedBytes += stat.size;
+    } catch {
+      skippedFiles.push(file.filePath);
+    }
+  }
+
+  return { deletedFiles, deletedBytes, skippedFiles };
+}
+
+async function buildDeletableFileList(filePaths: (string | null)[]): Promise<{
+  files: { filePath: string; root: string }[];
+  skippedFiles: string[];
+}> {
+  const files: { filePath: string; root: string }[] = [];
+  const skippedFiles: string[] = [];
+
+  for (const filePath of filePaths) {
+    if (!filePath) continue;
+    const resolved = await resolveDeletableMediaPath(filePath);
+    if (resolved) files.push(resolved);
+    else skippedFiles.push(filePath);
+  }
+
+  return { files, skippedFiles };
 }
 
 function tmdbSeasonCounts(metadata: unknown): { season: number; episodeCount: number }[] {
@@ -999,6 +1084,117 @@ export async function clearMissingEpisodeFile(
   ]);
 
   return { mediaItemId: episode.mediaItemId, episodeId: episode.id, cleared: true };
+}
+
+export async function deleteLibraryMediaItem(
+  mediaItemId: string,
+): Promise<AdminMediaDeleteResultDTO> {
+  const item = await prisma.mediaItem.findUnique({
+    where: { id: mediaItemId },
+    include: {
+      episodes: {
+        select: {
+          id: true,
+          filePath: true,
+        },
+      },
+    },
+  });
+
+  if (!item) {
+    throw ApiError.notFound(`Media item ${mediaItemId} not found`);
+  }
+
+  const prepared = await buildDeletableFileList([
+    item.filePath,
+    ...item.episodes.map((episode) => episode.filePath),
+  ]);
+
+  await prisma.$transaction([
+    prisma.torrent.updateMany({
+      where: { mediaItemId: item.id },
+      data: { mediaItemId: null },
+    }),
+    prisma.mediaItem.delete({ where: { id: item.id } }),
+  ]);
+
+  const deleted = await deletePreparedFiles(prepared.files);
+
+  return {
+    mediaItemId: item.id,
+    episodeId: null,
+    deletedRecords: 1 + item.episodes.length,
+    deletedFiles: deleted.deletedFiles,
+    deletedBytes: deleted.deletedBytes,
+    skippedFiles: [...prepared.skippedFiles, ...deleted.skippedFiles],
+  };
+}
+
+export async function deleteLibraryEpisode(
+  episodeId: string,
+): Promise<AdminMediaDeleteResultDTO> {
+  const episode = await prisma.episode.findUnique({
+    where: { id: episodeId },
+    select: {
+      id: true,
+      mediaItemId: true,
+      filePath: true,
+    },
+  });
+
+  if (!episode) {
+    throw ApiError.notFound(`Episode ${episodeId} not found`);
+  }
+
+  const prepared = await buildDeletableFileList([episode.filePath]);
+  await prisma.episode.delete({ where: { id: episode.id } });
+  const deleted = await deletePreparedFiles(prepared.files);
+
+  return {
+    mediaItemId: episode.mediaItemId,
+    episodeId: episode.id,
+    deletedRecords: 1,
+    deletedFiles: deleted.deletedFiles,
+    deletedBytes: deleted.deletedBytes,
+    skippedFiles: [...prepared.skippedFiles, ...deleted.skippedFiles],
+  };
+}
+
+export async function pruneTranscodeCache(
+  maxAgeSeconds = 30 * 60,
+): Promise<AdminStorageCleanupResultDTO> {
+  const root = path.resolve(config.TRANSCODE_ROOT);
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  const cutoff = Date.now() - Math.max(0, maxAgeSeconds) * 1000;
+  let deletedEntries = 0;
+  let deletedBytes = 0;
+  const skippedEntries: string[] = [];
+
+  for (const entry of entries) {
+    const entryPath = safeJoin(root, entry.name);
+    try {
+      const stat = await fs.stat(entryPath);
+      if (maxAgeSeconds > 0 && stat.mtimeMs > cutoff) {
+        skippedEntries.push(entry.name);
+        continue;
+      }
+      const bytes = entry.isDirectory() ? await directorySize(entryPath) : stat.size;
+      await fs.rm(entryPath, { recursive: true, force: true });
+      deletedEntries += 1;
+      deletedBytes += bytes;
+    } catch {
+      skippedEntries.push(entry.name);
+    }
+  }
+
+  return {
+    root,
+    maxAgeSeconds,
+    scannedEntries: entries.length,
+    deletedEntries,
+    deletedBytes,
+    skippedEntries,
+  };
 }
 
 export async function analyzeMissingLibraryMedia(): Promise<AdminBulkMediaAnalyzeResultDTO> {
