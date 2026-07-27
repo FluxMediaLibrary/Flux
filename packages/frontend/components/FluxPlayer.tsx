@@ -77,7 +77,15 @@ export function FluxPlayer(props: FluxPlayerProps) {
   const [qualityLabel, setQualityLabel] = useState<PlaybackInfoDTO['qualities'][number]['label']>('Auto');
   const [audioStreamIndex, setAudioStreamIndex] = useState<number | null>(null);
   const [hlsStartTime, setHlsStartTime] = useState(() => Math.max(0, startPositionSeconds));
+  const [directStartTime, setDirectStartTime] = useState(() => Math.max(0, startPositionSeconds));
   const [hlsReloadNonce, setHlsReloadNonce] = useState(0);
+
+  useEffect(() => {
+    const start = Math.max(0, startPositionSeconds);
+    setHlsStartTime(start);
+    setDirectStartTime(start);
+  }, [episodeId, mediaItemId, startPositionSeconds]);
+
   const loadSource = useCallback(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -150,9 +158,19 @@ export function FluxPlayer(props: FluxPlayerProps) {
       {...props}
       key={`${mediaItemId}:${episodeId ?? 'movie'}:${source.src}`}
       source={source}
-      startPositionSeconds={startPositionSeconds}
+      startPositionSeconds={source.method === 'direct' ? directStartTime : startPositionSeconds}
       fill={fill}
-      onQualityChange={setQualityLabel}
+      onQualityChange={(quality, positionSeconds) => {
+        const position = Number.isFinite(positionSeconds) ? Math.max(0, positionSeconds ?? 0) : 0;
+        if (quality === 'Auto' || quality === 'Original') {
+          setDirectStartTime(position);
+        } else {
+          const start = Math.max(0.001, position);
+          setHlsStartTime(Math.round(start * 1000) / 1000);
+          setHlsReloadNonce((nonce) => nonce + 1);
+        }
+        setQualityLabel(quality);
+      }}
       onAudioStreamChange={(streamIndex) => {
         setAudioStreamIndex(streamIndex);
         if (streamIndex !== null && qualityLabel === 'Original') setQualityLabel('Auto');
@@ -183,7 +201,7 @@ function FluxMediaPlayer({
   onFatalError,
 }: FluxPlayerProps & {
   source: PlayerSource;
-  onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label']) => void;
+  onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label'], positionSeconds?: number) => void;
   onAudioStreamChange: (streamIndex: number | null) => void;
   onTranscodeSeek: (time: number) => void;
   onFatalError: () => void;
@@ -200,6 +218,7 @@ function FluxMediaPlayer({
   const lastPlaybackStateRef = useRef({ paused: true, started: false });
   const recoverableErrorRef = useRef(false);
   const hlsRecoveryRef = useRef({ time: 0, at: 0 });
+  const hlsInitialSeekRef = useRef(false);
 
   useEffect(() => {
     setPlaybackReady(false);
@@ -210,6 +229,7 @@ function FluxMediaPlayer({
     lastPlaybackStateRef.current = { paused: true, started: false };
     recoverableErrorRef.current = false;
     hlsRecoveryRef.current = { time: 0, at: 0 };
+    hlsInitialSeekRef.current = false;
   }, [source.src]);
 
   const handlePlayerError = useCallback(() => {
@@ -314,7 +334,16 @@ function FluxMediaPlayer({
       keyDisabled
       streamType="on-demand"
       controlsDelay={2600}
-      onCanPlay={() => setPlaybackReady(true)}
+      onCanPlay={() => {
+        setPlaybackReady(true);
+        if (source.method === 'hls' && !hlsInitialSeekRef.current) {
+          hlsInitialSeekRef.current = true;
+          const player = playerRef.current;
+          if (player && Number.isFinite(player.currentTime) && player.currentTime > 1) {
+            player.currentTime = 0;
+          }
+        }
+      }}
       onPlay={() => {
         playbackStartedRef.current = true;
         lastPlaybackStateRef.current = { paused: false, started: true };
@@ -437,7 +466,7 @@ function FluxPlayerChrome({
   streams: MediaStreamDTO[];
   qualityOptions: PlaybackInfoDTO['qualities'];
   selectedQuality: PlaybackInfoDTO['qualities'][number]['label'];
-  onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label']) => void;
+  onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label'], positionSeconds?: number) => void;
   selectedAudioStreamIndex: number | null;
   onAudioStreamChange: (streamIndex: number | null) => void;
   playbackMethod: PlayerSource['method'];
