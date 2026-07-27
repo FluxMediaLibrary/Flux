@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import test from 'node:test';
+import { buildAdaptiveHlsArgs } from './adaptive-hls.js';
+
+test('forces compatible 1080p AVC/AAC sources through a real adaptive encode', () => {
+  const outputDir = path.join('tmp', 'adaptive');
+  const args = buildAdaptiveHlsArgs(
+    'movie.mkv',
+    outputDir,
+    'h264',
+    'aac',
+    1920,
+    1080,
+    0,
+    1,
+    131,
+  );
+
+  assert.deepEqual(args.slice(0, 5), ['-fflags', '+genpts', '-ss', '131.000', '-i']);
+  assert.ok(args.includes('-filter_complex'));
+  assert.ok(args.includes('libx264'));
+  assert.ok(args.includes('-var_stream_map'));
+  assert.ok(args.includes('v:0,a:0 v:1,a:1'));
+  assert.equal(
+    args.some((arg, index) => arg.startsWith('-c:v') && args[index + 1] === 'copy'),
+    false,
+  );
+  assert.equal(args.at(-1), path.join(outputDir, 'stream_%v', 'index.m3u8'));
+});

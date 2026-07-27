@@ -57,8 +57,9 @@ function sessionKey(
   episodeId?: string,
   audioStreamIndex?: number,
   startTimeSeconds = 0,
+  forceAdaptive = false,
 ): string {
-  return `${sessionBaseKey(mediaItemId, episodeId, audioStreamIndex)}::start=${startTimeSeconds.toFixed(3)}`;
+  return `${sessionBaseKey(mediaItemId, episodeId, audioStreamIndex)}::adaptive=${forceAdaptive ? '1' : '0'}::start=${startTimeSeconds.toFixed(3)}`;
 }
 
 function parseStartTime(value: string | undefined): number {
@@ -119,6 +120,7 @@ function tokenizeManifest(
   episodeId?: string,
   audioStreamIndex?: number,
   startTimeSeconds = 0,
+  forceAdaptive = false,
 ): string {
   if (!token) return manifest;
   return manifest
@@ -130,6 +132,7 @@ function tokenizeManifest(
       if (episodeId) params.set('episodeId', episodeId);
       if (typeof audioStreamIndex === 'number') params.set('audioStream', String(audioStreamIndex));
       if (startTimeSeconds > 0) params.set('startTime', startTimeSeconds.toFixed(3));
+      if (forceAdaptive) params.set('adaptive', '1');
       const sep = trimmed.includes('?') ? '&' : '?';
       return `${trimmed}${sep}${params.toString()}`;
     })
@@ -229,6 +232,7 @@ async function spawnTranscode(
   sessionDir: string,
   audioStreamIndex?: number,
   startTimeSeconds = 0,
+  forceAdaptive = false,
 ): Promise<{ manifest: 'index.m3u8' | 'master.m3u8'; transcode: TranscodeState }> {
   const probe = await probeMedia(sourceFile, audioStreamIndex);
 
@@ -238,7 +242,7 @@ async function spawnTranscode(
     probe.videoCodec !== 'h264' ||
     (probe.audioCodec !== null && probe.audioCodec !== 'aac');
 
-  if (needsTranscode && probe.width && probe.height) {
+  if ((needsTranscode || forceAdaptive) && probe.width && probe.height) {
     const args = buildAdaptiveHlsArgs(
       sourceFile, sessionDir,
       probe.videoCodec, probe.audioCodec,
@@ -248,7 +252,7 @@ async function spawnTranscode(
       startTimeSeconds,
     );
     console.log(
-      `[Transcode] adaptive video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} ` +
+      `[Transcode] adaptive forced=${forceAdaptive} video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} ` +
       `${probe.width}x${probe.height} -> multi-quality transcode`,
     );
     return { manifest: 'master.m3u8', transcode: spawnTrackedTranscode(args) };
@@ -314,7 +318,7 @@ hlsCleanupTimer.unref();
 
 async function discardOtherSessions(baseKey: string, keepKey: string): Promise<void> {
   const stale = [...hlsSessions.entries()].filter(
-    ([key]) => key !== keepKey && key.startsWith(`${baseKey}::start=`),
+    ([key]) => key !== keepKey && key.startsWith(`${baseKey}::`),
   );
   await Promise.all(stale.map(([key, session]) => discardSession(key, session)));
 }
@@ -481,28 +485,43 @@ export const streamingRoutes: FastifyPluginAsync = async (
     { preHandler: [app.requireProfileStream] },
     async (request, reply) => {
       const { mediaItemId } = request.params as { mediaItemId: string };
-      const { episodeId, audioStream, startTime } = request.query as {
+      const { episodeId, audioStream, startTime, adaptive } = request.query as {
         episodeId?: string;
         audioStream?: string;
         startTime?: string;
+        adaptive?: string;
       };
       const audioStreamIndex =
         audioStream !== undefined && Number.isInteger(Number(audioStream))
           ? Number(audioStream)
           : undefined;
       const startTimeSeconds = parseStartTime(startTime);
+      const forceAdaptive = adaptive === '1';
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
       await assertPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
       const baseKey = sessionBaseKey(mediaItemId, episodeId, audioStreamIndex);
-      const key = sessionKey(mediaItemId, episodeId, audioStreamIndex, startTimeSeconds);
+      const key = sessionKey(
+        mediaItemId,
+        episodeId,
+        audioStreamIndex,
+        startTimeSeconds,
+        forceAdaptive,
+      );
       const token = streamToken(request);
 
       const sendManifest = (raw: string) =>
         reply
           .header('Content-Type', 'application/vnd.apple.mpegurl')
           .header('Cache-Control', 'no-store')
-          .send(tokenizeManifest(raw, token, episodeId, audioStreamIndex, startTimeSeconds));
+          .send(tokenizeManifest(
+            raw,
+            token,
+            episodeId,
+            audioStreamIndex,
+            startTimeSeconds,
+            forceAdaptive,
+          ));
 
       let session = hlsSessions.get(key);
       let manifestType: 'index.m3u8' | 'master.m3u8' = 'index.m3u8';
@@ -524,6 +543,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
             sessionDir,
             audioStreamIndex,
             startTimeSeconds,
+            forceAdaptive,
           );
           manifestType = started.manifest;
           session = { dir: sessionDir, manifest: manifestType, transcode: started.transcode, lastAccessAt: Date.now() };
@@ -533,6 +553,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
             episodeId,
             audioStreamIndex,
             startTimeSeconds,
+            forceAdaptive,
             manifestType,
           }, '[Cast/HLS] started transcode session');
         }
@@ -591,7 +612,13 @@ export const streamingRoutes: FastifyPluginAsync = async (
         );
       }
 
-      request.log.info({ mediaItemId, episodeId, manifestType, startTimeSeconds }, '[Cast/HLS] serving manifest');
+      request.log.info({
+        mediaItemId,
+        episodeId,
+        manifestType,
+        startTimeSeconds,
+        forceAdaptive,
+      }, '[Cast/HLS] serving manifest');
       return sendManifest(fs.readFileSync(manifestPath, 'utf-8'));
     },
   );
@@ -604,22 +631,30 @@ export const streamingRoutes: FastifyPluginAsync = async (
     async (request, reply) => {
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { '*': relPath } = request.params as { '*': string };
-      const { episodeId, audioStream, startTime } = request.query as {
+      const { episodeId, audioStream, startTime, adaptive } = request.query as {
         episodeId?: string;
         audioStream?: string;
         startTime?: string;
+        adaptive?: string;
       };
       const audioStreamIndex =
         audioStream !== undefined && Number.isInteger(Number(audioStream))
           ? Number(audioStream)
           : undefined;
       const startTimeSeconds = parseStartTime(startTime);
+      const forceAdaptive = adaptive === '1';
 
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
       await assertPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
 
-      const key = sessionKey(mediaItemId, episodeId, audioStreamIndex, startTimeSeconds);
+      const key = sessionKey(
+        mediaItemId,
+        episodeId,
+        audioStreamIndex,
+        startTimeSeconds,
+        forceAdaptive,
+      );
       const session = hlsSessions.get(key);
       if (!session) {
         throw ApiError.notFound('No active HLS session for this media item');
@@ -663,6 +698,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
           episodeId,
           audioStreamIndex,
           startTimeSeconds,
+          forceAdaptive,
         );
         return reply
           .header('Content-Type', contentType)
