@@ -28,3 +28,27 @@ test('forces compatible 1080p AVC/AAC sources through a real adaptive encode', (
   );
   assert.equal(args.at(-1), path.join(outputDir, 'stream_%v', 'index.m3u8'));
 });
+
+test('normalizes H.264 MKV video and FLAC audio onto one zero-based HLS clock', () => {
+  const args = buildAdaptiveHlsArgs(
+    'episode.mkv',
+    path.join('tmp', 'dual-flac'),
+    'h264',
+    'flac',
+    1920,
+    1080,
+    0,
+    1,
+    0,
+  );
+  const filter = args[args.indexOf('-filter_complex') + 1] ?? '';
+
+  assert.match(filter, /setpts=PTS-STARTPTS/);
+  assert.ok(args.includes('libx264'));
+  assert.ok(args.includes('aac'));
+  assert.ok(args.includes('aresample=async=1:first_pts=0'));
+  assert.equal(
+    args.some((arg, index) => arg.startsWith('-c:a') && args[index + 1] === 'copy'),
+    false,
+  );
+});

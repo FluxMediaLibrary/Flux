@@ -72,6 +72,7 @@ export function buildAdaptiveHlsArgs(
 ): string[] {
   const tiers = applicableTiers(sourceWidth ?? 1920, sourceHeight ?? 1080);
   const canCopy = sourceCodec === 'h264' && audioCodec === 'aac';
+  const resetEncodedTimestamps = canCopy ? '' : ',setpts=PTS-STARTPTS';
   const videoMap = typeof videoStreamIndex === 'number' ? `0:${videoStreamIndex}` : '0:v:0';
   const hasAudio = typeof audioStreamIndex === 'number' && audioCodec !== null;
   const audioMap = hasAudio ? `0:${audioStreamIndex}` : null;
@@ -107,12 +108,12 @@ export function buildAdaptiveHlsArgs(
   const filterParts: string[] = [];
   if (tiers.length === 1) {
     // Single tier — just copy, no split needed
-    filterParts.push(`[${videoMap}]scale=w=${tiers[0]!.width}:h=${tiers[0]!.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[v0out]`);
+    filterParts.push(`[${videoMap}]scale=w=${tiers[0]!.width}:h=${tiers[0]!.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1${resetEncodedTimestamps}[v0out]`);
   } else {
     filterParts.push(`[${videoMap}]split=${tiers.length}${tiers.map((_, i) => `[v${i}]`).join('')}`);
     for (let i = 0; i < tiers.length; i++) {
       const t = tiers[i]!;
-      filterParts.push(`[v${i}]scale=w=${t.width}:h=${t.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[v${i}out]`);
+      filterParts.push(`[v${i}]scale=w=${t.width}:h=${t.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1${resetEncodedTimestamps}[v${i}out]`);
     }
   }
 
