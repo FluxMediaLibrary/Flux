@@ -53,7 +53,7 @@ services:
       - "51413:51413/udp"
       - "127.0.0.1:9091:9091"
     volumes:
-      - downloads:/data/downloads
+      - /storage/flux-downloads:/data/downloads
       - transmission-config:/config
       - ./transmission-settings.json:/config/settings.json
       - /storage/flux-extra:/data/extra
@@ -93,7 +93,7 @@ services:
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
     volumes:
       - media:/data/media
-      - downloads:/data/downloads
+      - /storage/flux-downloads:/data/downloads
       - transcode:/data/transcode
       - /storage/flux-extra:/data/extra
       - ./releases/android:/data/releases/android:ro
