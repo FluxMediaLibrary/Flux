@@ -263,7 +263,7 @@ export async function processTorrentPostprocess(
       }
     }
 
-    // 10. Update Torrent → SEEDING
+    // 10. Mark the import complete without keeping a duplicate seeding copy.
     await prisma.torrent.update({
       where: { id: torrentId },
       data: {
