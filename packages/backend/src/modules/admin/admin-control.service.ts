@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { config } from '../../config.js';
 import { prisma } from '../../lib/db.js';
 import { ApiError } from '../../lib/errors.js';
+import { resolveFilePath } from '../../lib/media-paths.js';
 import { getAdminInfo } from './admin.service.js';
 
 const ACTIVE_WINDOW_MS = 90_000;
@@ -123,30 +124,50 @@ async function storageUsage(): Promise<{ used: number | null; total: number | nu
   }
 }
 
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function countBrokenLibraryFiles(): Promise<number> {
+  const [movies, episodes] = await Promise.all([
+    prisma.mediaItem.findMany({ where: { filePath: { not: null } }, select: { filePath: true } }),
+    prisma.episode.findMany({ where: { filePath: { not: null } }, select: { filePath: true } }),
+  ]);
+  const checks = await Promise.all(
+    [...movies, ...episodes].map(async (row) => {
+      const resolved = await resolveFilePath(row.filePath!);
+      return resolved === null || !(await fileExists(resolved));
+    }),
+  );
+  return checks.filter(Boolean).length;
+}
+
 export async function getAdminSignal(): Promise<AdminSignalDTO> {
   const activeCutoff = new Date(Date.now() - ACTIVE_WINDOW_MS);
-  const [pendingRequests, activeDownloads, failedDownloads, missingMetadata, missingAnalysisMovies, missingAnalysisEpisodes, activeStreams, storage] = await Promise.all([
+  const [pendingRequests, activeDownloads, failedDownloads, brokenLibraryFiles, activeStreams, storage] = await Promise.all([
     prisma.request.count({ where: { status: 'PENDING' } }),
     prisma.torrent.count({ where: { status: { in: ['DOWNLOADING', 'PROCESSING'] } } }),
     prisma.torrent.count({ where: { status: 'ERROR' } }),
-    prisma.mediaItem.count({ where: { metadata: { equals: Prisma.DbNull } } }),
-    prisma.mediaItem.count({ where: { filePath: { not: null }, mediaInfo: null } }),
-    prisma.episode.count({ where: { filePath: { not: null }, mediaInfo: null } }),
+    countBrokenLibraryFiles(),
     prisma.watchProgress.count({ where: { updatedAt: { gte: activeCutoff }, positionSeconds: { gt: 0 } } }),
     storageUsage(),
   ]);
-  const libraryIssues = missingMetadata + missingAnalysisMovies + missingAnalysisEpisodes;
   const storageCritical = storage.percent !== null && storage.percent >= 0.95;
   const storageWarning = storage.percent !== null && storage.percent >= 0.85;
   const status = failedDownloads > 0 || storageCritical
     ? 'UNHEALTHY'
-    : pendingRequests > 0 || libraryIssues > 0 || storageWarning
+    : brokenLibraryFiles > 0 || storageWarning
       ? 'DEGRADED'
       : 'HEALTHY';
   return {
     generatedAt: new Date().toISOString(),
     status,
-    counts: { pendingRequests, activeDownloads, failedDownloads, libraryIssues, activeStreams },
+    counts: { pendingRequests, activeDownloads, failedDownloads, libraryIssues: brokenLibraryFiles, activeStreams },
     storagePercent: storage.percent,
   };
 }

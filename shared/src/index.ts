@@ -555,6 +555,10 @@ export interface RequestDTO {
   tmdbId: number;
   mediaType: MediaType;
   title: string;
+  year?: number | null;
+  posterPath?: string | null;
+  backdropPath?: string | null;
+  genres?: string[];
   season: number | null;
   episode: number | null;
   status: RequestStatus;

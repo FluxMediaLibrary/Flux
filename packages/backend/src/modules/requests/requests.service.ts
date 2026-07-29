@@ -8,6 +8,7 @@ import type { Request, Torrent } from '@prisma/client';
 import { prisma } from '../../lib/db.js';
 import { ApiError } from '../../lib/errors.js';
 import { notifyNewRequest } from '../notifications/notify.js';
+import { getDetail as getTmdbDetail } from '../tmdb/tmdb.service.js';
 import type { CreateRequestInput } from './requests.schema.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -16,6 +17,13 @@ import type { CreateRequestInput } from './requests.schema.js';
 type RequestWithProfile = Request & {
   profile?: { id: string; name: string; user?: { email: string } | null } | null;
   torrent?: Torrent | null;
+};
+
+type RequestMetadata = {
+  year: number | null;
+  posterPath: string | null;
+  backdropPath: string | null;
+  genres: string[];
 };
 
 // ─── DTO mappers ─────────────────────────────────────────────────────────────
@@ -75,6 +83,48 @@ export function mapRequestToAdminDTO(row: RequestWithProfile): RequestDTO {
   return dto;
 }
 
+function requestKey(tmdbId: number, mediaType: MediaType): string {
+  return `${tmdbId}:${mediaType}`;
+}
+
+async function getRequestMetadata(tmdbId: number, mediaType: MediaType): Promise<RequestMetadata> {
+  const local = await prisma.mediaItem.findUnique({
+    where: { tmdbId_type: { tmdbId, type: mediaType } },
+    select: { year: true, posterPath: true, backdropPath: true, genres: true },
+  });
+  if (local) {
+    return {
+      year: local.year,
+      posterPath: local.posterPath,
+      backdropPath: local.backdropPath,
+      genres: local.genres,
+    };
+  }
+
+  try {
+    const detail = await getTmdbDetail(mediaType, tmdbId);
+    return {
+      year: detail.year,
+      posterPath: detail.posterPath,
+      backdropPath: detail.backdropPath,
+      genres: detail.genres,
+    };
+  } catch {
+    return { year: null, posterPath: null, backdropPath: null, genres: [] };
+  }
+}
+
+function applyMetadata(dto: RequestDTO, metadata: RequestMetadata | undefined): RequestDTO {
+  if (!metadata) return { ...dto, genres: dto.genres ?? [] };
+  return {
+    ...dto,
+    year: metadata.year,
+    posterPath: metadata.posterPath,
+    backdropPath: metadata.backdropPath,
+    genres: metadata.genres,
+  };
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 async function getAdminRequestDTO(id: string): Promise<RequestDTO> {
@@ -94,7 +144,9 @@ async function getAdminRequestDTO(id: string): Promise<RequestDTO> {
   if (!row) {
     throw ApiError.notFound(`Request ${id} not found`);
   }
-  return mapRequestToAdminDTO(row);
+  const dto = mapRequestToAdminDTO(row);
+  const metadata = await getRequestMetadata(dto.tmdbId, dto.mediaType);
+  return applyMetadata(dto, metadata);
 }
 
 async function hasPlayableLibraryItem(
@@ -212,7 +264,16 @@ export async function listAllRequests(): Promise<RequestDTO[]> {
     orderBy: { createdAt: 'desc' },
   });
 
-  return rows.map(mapRequestToAdminDTO);
+  const dtos = rows.map(mapRequestToAdminDTO);
+  const metadataEntries = await Promise.all(
+    Array.from(new Map(dtos.map((dto) => [requestKey(dto.tmdbId, dto.mediaType), dto])).values())
+      .map(async (dto) => [
+        requestKey(dto.tmdbId, dto.mediaType),
+        await getRequestMetadata(dto.tmdbId, dto.mediaType),
+      ] as const),
+  );
+  const metadataByKey = new Map(metadataEntries);
+  return dtos.map((dto) => applyMetadata(dto, metadataByKey.get(requestKey(dto.tmdbId, dto.mediaType))));
 }
 
 /** Approve a pending request by id. */

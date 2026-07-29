@@ -80,7 +80,11 @@ function formatEpisodeNumbers(numbers: number[]): string {
 function hasMissingFiles(item: AdminLibraryItemDTO): boolean {
   return item.type === 'MOVIE'
     ? !item.available || item.fileExists === false
-    : item.missingEpisodes > 0 || item.brokenEpisodes > 0;
+    : item.brokenEpisodes > 0;
+}
+
+function hasCoverageGaps(item: AdminLibraryItemDTO): boolean {
+  return item.type === 'SHOW' && item.missingEpisodes > 0;
 }
 
 function hasMissingAnalysis(item: AdminLibraryItemDTO): boolean {
@@ -98,13 +102,13 @@ function itemMatchesIssue(item: AdminLibraryItemDTO, filter: IssueFilter): boole
 
 function issueTone(item: AdminLibraryItemDTO): 'ok' | 'warn' | 'bad' {
   if (hasMissingFiles(item)) return 'bad';
-  if (hasMissingAnalysis(item) || item.issues.length > 0) return 'warn';
+  if (hasCoverageGaps(item) || hasMissingAnalysis(item) || item.issues.length > 0) return 'warn';
   return 'ok';
 }
 
 function episodeStatusText(episode: AdminLibraryEpisodeDTO): string {
-  if (!episode.available) return 'Missing file';
   if (episode.fileExists === false) return 'Broken file';
+  if (!episode.available) return 'Not acquired';
   if (!episode.analyzed) return 'Needs analysis';
   return 'Ready';
 }
@@ -427,7 +431,8 @@ export default function AdminLibraryPage() {
             <HealthStat label="Items" value={data.summary.items} />
             <HealthStat label="Available" value={data.summary.availableItems} tone="ok" />
             <HealthStat label="Broken files" value={data.summary.brokenFiles} tone={data.summary.brokenFiles > 0 ? 'bad' : 'ok'} />
-            <HealthStat label="Missing files" value={data.summary.missingFiles + data.summary.unavailableEpisodes} tone={data.summary.missingFiles + data.summary.unavailableEpisodes > 0 ? 'bad' : 'ok'} />
+            <HealthStat label="Missing movie files" value={data.summary.missingFiles} tone={data.summary.missingFiles > 0 ? 'bad' : 'ok'} />
+            <HealthStat label="Coverage gaps" value={data.summary.unavailableEpisodes} tone={data.summary.unavailableEpisodes > 0 ? 'warn' : 'ok'} />
             <HealthStat label="Missing analysis" value={data.summary.missingAnalysis} tone={data.summary.missingAnalysis > 0 ? 'warn' : 'ok'} />
           </div>
 
@@ -676,7 +681,7 @@ function LibraryHealthRow({
                 label="Episodes"
                 value={`${item.availableEpisodes}/${item.expectedEpisodes ?? item.episodeCount}`}
               />
-              <Metric label="Missing" value={String(item.missingEpisodes)} bad={item.missingEpisodes > 0} />
+              <Metric label="Gaps" value={String(item.missingEpisodes)} warn={item.missingEpisodes > 0} />
               <Metric label="Unanalyzed" value={String(item.unanalyzedEpisodes)} warn={item.unanalyzedEpisodes > 0} />
               <Metric label="Requests" value={String(item.requests.length)} warn={item.requests.length > 0} />
             </>
@@ -744,8 +749,8 @@ function LibraryHealthRow({
       {item.type === 'SHOW' && item.seasons && item.seasons.length > 0 && (
         <div className="admin-season-strip">
           {item.seasons.map((season) => {
-            const bad = season.missingEpisodes > 0 || season.brokenEpisodes > 0;
-            const warn = !bad && season.unanalyzedEpisodes > 0;
+            const bad = season.brokenEpisodes > 0;
+            const warn = season.missingEpisodes > 0 || season.unanalyzedEpisodes > 0;
             const syncingSeason = syncingTarget === `${item.id}:s${season.season}`;
             return (
               <div
@@ -769,7 +774,7 @@ function LibraryHealthRow({
                 <span>
                   {season.availableEpisodes}/{season.expectedEpisodes ?? season.syncedEpisodes}
                 </span>
-                {bad && (
+                {(season.missingEpisodes > 0 || season.brokenEpisodes > 0) && (
                   <a
                     className="admin-season-action"
                     href={torrentPrefillHref(item, season.season)}
@@ -797,7 +802,8 @@ function LibraryHealthRow({
       {expanded && item.episodes && (
         <div className="admin-episode-grid">
           {item.episodes.map((episode) => {
-            const missing = !episode.available || episode.fileExists === false;
+            const broken = episode.fileExists === false;
+            const missing = !episode.available;
             const syncingSeason = syncingTarget === `${item.id}:s${episode.season}`;
             const status = episodeStatusText(episode);
             const matchingRequests = item.requests.filter((request) =>
@@ -806,7 +812,7 @@ function LibraryHealthRow({
             return (
               <div
                 key={episode.id}
-                className={`admin-episode-chip${missing ? ' bad' : !episode.analyzed ? ' warn' : ''}`}
+                className={`admin-episode-chip${broken ? ' bad' : missing || !episode.analyzed ? ' warn' : ''}`}
               >
                 <strong>S{episode.season} E{episode.episode}</strong>
                 <span>{episode.title ?? 'Untitled episode'}</span>
@@ -836,7 +842,7 @@ function LibraryHealthRow({
                   </div>
                 )}
                 <div className="admin-episode-actions">
-                  {missing ? (
+                  {missing || broken ? (
                     <>
                       <button
                         type="button"
