@@ -27,7 +27,6 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { isValidCastSession } from '../../lib/cast-sessions.js';
-import { assertPlaybackAccess } from '../roku/roku-playback.service.js';
 
 // ── In-memory session tracking ──────────────────────────────────────────────
 // Maps a (mediaItemId, episodeId) pair → sessionDir so segment routes know
@@ -422,7 +421,6 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { episodeId } = request.query as { episodeId?: string };
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
-      await assertPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
       const { filePath, mimeType, size } = await getMediaFilePath(mediaItemId, episodeId);
 
@@ -500,7 +498,6 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const startTimeSeconds = parseStartTime(startTime);
       const forceAdaptive = adaptive === '1';
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
-      await assertPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
       const baseKey = sessionBaseKey(mediaItemId, episodeId, audioStreamIndex);
       const key = sessionKey(
@@ -647,7 +644,6 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const forceAdaptive = adaptive === '1';
 
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
-      await assertPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
 
       const key = sessionKey(

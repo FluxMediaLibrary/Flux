@@ -35,7 +35,7 @@
 | Validation | Zod |
 | Torrents | Transmission (sidecar) |
 | Transcoding | FFmpeg (on-demand HLS) |
-| TV client | Roku SceneGraph + BrightScript |
+| Mobile client | Android WebView shell |
 
   </td>
     <td width="50%">
@@ -113,15 +113,6 @@ TMDb ID (`tmdbId` + `mediaType`) joins the library to requests. Library items ar
 2. **HLS fallback** — on-demand FFmpeg transcode streamed through hls.js when the browser cannot decode the source.
 
 Playback decisions are made per-file by probing codec support at the server level.
-
-### Roku
-
-The native Roku client lives in [`apps/roku`](apps/roku). It connects to any compatible Flux server, links through an expiring device code, uses server-driven profiles/discovery, and receives device-aware direct/remux/transcode playback sessions. See the [Roku setup guide](apps/roku/README.md), [API contract](docs/roku-api.md), and [hardware test matrix](docs/roku-testing.md).
-
-```bash
-npm run roku:check
-npm run roku:package
-```
 
 ## Prerequisites
 
@@ -299,6 +290,13 @@ npm run dev:backend        # backend on :6948 (hot reload)
 npm run dev:frontend       # frontend on :3000 (hot reload)
 ```
 
+## Community
+
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+- Report reproducible bugs and feature requests with the GitHub issue templates.
+- Report security vulnerabilities privately through [SECURITY.md](SECURITY.md).
+- Use [SUPPORT.md](SUPPORT.md) for setup and troubleshooting guidance.
+
 ### Monorepo layout
 
 ```
@@ -337,7 +335,6 @@ flux/
 | `npm run prisma:migrate` | Apply pending migrations |
 | `npm run prisma:migrate:dev` | Create and apply a new migration |
 | `npm run prisma:generate` | Regenerate Prisma client |
-
 ### Conventions
 
 - TypeScript strict, ES modules, no `any` without explicit reason
@@ -345,3 +342,7 @@ flux/
 - DB changes: edit `schema.prisma` then run `npm run prisma:migrate` (named migration)
 - Path traversal protection: all media paths resolved against configured root
 - Secrets: env only, never committed. TMDb key stays server-side
+
+## License
+
+Flux is released under the [MIT License](LICENSE).

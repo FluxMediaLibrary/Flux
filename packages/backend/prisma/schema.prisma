@@ -38,60 +38,8 @@ model User {
   invitesCreated Invite[]  @relation("InviteCreatedBy")
   invitedBy      Invite?   @relation("InviteUsedBy")
   auditEvents    AuditEvent[]
-  deviceAuthorizations DeviceAuthorization[]
-  deviceSessions DeviceSession[]
-  playbackSessions PlaybackSession[]
 
   @@map("users")
-}
-
-model DeviceAuthorization {
-  id                  String    @id @default(cuid())
-  deviceCodeHash      String    @unique
-  userCode            String    @unique
-  deviceId            String
-  deviceName          String
-  platform            String
-  appVersion          String
-  status              String    @default("PENDING")
-  pollIntervalSeconds Int       @default(5)
-  lastPolledAt        DateTime?
-  expiresAt           DateTime
-  approvedById        String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-
-  approvedBy User? @relation(fields: [approvedById], references: [id], onDelete: Cascade)
-
-  @@index([expiresAt])
-  @@index([approvedById])
-  @@map("device_authorizations")
-}
-
-model DeviceSession {
-  id               String    @id @default(cuid())
-  userId           String
-  deviceId         String
-  deviceName       String
-  platform         String
-  appVersion       String
-  refreshTokenHash String    @unique
-  refreshVersion   Int       @default(1)
-  activeProfileId  String?
-  expiresAt        DateTime
-  revokedAt        DateTime?
-  revokedReason    String?
-  lastSeenAt       DateTime  @default(now())
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  playbackSessions PlaybackSession[]
-
-  @@unique([userId, deviceId])
-  @@index([expiresAt])
-  @@index([userId, revokedAt])
-  @@map("device_sessions")
 }
 
 model AuditEvent {
@@ -125,7 +73,6 @@ model Profile {
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   watchProgress  WatchProgress[]
   requests       Request[]
-  playbackSessions PlaybackSession[]
 
   @@index([userId])
   @@map("profiles")
@@ -179,7 +126,6 @@ model MediaItem {
   torrents      Torrent[]
   mediaStreams  MediaStream[]
   mediaInfo     MediaInfo?
-  playbackSessions PlaybackSession[]
   playbackMarkers PlaybackMarker[]
 
   @@unique([tmdbId, type])
@@ -202,44 +148,11 @@ model Episode {
   watchProgress WatchProgress[]
   mediaStreams  MediaStream[]
   mediaInfo     MediaInfo?
-  playbackSessions PlaybackSession[]
   playbackMarkers PlaybackMarker[]
 
   @@unique([mediaItemId, season, episode])
   @@index([mediaItemId])
   @@map("episodes")
-}
-
-model PlaybackSession {
-  id                  String    @id @default(cuid())
-  accountId           String
-  profileId           String
-  deviceSessionId     String
-  mediaItemId         String
-  episodeId           String?
-  method              String
-  contentType         String
-  audioStreamIndex    Int?
-  subtitleStreamIndex Int?
-  positionSeconds     Float     @default(0)
-  durationSeconds     Float?
-  state               String    @default("ACTIVE")
-  expiresAt           DateTime
-  lastHeartbeatAt     DateTime  @default(now())
-  endedAt             DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-
-  account       User          @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  profile       Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  deviceSession DeviceSession @relation(fields: [deviceSessionId], references: [id], onDelete: Cascade)
-  mediaItem     MediaItem     @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
-  episode       Episode?      @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-
-  @@index([deviceSessionId, state])
-  @@index([profileId, updatedAt])
-  @@index([expiresAt])
-  @@map("playback_sessions")
 }
 
 model PlaybackMarker {

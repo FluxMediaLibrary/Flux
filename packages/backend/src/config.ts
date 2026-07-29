@@ -44,23 +44,6 @@ const envSchema = z.object({
   FLUX_SERVER_ID: z.string().uuid().optional(),
   FLUX_SERVER_NAME: z.string().trim().min(1).max(80).default('Flux'),
   FLUX_SERVER_VERSION: z.string().regex(/^\d+\.\d+\.\d+$/).default('0.1.0'),
-  ROKU_SUPPORTED: envBoolean(true),
-  ROKU_MIN_VERSION: z.string().regex(/^\d+\.\d+\.\d+$/).default('1.0.0'),
-  ROKU_LATEST_VERSION: z.string().regex(/^\d+\.\d+\.\d+$/).default('1.0.0'),
-  ROKU_FEATURE_REQUESTS: envBoolean(true),
-  ROKU_FEATURE_SKIP_INTRO: envBoolean(true),
-  ROKU_FEATURE_SUBTITLES: envBoolean(true),
-  ROKU_FEATURE_AUDIO_TRACKS: envBoolean(true),
-  ROKU_ROW_ORDER: z.string().default('continue-watching,recently-added,new-releases,top-rated,recommended,random-picks'),
-  ROKU_HERO_ROTATION_SECONDS: z.coerce.number().int().min(0).max(30).default(8),
-  ROKU_ANNOUNCEMENT: z.preprocess((value) => value === '' ? undefined : value, z.string().trim().max(240).optional()),
-  ROKU_UPDATE_MESSAGE: z.string().trim().max(240).default('Roku installs Flux updates automatically through its managed channel system.'),
-  ROKU_RELEASE_NOTES: z.string().default(''),
-  ROKU_LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
-  DEVICE_CODE_TTL_SECONDS: z.coerce.number().int().min(120).max(1800).default(600),
-  DEVICE_POLL_INTERVAL_SECONDS: z.coerce.number().int().min(3).max(30).default(5),
-  DEVICE_SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(90),
-  ROKU_PLAYBACK_SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(14400),
 
   /**
    * Comma-separated media root directories. Files placed during post-processing

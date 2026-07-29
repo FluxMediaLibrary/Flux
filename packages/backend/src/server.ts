@@ -24,7 +24,6 @@ import { adminRoutes } from './modules/admin/admin.routes.js';
 import { castRoutes } from './modules/cast/cast.routes.js';
 import { appRoutes } from './modules/app/app.routes.js';
 import { clientRoutes } from './modules/client/client.routes.js';
-import { rokuClientRoutes, rokuRoutes } from './modules/roku/roku.routes.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -57,8 +56,6 @@ export async function buildServer(): Promise<FastifyInstance> {
     async (api) => {
       await api.register(authRoutes, { prefix: '/auth' });
       await api.register(clientRoutes, { prefix: '/client' });
-      await api.register(rokuRoutes, { prefix: '/roku' });
-      await api.register(rokuClientRoutes, { prefix: '/clients' });
       await api.register(profileRoutes, { prefix: '/profiles' });
       await api.register(inviteRoutes, { prefix: '/invites' });
       await api.register(tmdbRoutes, { prefix: '/tmdb' });

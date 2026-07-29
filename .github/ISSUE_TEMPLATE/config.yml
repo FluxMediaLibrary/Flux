@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/IDKDeadXD/Flux/security/advisories/new
+    about: Please report security issues privately instead of opening a public issue.
+  - name: Support and setup help
+    url: https://github.com/IDKDeadXD/Flux/discussions
+    about: Use discussions for deployment questions, troubleshooting, and usage help.

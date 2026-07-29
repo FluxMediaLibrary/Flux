@@ -1,6 +1,5 @@
 import type {
   ActivateProfileResponse,
-  ApproveDeviceAuthorizationRequest,
   AdminRequestFulfillmentSyncResultDTO,
   AdminBulkEpisodeSyncResultDTO,
   AdminBulkMediaAnalyzeResultDTO,
@@ -302,9 +301,6 @@ export const api = {
     return request<TmdbPersonResult[]>(`/api/tmdb/people/search?${qs.toString()}`, {
       signal,
     });
-  },
-  approveDevice(body: ApproveDeviceAuthorizationRequest) {
-    return request<{ state: 'approved' | 'denied' }>('/api/auth/device/approve', { body });
   },
   trending(type: MediaType, window: TrendingWindow = 'week', signal?: AbortSignal) {
     const qs = new URLSearchParams({

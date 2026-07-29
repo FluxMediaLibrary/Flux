@@ -17,18 +17,6 @@ export const clientRoutes: FastifyPluginAsync = async (app) => {
     serverVersion: config.FLUX_SERVER_VERSION,
     apiVersion: 1,
     minimumApiVersion: 1,
-    minimumRokuVersion: config.ROKU_MIN_VERSION,
-    latestRokuVersion: config.ROKU_LATEST_VERSION,
-    rokuSupported: config.ROKU_SUPPORTED,
-    authentication: { deviceLink: true, usernamePassword: false },
-    features: {
-      profiles: true,
-      profilePins: false,
-      requests: config.ROKU_FEATURE_REQUESTS,
-      skipIntro: config.ROKU_FEATURE_SKIP_INTRO,
-      subtitles: config.ROKU_FEATURE_SUBTITLES,
-      audioTracks: config.ROKU_FEATURE_AUDIO_TRACKS,
-    },
     branding: {
       name: config.FLUX_SERVER_NAME,
       logoUrl: new URL('/icon-512.png', config.FRONTEND_ORIGIN).toString(),
