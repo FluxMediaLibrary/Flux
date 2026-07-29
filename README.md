@@ -128,6 +128,18 @@ Flux can run two ways:
 1. **Published images**: best for normal self-hosting. Docker pulls the backend/frontend images from GHCR and starts them with Postgres, Redis, and Transmission.
 2. **Source build**: best for local development or when you are changing the code. Docker builds the backend/frontend images from this checkout.
 
+### Quick Setup Script
+
+For a fresh image-based install, download and run the setup script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/IDKDeadXD/Flux/master/setup.sh -o setup.sh
+chmod +x setup.sh
+./setup.sh
+```
+
+The script asks whether Flux will be used from localhost, a home/LAN address, or a public domain. It then downloads the image Compose file if needed, writes `.env`, creates local storage folders, pulls the GHCR images, and starts Flux.
+
 ### 1. Clone
 
 ```bash
