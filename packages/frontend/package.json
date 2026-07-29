@@ -14,7 +14,7 @@
     "@flux/shared": "*",
     "@vidstack/react": "^1.15.6",
     "hls.js": "^1.5.20",
-    "next": "^16.2.0",
+    "next": "^16.2.11",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
