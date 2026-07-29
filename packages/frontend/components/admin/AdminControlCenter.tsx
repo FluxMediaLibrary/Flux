@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AdminPermission, AdminSignalDTO } from '@flux/shared';
@@ -116,7 +117,9 @@ export function AdminControlCenter({ children }: { children: ReactNode }) {
       <div className="control-center">
         <aside className={`control-sidebar${mobileOpen ? ' is-open' : ''}`} aria-label="Admin navigation">
           <div className="control-brand">
-            <Link href="/admin/overview" className="control-brand-mark" aria-label="Flux control center">F<span>X</span></Link>
+            <Link href="/admin/overview" className="control-brand-mark" aria-label="Flux control center">
+              <Image src="/icon-192.png" alt="" width={28} height={28} priority />
+            </Link>
             <div><strong>Flux</strong><small>Control center</small></div>
             <button className="control-icon-button control-mobile-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><Icon name="close" /></button>
           </div>
