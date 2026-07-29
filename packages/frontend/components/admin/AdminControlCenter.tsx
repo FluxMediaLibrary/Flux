@@ -94,7 +94,7 @@ export function AdminControlCenter({ children }: { children: ReactNode }) {
     return [
       signal.counts.failedDownloads > 0 ? { id: 'downloads', tone: 'critical', title: `${signal.counts.failedDownloads} failed download${signal.counts.failedDownloads === 1 ? '' : 's'}`, href: '/admin/downloads?status=ERROR' } : null,
       signal.counts.pendingRequests > 0 ? { id: 'requests', tone: 'warning', title: `${signal.counts.pendingRequests} request${signal.counts.pendingRequests === 1 ? '' : 's'} waiting`, href: '/admin/requests?status=PENDING' } : null,
-      signal.counts.libraryIssues > 0 ? { id: 'library', tone: 'warning', title: `${signal.counts.libraryIssues} library issue${signal.counts.libraryIssues === 1 ? '' : 's'}`, href: '/admin/library?issue=ALL' } : null,
+      signal.counts.libraryIssues > 0 ? { id: 'library', tone: 'warning', title: `${signal.counts.libraryIssues} broken library file${signal.counts.libraryIssues === 1 ? '' : 's'}`, href: '/admin/library?issue=BROKEN' } : null,
       signal.storagePercent !== null && signal.storagePercent >= 0.85 ? { id: 'storage', tone: signal.storagePercent >= 0.95 ? 'critical' : 'warning', title: `Storage ${Math.round(signal.storagePercent * 100)}% full`, href: '/admin/storage' } : null,
     ].filter((item): item is NonNullable<typeof item> => item !== null);
   }, [signal]);
