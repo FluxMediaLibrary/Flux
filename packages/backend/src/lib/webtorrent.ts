@@ -7,7 +7,7 @@
  */
 import { config } from '../config.js';
 import { torrentDownloadDir, torrentFilePath } from './media-paths.js';
-import { writeFile, mkdir, readdir, readFile } from 'node:fs/promises';
+import { writeFile, mkdir, readdir, readFile, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 let _sessionId: string | null = null;
@@ -245,13 +245,17 @@ export async function removeTorrent(
     fields: ['id'],
   })) as { torrents: { id: number }[] };
 
-  if (!result.torrents?.[0]) return false;
+  const existsInTransmission = Boolean(result.torrents?.[0]);
 
-  await rpc('torrent-remove', {
-    ids: [infoHash],
-    'delete-local-data': deleteFiles,
-  });
-  return true;
+  if (existsInTransmission) {
+    await rpc('torrent-remove', {
+      ids: [infoHash],
+      'delete-local-data': deleteFiles,
+    });
+  }
+
+  await rm(torrentFilePath(infoHash), { force: true });
+  return existsInTransmission;
 }
 
 /** Resume all previously persisted torrents on boot. */
