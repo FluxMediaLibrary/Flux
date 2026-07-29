@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
@@ -72,30 +72,26 @@ export default function BrowsePage() {
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
 
-  const [requests, setRequests] = useState<Map<string, RequestStatus>>(
-    new Map(),
-  );
+  const [requests, setRequests] = useState<Map<string, RequestStatus>>(new Map());
   const [requestingIds, setRequestingIds] = useState<Set<string>>(new Set());
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const gridAbortRef = useRef<AbortController>(undefined);
 
-  // ── Existing requests (to disable already-requested titles) ───────────────
   useEffect(() => {
     if (!activeProfile) return;
     api
       .listMyRequests()
       .then((reqs) => {
         const map = new Map<string, RequestStatus>();
-        for (const r of reqs) map.set(requestKey(r.tmdbId, r.mediaType), r.status);
+        for (const request of reqs) map.set(requestKey(request.tmdbId, request.mediaType), request.status);
         setRequests(map);
       })
       .catch(() => {
-        /* non-fatal */
+        /* Existing request state is helpful but not required to browse. */
       });
   }, [activeProfile]);
 
-  // ── Genres + hero (trending) load on mediaType change ─────────────────────
   useEffect(() => {
     const controller = new AbortController();
     setActiveGenre(null);
@@ -104,101 +100,107 @@ export default function BrowsePage() {
     api
       .listGenres(mediaType, controller.signal)
       .then(setGenres)
-      .catch(() => {
-        /* non-fatal */
-      });
+      .catch(() => setGenres([]));
 
     api
       .trending(mediaType, 'week', controller.signal)
-      .then((items) => setHero(items.filter((i) => i.backdropPath).slice(0, 5)))
-      .catch(() => {
-        /* non-fatal — hero just won't render */
-      });
+      .then((items) => setHero(items.filter((item) => item.backdropPath).slice(0, 5)))
+      .catch(() => setHero([]));
 
     return () => controller.abort();
   }, [mediaType]);
 
-  // ── Hero auto-rotation ────────────────────────────────────────────────────
   useEffect(() => {
     if (hero.length <= 1) return;
-    const t = setInterval(
-      () => setHeroIndex((i) => (i + 1) % hero.length),
-      HERO_ROTATE_MS,
-    );
-    return () => clearInterval(t);
+    const timer = setInterval(() => setHeroIndex((index) => (index + 1) % hero.length), HERO_ROTATE_MS);
+    return () => clearInterval(timer);
   }, [hero]);
 
-  // ── Load the main grid: popular / discover(genre) — when not searching ────
-  const loadFeed = useCallback(
-    async (type: MediaType, genreId: number | null) => {
-      if (gridAbortRef.current) gridAbortRef.current.abort();
-      const controller = new AbortController();
-      gridAbortRef.current = controller;
-      setLoading(true);
-      setError(null);
-      try {
-        const items =
-          genreId === null
-            ? await api.popular(type, controller.signal)
-            : await api.discover(type, genreId, controller.signal);
-        setResults(items);
-      } catch (err: unknown) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setError(err instanceof Error ? err.message : 'Failed to load titles.');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  const loadFeed = useCallback(async (type: MediaType, genreId: number | null) => {
+    if (gridAbortRef.current) gridAbortRef.current.abort();
+    const controller = new AbortController();
+    gridAbortRef.current = controller;
+    setLoading(true);
+    setError(null);
+    try {
+      const items = genreId === null
+        ? await api.popular(type, controller.signal)
+        : await api.discover(type, genreId, controller.signal);
+      setResults(items);
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setError(err instanceof Error ? err.message : 'Failed to load titles.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (searching) return;
-    loadFeed(mediaType, activeGenre);
+    void loadFeed(mediaType, activeGenre);
   }, [mediaType, activeGenre, searching, loadFeed]);
 
-  // ── Search ────────────────────────────────────────────────────────────────
-  const runSearch = useCallback(
-    async (q: string, type: MediaType) => {
-      if (gridAbortRef.current) gridAbortRef.current.abort();
-      const controller = new AbortController();
-      gridAbortRef.current = controller;
-      setLoading(true);
-      setError(null);
-      try {
-        const items = await api.searchTmdb(q, type, controller.signal);
-        setResults(items);
-      } catch (err: unknown) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setError(err instanceof Error ? err.message : 'Search failed.');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
-
-  const handleQueryChange = useCallback(
-    (val: string) => {
-      setQuery(val);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      const trimmed = val.trim();
-      if (!trimmed) {
-        setSearching(false);
-        return;
-      }
-      setSearching(true);
-      debounceRef.current = setTimeout(() => runSearch(trimmed, mediaType), 320);
-    },
-    [mediaType, runSearch],
-  );
+  const runSearch = useCallback(async (q: string, type: MediaType) => {
+    if (gridAbortRef.current) gridAbortRef.current.abort();
+    const controller = new AbortController();
+    gridAbortRef.current = controller;
+    setLoading(true);
+    setError(null);
+    try {
+      const items = await api.searchTmdb(q, type, controller.signal);
+      setResults(items);
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setError(err instanceof Error ? err.message : 'Search failed.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const clearSearch = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     setQuery('');
     setSearching(false);
   }, []);
 
-  // ── Request action ────────────────────────────────────────────────────────
+  const handleQueryChange = useCallback((value: string) => {
+    setQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    debounceRef.current = setTimeout(() => void runSearch(trimmed, mediaType), 320);
+  }, [mediaType, runSearch]);
+
+  const submitSearch = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const trimmed = query.trim();
+    if (!trimmed) {
+      clearSearch();
+      return;
+    }
+    setSearching(true);
+    void runSearch(trimmed, mediaType);
+  }, [clearSearch, mediaType, query, runSearch]);
+
+  const switchMediaType = useCallback((type: MediaType) => {
+    setMediaType(type);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const trimmed = query.trim();
+    if (trimmed) {
+      setSearching(true);
+      void runSearch(trimmed, type);
+    }
+  }, [query, runSearch]);
+
+  const chooseGenre = useCallback((genreId: number | null) => {
+    setActiveGenre(genreId);
+    if (searching) clearSearch();
+  }, [clearSearch, searching]);
+
   const handleRequest = useCallback(async (item: TmdbSearchResult) => {
     const key = requestKey(item.tmdbId, item.mediaType);
     setRequestingIds((prev) => new Set(prev).add(key));
@@ -210,7 +212,7 @@ export default function BrowsePage() {
       });
       setRequests((prev) => new Map(prev).set(key, 'PENDING'));
     } catch {
-      /* keep enabled so the user can retry */
+      /* Keep enabled so the user can retry. */
     } finally {
       setRequestingIds((prev) => {
         const next = new Set(prev);
@@ -220,7 +222,6 @@ export default function BrowsePage() {
     }
   }, []);
 
-  // ── Cleanup ───────────────────────────────────────────────────────────────
   useEffect(
     () => () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -232,39 +233,110 @@ export default function BrowsePage() {
   const heroItem = hero[heroIndex];
   useAmbient(heroItem?.backdropPath ?? null);
 
+  const activeGenreName = useMemo(
+    () => genres.find((genre) => genre.id === activeGenre)?.name ?? null,
+    [activeGenre, genres],
+  );
+
   const sectionTitle = searching
-    ? `Results for “${query.trim()}”`
-    : activeGenre !== null
-      ? genres.find((g) => g.id === activeGenre)?.name ?? 'Discover'
-      : mediaType === 'MOVIE'
-        ? 'Popular Movies'
-        : 'Popular Shows';
+    ? `Results for "${query.trim()}"`
+    : activeGenreName ?? (mediaType === 'MOVIE' ? 'Popular Movies' : 'Popular Shows');
 
   return (
-    <div className="page">
-      <div className="section-head">
-        <h1>Browse</h1>
-      </div>
+    <div className="page browse-page">
+      <section className="browse-workbench" aria-label="Browse controls">
+        <div className="browse-workbench-head">
+          <div>
+            <span className="browse-kicker">Requests</span>
+            <h1>Browse</h1>
+          </div>
+          <div className="browse-type-switch" aria-label="Media type">
+            {(['MOVIE', 'SHOW'] as const).map((type) => (
+              <button
+                key={type}
+                type="button"
+                className={mediaType === type ? 'active' : undefined}
+                onClick={() => switchMediaType(type)}
+              >
+                {type === 'MOVIE' ? 'Movies' : 'TV Shows'}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      {/* Search (secondary) */}
-      <div className="search-row">
-        <input
-          className="input"
-          type="text"
-          placeholder="Search for a movie or TV show…"
-          value={query}
-          onChange={(e) => handleQueryChange(e.target.value)}
-        />
-        {query && (
-          <button className="btn btn-ghost" onClick={clearSearch}>
-            Clear
-          </button>
+        <form
+          className="browse-search-panel"
+          role="search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitSearch();
+          }}
+        >
+          <label className="browse-search-field">
+            <span>Search titles</span>
+            <input
+              type="search"
+              placeholder={mediaType === 'MOVIE' ? 'Search movies' : 'Search TV shows'}
+              value={query}
+              onChange={(event) => handleQueryChange(event.target.value)}
+            />
+          </label>
+          <label className="browse-genre-select">
+            <span>Discover genre</span>
+            <select
+              value={activeGenre ?? 'POPULAR'}
+              onChange={(event) => chooseGenre(event.target.value === 'POPULAR' ? null : Number(event.target.value))}
+            >
+              <option value="POPULAR">Popular</option>
+              {genres.map((genre) => (
+                <option key={genre.id} value={genre.id}>{genre.name}</option>
+              ))}
+            </select>
+          </label>
+          <div className="browse-search-actions">
+            <button className="btn btn-primary" type="submit" disabled={!query.trim()}>
+              Search
+            </button>
+            {(query || searching || activeGenre !== null) && (
+              <button
+                className="btn btn-ghost"
+                type="button"
+                onClick={() => {
+                  setActiveGenre(null);
+                  clearSearch();
+                }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </form>
+
+        {genres.length > 0 && (
+          <div className="genre-grid" aria-label="Discover by genre">
+            <button
+              type="button"
+              className={`genre-chip${activeGenre === null && !searching ? ' active' : ''}`}
+              onClick={() => chooseGenre(null)}
+            >
+              Popular
+            </button>
+            {genres.map((genre) => (
+              <button
+                key={genre.id}
+                type="button"
+                className={`genre-chip${activeGenre === genre.id && !searching ? ' active' : ''}`}
+                onClick={() => chooseGenre(genre.id)}
+              >
+                {genre.name}
+              </button>
+            ))}
+          </div>
         )}
-      </div>
+      </section>
 
-      {/* Hero carousel — hidden while searching */}
       {!searching && heroItem && (
-        <div className="disc-hero" style={{ marginTop: 22 }}>
+        <div className="disc-hero">
           <button
             className="disc-hero-hit"
             type="button"
@@ -273,27 +345,19 @@ export default function BrowsePage() {
           />
           <div className="disc-hero-bg">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`${BACKDROP_BASE}${heroItem.backdropPath}`}
-              alt=""
-              key={heroItem.tmdbId}
-            />
+            <img src={`${BACKDROP_BASE}${heroItem.backdropPath}`} alt="" key={heroItem.tmdbId} />
           </div>
           <div className="disc-hero-content">
-            <span className="disc-hero-kicker">🔥 Trending this week</span>
+            <span className="disc-hero-kicker">Trending this week</span>
             <h2 className="disc-hero-title">{heroItem.title}</h2>
             <div className="disc-hero-meta">
               {heroItem.year && <span>{heroItem.year}</span>}
               <span>{heroItem.mediaType === 'MOVIE' ? 'Movie' : 'TV'}</span>
               {heroItem.voteAverage !== null && (
-                <span style={{ color: '#ffd479' }}>
-                  ★ {heroItem.voteAverage.toFixed(1)}
-                </span>
+                <span style={{ color: '#ffd479' }}>Rating {heroItem.voteAverage.toFixed(1)}</span>
               )}
             </div>
-            {heroItem.overview && (
-              <p className="disc-hero-overview">{heroItem.overview}</p>
-            )}
+            {heroItem.overview && <p className="disc-hero-overview">{heroItem.overview}</p>}
             <div className="disc-hero-actions">
               <HeroAction
                 item={heroItem}
@@ -306,12 +370,12 @@ export default function BrowsePage() {
           </div>
           {hero.length > 1 && (
             <div className="disc-hero-dots">
-              {hero.map((h, i) => (
+              {hero.map((item, index) => (
                 <button
-                  key={h.tmdbId}
-                  className={`disc-hero-dot${i === heroIndex ? ' active' : ''}`}
-                  onClick={() => setHeroIndex(i)}
-                  aria-label={`Show ${h.title}`}
+                  key={item.tmdbId}
+                  className={`disc-hero-dot${index === heroIndex ? ' active' : ''}`}
+                  onClick={() => setHeroIndex(index)}
+                  aria-label={`Show ${item.title}`}
                 />
               ))}
             </div>
@@ -319,77 +383,36 @@ export default function BrowsePage() {
         </div>
       )}
 
-      {/* Type + genre toolbar — hidden while searching */}
-      {!searching && (
-        <>
-          <div className="browse-toolbar">
-            <div className="toggle-group">
-              {(['MOVIE', 'SHOW'] as const).map((t) => (
-                <button
-                  key={t}
-                  className={`toggle${mediaType === t ? ' active' : ''}`}
-                  onClick={() => setMediaType(t)}
-                >
-                  {t === 'MOVIE' ? 'Movies' : 'TV Shows'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {genres.length > 0 && (
-            <div className="genre-bar">
-              <button
-                className={`genre-pill${activeGenre === null ? ' active' : ''}`}
-                onClick={() => setActiveGenre(null)}
-              >
-                Popular
-              </button>
-              {genres.map((g) => (
-                <button
-                  key={g.id}
-                  className={`genre-pill${activeGenre === g.id ? ' active' : ''}`}
-                  onClick={() => setActiveGenre(g.id)}
-                >
-                  {g.name}
-                </button>
-              ))}
-            </div>
+      <div className="disc-section-head">
+        <div>
+          <h2>{sectionTitle}</h2>
+          {searching && activeGenreName && (
+            <p className="browse-context-note">Genre selection applies when you return to discovery.</p>
           )}
-        </>
-      )}
-
-      {/* Section header */}
-      <div className="disc-section-head" style={{ marginTop: 20 }}>
-        <h2>{sectionTitle}</h2>
-        {!loading && results.length > 0 && (
-          <span className="disc-count">{results.length} titles</span>
-        )}
+        </div>
+        {!loading && results.length > 0 && <span className="disc-count">{results.length} titles</span>}
       </div>
 
-      {/* Error */}
       {error && <div className="form-error">{error}</div>}
 
-      {/* Loading skeleton */}
       {loading && (
         <div className="poster-grid">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div className="poster-skel" key={i} />
+          {Array.from({ length: 12 }).map((_, index) => (
+            <div className="poster-skel" key={index} />
           ))}
         </div>
       )}
 
-      {/* Empty */}
       {!loading && !error && results.length === 0 && (
         <div className="empty">
           <p>
             {searching
-              ? 'No results found. Try a different search.'
+              ? 'No results found. Try a different search or switch media type.'
               : 'Nothing to show here yet.'}
           </p>
         </div>
       )}
 
-      {/* Grid */}
       {!loading && results.length > 0 && (
         <div className="poster-grid">
           {results.map((item) => {
@@ -411,8 +434,6 @@ export default function BrowsePage() {
   );
 }
 
-// ── Hero call-to-action ───────────────────────────────────────────────────────
-
 function HeroAction({
   item,
   status,
@@ -429,7 +450,7 @@ function HeroAction({
   if (item.inLibrary && item.mediaItemId) {
     return (
       <Link href={`/library/${item.mediaItemId}`} className="btn btn-primary">
-        ▶ Play
+        Play
       </Link>
     );
   }
@@ -445,17 +466,15 @@ function HeroAction({
   }
   return (
     <>
-    <button className="btn btn-primary" onClick={onRequest} disabled={requesting}>
-      {requesting ? 'Requesting…' : '+ Request'}
-    </button>
+      <button className="btn btn-primary" onClick={onRequest} disabled={requesting}>
+        {requesting ? 'Requesting...' : '+ Request'}
+      </button>
       <Link className="btn btn-ghost" href={detailsHref}>
         Details
       </Link>
     </>
   );
 }
-
-// ── Poster card ───────────────────────────────────────────────────────────────
 
 function MediaCard({
   item,
@@ -488,17 +507,11 @@ function MediaCard({
       <div className="media-poster">
         {item.posterPath ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={`${POSTER_BASE}${item.posterPath}`}
-            alt={item.title}
-            loading="lazy"
-          />
+          <img src={`${POSTER_BASE}${item.posterPath}`} alt={item.title} loading="lazy" />
         ) : (
           <div className="media-poster-ph">No poster</div>
         )}
-        {item.voteAverage !== null && (
-          <span className="media-rating">★ {item.voteAverage.toFixed(1)}</span>
-        )}
+        {item.voteAverage !== null && <span className="media-rating">Rating {item.voteAverage.toFixed(1)}</span>}
         {inLibrary ? (
           <span className="media-badge">In Library</span>
         ) : status && status !== 'REJECTED' ? (
@@ -508,7 +521,7 @@ function MediaCard({
       <div className="media-caption">
         <p className="media-caption-title">{item.title}</p>
         <p className="media-caption-sub">
-          {item.year ?? '—'} · {item.mediaType === 'MOVIE' ? 'Movie' : 'TV'}
+          {item.year ?? 'Unknown'} / {item.mediaType === 'MOVIE' ? 'Movie' : 'TV'}
         </p>
         <div style={{ marginTop: 8 }}>
           {inLibrary ? (
@@ -518,7 +531,7 @@ function MediaCard({
               style={{ width: '100%' }}
               onClick={(event) => event.stopPropagation()}
             >
-              ▶ Play
+              Play
             </Link>
           ) : status ? (
             <span className={statusPillClass(status)}>{statusLabel(status)}</span>
@@ -532,7 +545,7 @@ function MediaCard({
               }}
               disabled={requesting}
             >
-              {requesting ? 'Requesting…' : '+ Request'}
+              {requesting ? 'Requesting...' : '+ Request'}
             </button>
           )}
         </div>

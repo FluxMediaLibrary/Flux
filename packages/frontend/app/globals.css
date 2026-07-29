@@ -3494,6 +3494,156 @@ table.data tr:last-child td {
 
 /* ── Toolbar + genre pills ───────────────────────────────────────────────── */
 
+.browse-page {
+  padding-top: 24px;
+}
+.browse-workbench {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.024)),
+    rgba(10,12,16,.46);
+  box-shadow: 0 16px 42px rgba(0,0,0,.24);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.browse-workbench-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.browse-workbench h1 {
+  margin: 2px 0 0;
+  font-size: clamp(1.65rem, 4vw, 2.35rem);
+  line-height: 1;
+}
+.browse-kicker {
+  display: block;
+  color: var(--accent-2);
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.browse-type-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(94px, 1fr));
+  min-height: 40px;
+  padding: 3px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: rgba(0,0,0,.18);
+}
+.browse-type-switch button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 8px 12px;
+  font: inherit;
+  font-size: .86rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.browse-type-switch button:hover,
+.browse-type-switch button:focus-visible {
+  color: var(--text);
+  outline: none;
+}
+.browse-type-switch button.active {
+  background: var(--accent);
+  color: #fff;
+}
+.browse-search-panel {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, 260px) auto;
+  gap: 10px;
+  align-items: end;
+}
+.browse-search-field,
+.browse-genre-select {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.browse-search-field span,
+.browse-genre-select span {
+  color: var(--text-dim);
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.browse-search-field input,
+.browse-genre-select select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: rgba(6,8,12,.72);
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: .92rem;
+}
+.browse-search-field input:focus,
+.browse-genre-select select:focus {
+  border-color: var(--accent-2);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(96,165,250,.12);
+}
+.browse-search-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.genre-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 8px;
+  max-height: 176px;
+  overflow: auto;
+  padding-right: 4px;
+}
+.genre-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  min-width: 0;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: rgba(255,255,255,.045);
+  color: var(--text-muted);
+  padding: 7px 10px;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.genre-chip:hover,
+.genre-chip:focus-visible {
+  border-color: rgba(255,255,255,.22);
+  color: var(--text);
+  outline: none;
+}
+.genre-chip.active {
+  border-color: rgba(96,165,250,.58);
+  background: rgba(96,165,250,.17);
+  color: #d9ebff;
+}
+.browse-context-note {
+  margin: 5px 0 0;
+  color: var(--text-dim);
+  font-size: .78rem;
+}
+
 .browse-toolbar {
   display: flex;
   align-items: center;
@@ -4029,6 +4179,36 @@ table.data tr:last-child td {
 }
 
 @media (max-width: 640px) {
+  .browse-page {
+    padding-top: 18px;
+  }
+  .browse-workbench {
+    gap: 13px;
+    padding: 13px;
+  }
+  .browse-workbench-head,
+  .browse-search-panel {
+    grid-template-columns: 1fr;
+  }
+  .browse-workbench-head {
+    display: grid;
+  }
+  .browse-type-switch {
+    width: 100%;
+  }
+  .browse-search-panel {
+    display: grid;
+  }
+  .browse-search-actions {
+    justify-content: stretch;
+  }
+  .browse-search-actions .btn {
+    flex: 1;
+  }
+  .genre-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 214px;
+  }
   .disc-hero-title {
     font-size: 1.6rem;
   }
