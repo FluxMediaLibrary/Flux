@@ -54,6 +54,7 @@ services:
       - "127.0.0.1:9091:9091"
     volumes:
       - /storage/flux-downloads:/data/downloads
+      - media:/data/media
       - transmission-config:/config
       - ./transmission-settings.json:/config/settings.json
       - /storage/flux-extra:/data/extra
