@@ -22,7 +22,7 @@ import type { Prisma, RequestStatus } from '@prisma/client';
 import type { Job } from 'bullmq';
 
 // Transmission engine
-import { getTorrentFiles } from '../../lib/webtorrent.js';
+import { getTorrentFiles, removeTorrent } from '../../lib/webtorrent.js';
 
 interface FileMappingEntry {
   path: string;
@@ -267,8 +267,10 @@ export async function processTorrentPostprocess(
     await prisma.torrent.update({
       where: { id: torrentId },
       data: {
-        status: 'SEEDING',
-        seedingSince: new Date(),
+        status: 'STOPPED',
+        seedingSince: null,
+        downloadSpeed: 0,
+        uploadSpeed: 0,
         mediaItemId,
       },
     });
@@ -350,6 +352,21 @@ export async function processTorrentPostprocess(
           job.log(`Notification failed for request ${req.id}: ${String(err)}`);
         }
       }
+    }
+
+    try {
+      await removeTorrent(infoHash, true);
+      job.log(`Removed Transmission staging data for ${infoHash} after import`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      job.log(`Imported media, but failed to remove Transmission staging data for ${infoHash}: ${message}`);
+      await prisma.torrent.update({
+        where: { id: torrentId },
+        data: {
+          status: 'ERROR',
+          errorMessage: `Imported media, but failed to remove duplicate download data: ${message}`,
+        },
+      });
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
