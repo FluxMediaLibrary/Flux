@@ -22,7 +22,7 @@
     "dev:backend": "npm run dev --workspace @flux/backend",
     "dev:frontend": "npm run dev --workspace @flux/frontend",
     "build": "npm run build --workspace @flux/shared && npm run build --workspace @flux/backend && npm run build --workspace @flux/frontend",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run build --workspace @flux/shared && npm run prisma:generate --workspace @flux/backend && npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "prisma:generate": "npm run prisma:generate --workspace @flux/backend",
     "prisma:migrate": "npm run prisma:migrate --workspace @flux/backend"
