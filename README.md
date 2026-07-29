@@ -123,6 +123,11 @@ Playback decisions are made per-file by probing codec support at the server leve
 
 ## Setup
 
+Flux can run two ways:
+
+1. **Published images**: best for normal self-hosting. Docker pulls the backend/frontend images from GHCR and starts them with Postgres, Redis, and Transmission.
+2. **Source build**: best for local development or when you are changing the code. Docker builds the backend/frontend images from this checkout.
+
 ### 1. Clone
 
 ```bash
@@ -136,7 +141,7 @@ cd flux
 cp .env.example .env
 ```
 
-Edit `.env` and fill in:
+Edit `.env` and fill in the required values:
 
 | Variable | Purpose |
 |---|---|
@@ -146,17 +151,85 @@ Edit `.env` and fill in:
 | `BOOTSTRAP_ADMIN_EMAIL` | Initial admin email |
 | `BOOTSTRAP_ADMIN_PASSWORD` | Initial admin password |
 | `FRONTEND_ORIGIN` | Public frontend URL (e.g. `https://flux.example.com`) |
-| `NEXT_PUBLIC_API_BASE_URL` | Public backend URL (baked into frontend at build time) |
+| `PUBLIC_API_BASE_URL` | Public backend URL for stream/cast URLs. Use the same public origin when nginx routes `/api` to the backend, or a backend-specific URL for split-domain installs. |
 
-### 3. Start
+Recommended values for a single-domain VPS:
+
+```env
+FRONTEND_ORIGIN=https://flux.example.com
+PUBLIC_API_BASE_URL=https://flux.example.com
+NEXT_PUBLIC_API_BASE_URL=
+FLUX_INTERNAL_API_BASE_URL=http://127.0.0.1:6948
+```
+
+`NEXT_PUBLIC_API_BASE_URL` is only needed when the browser should call a separate backend domain directly, such as `https://api.flux.example.com`. For the published frontend image, leave it empty and let the frontend proxy `/api/...` to `FLUX_INTERNAL_API_BASE_URL` at runtime.
+
+### 3. Start With Published Images
+
+This is the normal path for users who just want to pull images and run Flux:
+
+```bash
+docker compose -f docker-compose.images.yml pull
+docker compose -f docker-compose.images.yml up -d
+```
+
+The image Compose file uses:
+
+| Service | Image |
+|---|---|
+| Backend | `ghcr.io/idkdeadxd/flux-backend:latest` |
+| Frontend | `ghcr.io/idkdeadxd/flux-frontend:latest` |
+| PostgreSQL | `postgres:16-alpine` |
+| Redis | `redis:7-alpine` |
+| Transmission | `lscr.io/linuxserver/transmission:latest` |
+
+To pin a specific Flux image tag:
+
+```bash
+FLUX_IMAGE_TAG=prod docker compose -f docker-compose.images.yml up -d
+```
+
+To use images from a fork or private registry:
+
+```bash
+FLUX_IMAGE_PREFIX=ghcr.io/your-name/flux docker compose -f docker-compose.images.yml up -d
+```
+
+On first run the backend applies pending Prisma migrations, then seeds the bootstrap admin account if no users exist yet.
+
+### 4. Start From Source
+
+Use this when developing or when you want Docker to build local changes:
 
 ```bash
 docker compose up --build
 ```
 
-On first run the backend applies pending Prisma migrations, then seeds the bootstrap admin account if no users exist yet.
+### 5. Image Publishing
 
-### 4. Reverse proxy (nginx)
+The `Publish Images` GitHub Actions workflow builds and pushes both app images to GitHub Container Registry.
+
+Image tags:
+
+| Tag | When it is published |
+|---|---|
+| `latest` | Pushes to `main`, `master`, or `PROD` |
+| `prod` | Pushes to `PROD` |
+| `sha-<commit>` | Every image workflow run |
+| `v*` | Version tags, such as `v1.2.0` |
+
+To publish images from your own fork:
+
+1. Enable GitHub Actions for the repository.
+2. Make sure the workflow has package write permission. The repo setting is usually **Settings -> Actions -> General -> Workflow permissions -> Read and write permissions**.
+3. Push to `main`, `master`, `PROD`, or push a `v*` tag.
+4. Use your fork's image prefix when deploying:
+
+```bash
+FLUX_IMAGE_PREFIX=ghcr.io/your-name/flux docker compose -f docker-compose.images.yml up -d
+```
+
+### 6. Reverse Proxy (nginx)
 
 ```
 # Frontend — Next.js standalone
@@ -174,7 +247,7 @@ location /api/ {
 }
 ```
 
-### 5. First login
+### 7. First Login
 
 Navigate to your frontend URL, sign in with the bootstrap admin credentials, then:
 

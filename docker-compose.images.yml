@@ -1,0 +1,121 @@
+# Flux deployment using published GHCR images instead of local Docker builds.
+#
+# Usage:
+#   cp .env.example .env
+#   docker compose -f docker-compose.images.yml up -d
+#
+# Override FLUX_IMAGE_PREFIX when using a fork or private registry, for example:
+#   FLUX_IMAGE_PREFIX=ghcr.io/your-name/flux docker compose -f docker-compose.images.yml up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  transmission:
+    image: lscr.io/linuxserver/transmission:latest
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "UTC"
+      TRANSMISSION_WEB_HOME: "/combustion-release/"
+      USER: ${TRANSMISSION_USER:-admin}
+      PASS: ${TRANSMISSION_PASS:-flux}
+      PEERPORT: 51413
+      TRANSMISSION_DOWNLOAD_DIR: /data/downloads
+      TRANSMISSION_INCOMPLETE_DIR: /data/downloads/incomplete
+      TRANSMISSION_WATCH_DIR: /data/downloads/watch
+      TRANSMISSION_START_ON_ADD: "true"
+      TRANSMISSION_TRASH_ORIGINAL: "true"
+    ports:
+      - "51413:51413"
+      - "51413:51413/udp"
+      - "127.0.0.1:9091:9091"
+    volumes:
+      - ${FLUX_DOWNLOADS_PATH:-/storage/flux-downloads}:/data/downloads
+      - media:/data/media
+      - transmission-config:/config
+      - ./transmission-settings.json:/config/settings.json:ro
+      - ${FLUX_EXTRA_PATH:-/storage/flux-extra}:/data/extra
+
+  backend:
+    image: ${FLUX_IMAGE_PREFIX:-ghcr.io/idkdeadxd/flux}-backend:${FLUX_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      TMDB_API_KEY: ${TMDB_API_KEY}
+      BACKEND_PORT: ${BACKEND_PORT:-6948}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-}
+      MEDIA_ROOT: ${MEDIA_ROOT}
+      MEDIA_ROOTS: ${MEDIA_ROOTS:-${MEDIA_ROOT}}
+      DOWNLOAD_ROOT: ${DOWNLOAD_ROOT}
+      TRANSCODE_ROOT: ${TRANSCODE_ROOT}
+      ANDROID_RELEASE_ROOT: /data/releases/android
+      TRANSMISSION_RPC_URL: ${TRANSMISSION_RPC_URL:-http://localhost:9091/transmission/rpc}
+      TRANSMISSION_USER: ${TRANSMISSION_USER:-admin}
+      TRANSMISSION_PASS: ${TRANSMISSION_PASS:-flux}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
+    volumes:
+      - media:/data/media
+      - ${FLUX_DOWNLOADS_PATH:-/storage/flux-downloads}:/data/downloads
+      - transcode:/data/transcode
+      - ${FLUX_EXTRA_PATH:-/storage/flux-extra}:/data/extra
+      - ./releases/android:/data/releases/android:ro
+
+  frontend:
+    image: ${FLUX_IMAGE_PREFIX:-ghcr.io/idkdeadxd/flux}-frontend:${FLUX_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: production
+      FLUX_INTERNAL_API_BASE_URL: ${FLUX_INTERNAL_API_BASE_URL:-http://127.0.0.1:${BACKEND_PORT:-6948}}
+      PORT: ${FRONTEND_PORT:-4938}
+
+volumes:
+  pgdata:
+  redisdata:
+  transmission-config:
+  media:
+  transcode:

@@ -14,6 +14,7 @@ ENV NODE_ENV=development
 COPY package.json package-lock.json* ./
 COPY shared/package.json ./shared/package.json
 COPY packages/backend/package.json ./packages/backend/package.json
+COPY packages/frontend/package.json ./packages/frontend/package.json
 # Prisma schema is needed for `prisma generate` during postinstall/build.
 COPY packages/backend/prisma ./packages/backend/prisma
 # Use npm ci when a lockfile exists, else fall back to install.
@@ -33,6 +34,7 @@ FROM base AS proddeps
 COPY package.json package-lock.json* ./
 COPY shared/package.json ./shared/package.json
 COPY packages/backend/package.json ./packages/backend/package.json
+COPY packages/frontend/package.json ./packages/frontend/package.json
 COPY packages/backend/prisma ./packages/backend/prisma
 RUN (npm ci --omit=dev || npm install --omit=dev) \
   && npm cache clean --force

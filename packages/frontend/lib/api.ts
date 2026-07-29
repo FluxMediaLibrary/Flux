@@ -108,14 +108,6 @@ interface RequestOptions {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  if (!BASE_URL) {
-    throw new FluxApiError({
-      error: 'ConfigError',
-      message: 'NEXT_PUBLIC_API_BASE_URL is not configured.',
-      statusCode: 0,
-    });
-  }
-
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
 
@@ -174,14 +166,6 @@ async function uploadForm<T>(
   form: FormData,
   options: { signal?: AbortSignal } = {},
 ): Promise<T> {
-  if (!BASE_URL) {
-    throw new FluxApiError({
-      error: 'ConfigError',
-      message: 'NEXT_PUBLIC_API_BASE_URL is not configured.',
-      statusCode: 0,
-    });
-  }
-
   const headers: Record<string, string> = { Accept: 'application/json' };
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -593,7 +577,7 @@ export function subscribeAdminSignals(
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   const connect = async (): Promise<void> => {
-    if (controller.signal.aborted || !BASE_URL) return;
+    if (controller.signal.aborted) return;
     try {
       const token = getToken();
       const response = await fetch(`${BASE_URL}/api/admin/events`, {
