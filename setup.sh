@@ -161,6 +161,7 @@ write_env() {
   TRANSMISSION_USER="$(prompt "Transmission username" "admin")"
   TRANSMISSION_PASS="$(prompt_secret "Transmission password (leave empty to generate)")"
   [[ -n "$TRANSMISSION_PASS" ]] || TRANSMISSION_PASS="$(generate_secret)"
+  [[ ${#TRANSMISSION_PASS} -ge 12 ]] || fail "Transmission password must be at least 12 characters."
 
   local default_image_tag=""
   if command -v git >/dev/null 2>&1; then

@@ -13,6 +13,12 @@ import { checkTorrentClient } from './lib/webtorrent.js';
 async function main(): Promise<void> {
   const app = await buildServer();
 
+  if (config.NODE_ENV === 'production' && config.TRANSMISSION_PASS.length < 12) {
+    app.log.warn(
+      'TRANSMISSION_PASS is a legacy weak value. Flux will remain available, but rotate it to at least 12 characters in .env and recreate backend + Transmission.',
+    );
+  }
+
   await seedBootstrapAdmin(app);
   startWorkers();
   startTorrentPoller(app.log);

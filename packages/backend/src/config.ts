@@ -85,8 +85,11 @@ const envSchema = z.object({
     .url()
     .default('http://localhost:9091/transmission/rpc'),
   TRANSMISSION_USER: z.string().min(1).default('admin'),
+  // Existing installations may have a legacy short password. Accept it so an
+  // upgrade cannot take the media server offline; setup enforces strong values
+  // for new installs and startup emits a warning until the legacy value rotates.
   TRANSMISSION_PASS: z.string()
-    .min(12, 'TRANSMISSION_PASS must be at least 12 characters')
+    .min(1, 'TRANSMISSION_PASS is required')
     .default('development-only-password'),
 
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
