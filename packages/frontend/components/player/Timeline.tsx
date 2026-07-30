@@ -7,6 +7,7 @@ import { ThumbnailPreview } from './ThumbnailPreview';
 interface TimelineProps {
   mediaItemId: string;
   episodeId?: string;
+  streamToken: string;
   durationSeconds?: number | null;
   positionOffset?: number;
   onSeek: (time: number, trigger?: Event, commit?: boolean) => void;
@@ -20,6 +21,7 @@ export interface ChapterMarker {
 export function Timeline({
   mediaItemId,
   episodeId,
+  streamToken,
   durationSeconds,
   positionOffset = 0,
   onSeek,
@@ -166,6 +168,7 @@ export function Timeline({
       <ThumbnailPreview
         mediaItemId={mediaItemId}
         episodeId={episodeId}
+        streamToken={streamToken}
         time={preview.time}
         left={preview.left}
         visible={preview.visible && !disabled}

@@ -59,6 +59,7 @@ export interface ProfileDTO {
   id: string;
   name: string;
   avatar: string | null;
+  hasPin: boolean;
   createdAt: string;
 }
 
@@ -109,14 +110,28 @@ export interface ActivateProfileResponse {
   profile: ProfileDTO;
 }
 
+export interface ActivateProfileRequest {
+  pin?: string;
+}
+
 export interface CreateProfileRequest {
   name: string;
   avatar?: string;
+  pin?: string;
 }
 
 export interface UpdateProfileRequest {
   name?: string;
   avatar?: string | null;
+  /** Four digits to set/change the PIN, or null to remove it. */
+  pin?: string | null;
+  /** Required whenever the profile PIN is added, changed, or removed. */
+  accountPassword?: string;
+}
+
+export interface DeleteProfileRequest {
+  /** Required when deleting a PIN-protected profile. */
+  accountPassword?: string;
 }
 
 // ─── Premade avatars ──────────────────────────────────────────────────────────
@@ -517,6 +532,9 @@ export interface PlaybackInfoDTO {
     available: boolean;
     source: 'direct' | 'hls';
   }[];
+  /** Short-lived media-only credential. Never use the account JWT in media URLs. */
+  streamToken: string;
+  streamTokenExpiresAt: string;
 }
 
 export interface CastPlaybackInfoDTO {

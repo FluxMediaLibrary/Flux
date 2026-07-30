@@ -130,15 +130,17 @@ Flux can run two ways:
 
 ### Quick Setup Script
 
-For a fresh image-based install, download and run the setup script:
+For a fresh image-based install, clone a reviewable revision and run its setup script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/IDKDeadXD/Flux/master/setup.sh -o setup.sh
-chmod +x setup.sh
+git clone --depth 1 https://github.com/IDKDeadXD/Flux.git flux
+cd flux
 ./setup.sh
 ```
 
-The script asks whether Flux will be used from localhost, a home/LAN address, or a public domain. It then downloads the image Compose file if needed, writes `.env`, creates local storage folders, pulls the GHCR images, and starts Flux.
+The script records that checkout's immutable commit/image tag, asks whether Flux
+will be used from localhost, a home/LAN address, or a public domain, writes a
+private `.env`, creates storage folders, pulls the matching images, and starts Flux.
 
 ### 1. Clone
 
@@ -171,7 +173,7 @@ Recommended values for a single-domain VPS:
 FRONTEND_ORIGIN=https://flux.example.com
 PUBLIC_API_BASE_URL=https://flux.example.com
 NEXT_PUBLIC_API_BASE_URL=
-FLUX_INTERNAL_API_BASE_URL=http://127.0.0.1:6948
+FLUX_INTERNAL_API_BASE_URL=http://backend:6948
 ```
 
 `NEXT_PUBLIC_API_BASE_URL` is only needed when the browser should call a separate backend domain directly, such as `https://api.flux.example.com`. For the published frontend image, leave it empty and let the frontend proxy `/api/...` to `FLUX_INTERNAL_API_BASE_URL` at runtime.
@@ -189,16 +191,16 @@ The image Compose file uses:
 
 | Service | Image |
 |---|---|
-| Backend | `ghcr.io/idkdeadxd/flux-backend:latest` |
-| Frontend | `ghcr.io/idkdeadxd/flux-frontend:latest` |
-| PostgreSQL | `postgres:16-alpine` |
-| Redis | `redis:7-alpine` |
-| Transmission | `lscr.io/linuxserver/transmission:latest` |
+| Backend | `ghcr.io/idkdeadxd/flux-backend:sha-<commit>` |
+| Frontend | `ghcr.io/idkdeadxd/flux-frontend:sha-<commit>` |
+| PostgreSQL | Digest-pinned `postgres:16-alpine` |
+| Redis | Digest-pinned `redis:7-alpine` |
+| Transmission | Digest-pinned LinuxServer Transmission |
 
-To pin a specific Flux image tag:
+Select the immutable tag matching the reviewed source revision:
 
 ```bash
-FLUX_IMAGE_TAG=prod docker compose -f docker-compose.images.yml up -d
+FLUX_IMAGE_TAG=sha-0123456789ab docker compose -f docker-compose.images.yml up -d
 ```
 
 To use images from a fork or private registry:
@@ -251,12 +253,9 @@ location / {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 }
 
-# Backend — Fastify API
-location /api/ {
-    proxy_pass http://127.0.0.1:6948;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-}
+# Backend remains private
+# `/api/*` is forwarded privately by the frontend container. Do not publish
+# the backend port or add a second public nginx route for it.
 ```
 
 ### 7. First Login

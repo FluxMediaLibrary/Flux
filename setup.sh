@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
-REPO_RAW_BASE="${FLUX_SETUP_RAW_BASE:-https://raw.githubusercontent.com/IDKDeadXD/Flux/master}"
+REPO_RAW_BASE="${FLUX_SETUP_RAW_BASE:-}"
 COMPOSE_FILE="docker-compose.images.yml"
 ENV_FILE=".env"
 TRANSMISSION_SETTINGS="transmission-settings.json"
@@ -161,7 +162,20 @@ write_env() {
   TRANSMISSION_PASS="$(prompt_secret "Transmission password (leave empty to generate)")"
   [[ -n "$TRANSMISSION_PASS" ]] || TRANSMISSION_PASS="$(generate_secret)"
 
-  FLUX_IMAGE_TAG="$(prompt "Flux image tag" "latest")"
+  local default_image_tag=""
+  if command -v git >/dev/null 2>&1; then
+    local remote_sha
+    remote_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+    if [[ ! "$remote_sha" =~ ^[0-9a-f]{40}$ ]]; then
+      remote_sha="$(git ls-remote https://github.com/IDKDeadXD/Flux.git refs/heads/master 2>/dev/null | awk '{print $1}' || true)"
+    fi
+    if [[ "$remote_sha" =~ ^[0-9a-f]{40}$ ]]; then
+      default_image_tag="sha-${remote_sha:0:12}"
+      [[ -n "$REPO_RAW_BASE" ]] || REPO_RAW_BASE="https://raw.githubusercontent.com/IDKDeadXD/Flux/$remote_sha"
+    fi
+  fi
+  FLUX_IMAGE_TAG="$(prompt "Immutable Flux image tag (sha-...)" "$default_image_tag")"
+  [[ "$FLUX_IMAGE_TAG" =~ ^sha-[0-9a-f]{12}$ ]] || fail "Use an immutable image tag such as sha-0123456789ab."
   FLUX_IMAGE_PREFIX="$(prompt "Flux image prefix" "ghcr.io/idkdeadxd/flux")"
 
   local storage_root default_downloads default_extra
@@ -210,20 +224,43 @@ write_env() {
   printf '\n' >>"$ENV_FILE"
   write_env_var BOOTSTRAP_ADMIN_EMAIL "$BOOTSTRAP_ADMIN_EMAIL"
   write_env_var BOOTSTRAP_ADMIN_PASSWORD "$BOOTSTRAP_ADMIN_PASSWORD"
+  chmod 600 "$ENV_FILE"
 }
 
 main() {
   info "Flux image deployment setup"
   require_docker
-  ensure_support_files
   choose_public_origin
   write_env
+  if [[ ! -f "$COMPOSE_FILE" || ! -f "$TRANSMISSION_SETTINGS" ]]; then
+    [[ -n "$REPO_RAW_BASE" ]] || fail "Could not resolve an immutable source revision. Install git or set FLUX_SETUP_RAW_BASE to a commit-pinned raw URL."
+  fi
+  ensure_support_files
 
   info "Pulling Flux images"
   docker_compose -f "$COMPOSE_FILE" pull
 
   info "Starting Flux"
   docker_compose -f "$COMPOSE_FILE" up -d
+
+  info "Waiting for the initial administrator to be created"
+  local ready="false"
+  for _ in $(seq 1 30); do
+    if docker_compose -f "$COMPOSE_FILE" exec -T backend \
+      node -e "fetch('http://127.0.0.1:${BACKEND_PORT}/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" \
+      >/dev/null 2>&1; then
+      ready="true"
+      break
+    fi
+    sleep 2
+  done
+  if [[ "$ready" == "true" ]]; then
+    sed -i 's/^BOOTSTRAP_ADMIN_EMAIL=.*/BOOTSTRAP_ADMIN_EMAIL=""/' "$ENV_FILE"
+    sed -i 's/^BOOTSTRAP_ADMIN_PASSWORD=.*/BOOTSTRAP_ADMIN_PASSWORD=""/' "$ENV_FILE"
+    info "Removed one-time bootstrap credentials from $ENV_FILE"
+  else
+    warn "Backend did not become ready; bootstrap credentials remain in $ENV_FILE for the next start."
+  fi
 
   info "Setup complete"
   printf 'Flux should be reachable at: %s\n' "$PUBLIC_ORIGIN"

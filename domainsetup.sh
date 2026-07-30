@@ -86,7 +86,7 @@ server {
     listen 80;
     server_name $DOMAIN;
 
-    # Frontend
+    # Flux frontend and private API proxy
     location / {
         proxy_pass http://127.0.0.1:4938;
         proxy_http_version 1.1;
@@ -96,24 +96,10 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        client_max_body_size 10M;
         proxy_read_timeout 86400;
     }
 
-    # Backend API (strip /api prefix before forwarding)
-    location /api/ {
-        proxy_pass http://127.0.0.1:6948;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        client_max_body_size 10M;
-    }
-
-    # Backend health check (unauthenticated)
-    location /health {
-        proxy_pass http://127.0.0.1:6948;
-    }
 }
 NGINXEOF
 
@@ -132,7 +118,7 @@ echo ""
 echo "  3. Get SSL:"
 echo "     sudo certbot --nginx -d $DOMAIN"
 echo ""
-echo "  4. Rebuild the frontend (API URL is baked at build time):"
+echo "  4. Restart Flux after changing its public origin:"
 echo "     docker compose up -d --build frontend"
 echo ""
 echo "  The backend picks up FRONTEND_ORIGIN at startup — restart it too:"

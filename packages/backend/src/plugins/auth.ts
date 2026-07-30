@@ -20,7 +20,11 @@ import type {
   preHandlerHookHandler,
 } from 'fastify';
 import type { AdminPermission, Role } from '@flux/shared';
-import { verifyToken, type CastPlaybackClaims } from '../lib/jwt.js';
+import {
+  verifyToken,
+  type CastPlaybackClaims,
+  type StreamPlaybackClaims,
+} from '../lib/jwt.js';
 import { ApiError } from '../lib/errors.js';
 import { prisma } from '../lib/db.js';
 
@@ -35,6 +39,8 @@ declare module 'fastify' {
     activeProfileId?: string;
     /** Present only for a signed, media-scoped Cast receiver token. */
     castPlayback?: CastPlaybackClaims;
+    /** Present only for a short-lived, media-scoped browser token. */
+    streamPlayback?: StreamPlaybackClaims;
   }
   interface FastifyInstance {
     requireAuth: preHandlerHookHandler;
@@ -97,7 +103,7 @@ function applyClaims(request: FastifyRequest, token: string, allowMediaPurpose: 
   } catch {
     throw ApiError.unauthorized('Invalid or expired token');
   }
-  if (!allowMediaPurpose && ['stream', 'cast-playback'].includes(claims.purpose ?? '')) {
+  if (!allowMediaPurpose && claims.purpose !== 'account') {
     throw ApiError.unauthorized('This token cannot access account APIs', 'TOKEN_PURPOSE_INVALID');
   }
   request.account = { id: claims.sub, role: claims.role };
@@ -108,16 +114,39 @@ function applyClaims(request: FastifyRequest, token: string, allowMediaPurpose: 
       throw ApiError.unauthorized('Invalid Cast playback token');
     }
     request.castPlayback = cast;
+  } else if (claims.purpose === 'stream') {
+    const stream = claims as unknown as StreamPlaybackClaims;
+    if (!stream.mediaItemId) {
+      throw ApiError.unauthorized('Invalid stream token');
+    }
+    request.streamPlayback = stream;
   }
 }
 
-async function ensureAccountEnabled(accountId: string): Promise<void> {
+async function refreshAccount(request: FastifyRequest): Promise<void> {
   const account = await prisma.user.findUnique({
-    where: { id: accountId },
-    select: { disabled: true },
+    where: { id: request.account!.id },
+    select: { role: true, disabled: true },
   });
   if (!account || account.disabled) {
     throw ApiError.forbidden('This account is disabled', 'ACCOUNT_DISABLED');
+  }
+  request.account!.role = account.role;
+}
+
+async function ensureActiveProfile(request: FastifyRequest): Promise<void> {
+  if (!request.activeProfileId) {
+    throw ApiError.forbidden(
+      'No active profile selected. Activate a profile first.',
+      'NO_ACTIVE_PROFILE',
+    );
+  }
+  const profile = await prisma.profile.findFirst({
+    where: { id: request.activeProfileId, userId: request.account!.id },
+    select: { id: true },
+  });
+  if (!profile) {
+    throw ApiError.forbidden('This profile is unavailable', 'PROFILE_UNAVAILABLE');
   }
 }
 
@@ -126,13 +155,14 @@ const authPlugin = fp(async (app: FastifyInstance) => {
   app.decorateRequest('account', undefined);
   app.decorateRequest('activeProfileId', undefined);
   app.decorateRequest('castPlayback', undefined);
+  app.decorateRequest('streamPlayback', undefined);
 
   const requireAuth: preHandlerHookHandler = async (
     request: FastifyRequest,
     _reply: FastifyReply,
   ) => {
     authenticate(request);
-    await ensureAccountEnabled(request.account!.id);
+    await refreshAccount(request);
   };
 
   const requireAdmin: preHandlerHookHandler = async (
@@ -140,7 +170,7 @@ const authPlugin = fp(async (app: FastifyInstance) => {
     _reply: FastifyReply,
   ) => {
     authenticate(request);
-    await ensureAccountEnabled(request.account!.id);
+    await refreshAccount(request);
     if (request.account?.role !== 'ADMIN') {
       throw ApiError.forbidden('Admin role required');
     }
@@ -168,13 +198,8 @@ const authPlugin = fp(async (app: FastifyInstance) => {
     _reply: FastifyReply,
   ) => {
     authenticate(request);
-    await ensureAccountEnabled(request.account!.id);
-    if (!request.activeProfileId) {
-      throw ApiError.forbidden(
-        'No active profile selected. Activate a profile first.',
-        'NO_ACTIVE_PROFILE',
-      );
-    }
+    await refreshAccount(request);
+    await ensureActiveProfile(request);
   };
 
   const requireProfileStream: preHandlerHookHandler = async (
@@ -182,12 +207,11 @@ const authPlugin = fp(async (app: FastifyInstance) => {
     _reply: FastifyReply,
   ) => {
     authenticateAllowQuery(request);
-    if (!request.activeProfileId) {
-      throw ApiError.forbidden(
-        'No active profile selected. Activate a profile first.',
-        'NO_ACTIVE_PROFILE',
-      );
+    if (!request.streamPlayback && !request.castPlayback) {
+      throw ApiError.unauthorized('A short-lived media token is required', 'MEDIA_TOKEN_REQUIRED');
     }
+    await refreshAccount(request);
+    await ensureActiveProfile(request);
   };
 
   app.decorate('requireAuth', requireAuth);

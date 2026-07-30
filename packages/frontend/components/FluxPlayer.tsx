@@ -132,10 +132,11 @@ export function FluxPlayer(props: FluxPlayerProps) {
         const timelineOffset = direct ? 0 : Math.max(0, hlsStartTime);
         setSource({
           src: direct
-            ? api.getStreamUrl(mediaItemId, episodeId)
+            ? api.getStreamUrl(mediaItemId, episodeId, info.streamToken)
             : api.getHlsUrl(
                 mediaItemId,
                 episodeId,
+                info.streamToken,
                 validAudioStreamIndex,
                 timelineOffset,
                 hlsReloadNonce,
@@ -452,6 +453,7 @@ function FluxMediaPlayer({
         videoCodec={videoLabel ?? source.info?.videoCodec ?? null}
         audioCodec={audioLabel ?? source.info?.audioCodec ?? null}
         durationSeconds={source.info?.durationSeconds ?? null}
+        streamToken={source.info!.streamToken}
         streams={source.info?.streams ?? []}
         qualityOptions={source.info?.qualities ?? []}
         selectedQuality={source.qualityLabel}
@@ -515,6 +517,7 @@ function FluxPlayerChrome({
   videoCodec,
   audioCodec,
   durationSeconds,
+  streamToken,
   streams,
   qualityOptions,
   selectedQuality,
@@ -547,6 +550,7 @@ function FluxPlayerChrome({
   videoCodec: string | null;
   audioCodec: string | null;
   durationSeconds: number | null;
+  streamToken: string;
   streams: MediaStreamDTO[];
   qualityOptions: PlaybackInfoDTO['qualities'];
   selectedQuality: PlaybackInfoDTO['qualities'][number]['label'];
@@ -1003,6 +1007,7 @@ function FluxPlayerChrome({
       <Timeline
         mediaItemId={mediaItemId}
         episodeId={episodeId}
+        streamToken={streamToken}
         durationSeconds={stableDuration || null}
         positionOffset={positionOffset}
         onSeek={seekTo}

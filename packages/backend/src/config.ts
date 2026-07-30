@@ -25,6 +25,13 @@ const envSchema = z.object({
     .string()
     .min(16, 'JWT_SECRET must be at least 16 characters'),
   JWT_EXPIRES_IN: z.string().min(1).default('7d'),
+  // Playback tokens are restricted to one profile and one title. Keep them long
+  // enough for films, live seeking, and TV marathons without exposing the
+  // reusable account session in media URLs.
+  STREAM_TOKEN_TTL_SECONDS: z.coerce.number().int().min(300).max(86_400).default(43_200),
+  MAX_CONCURRENT_TRANSCODES: z.coerce.number().int().min(1).max(32).default(4),
+  MAX_CONCURRENT_THUMBNAILS: z.coerce.number().int().min(1).max(32).default(4),
+  MAX_CONCURRENT_TRICKPLAY: z.coerce.number().int().min(1).max(16).default(2),
 
   TMDB_API_KEY: z.string().min(1, 'TMDB_API_KEY is required'),
 
@@ -78,7 +85,9 @@ const envSchema = z.object({
     .url()
     .default('http://localhost:9091/transmission/rpc'),
   TRANSMISSION_USER: z.string().min(1).default('admin'),
-  TRANSMISSION_PASS: z.string().min(1).default('flux'),
+  TRANSMISSION_PASS: z.string()
+    .min(12, 'TRANSMISSION_PASS must be at least 12 characters')
+    .default('development-only-password'),
 
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(8).optional(),

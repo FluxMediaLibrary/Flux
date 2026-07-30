@@ -245,7 +245,7 @@ public final class MainActivity extends AppCompatActivity {
     private void configureWebView() {
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
-        cookieManager.setAcceptThirdPartyCookies(webView, true);
+        cookieManager.setAcceptThirdPartyCookies(webView, false);
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -285,7 +285,7 @@ public final class MainActivity extends AppCompatActivity {
     private void showServerUrlPrompt(boolean allowCancel) {
         EditText input = new EditText(this);
         input.setSingleLine(true);
-        input.setHint("https://domain.com or http://102.3.214.3");
+        input.setHint("https://flux.example.com");
         input.setText(FluxServerConfig.getBaseUrl(this) == null ? "" : FluxServerConfig.getBaseUrl(this));
         input.setSelectAllOnFocus(true);
 

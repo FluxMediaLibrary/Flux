@@ -9,7 +9,7 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -26,7 +26,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -40,7 +40,7 @@ services:
       retries: 5
 
   transmission:
-    image: lscr.io/linuxserver/transmission:latest
+    image: lscr.io/linuxserver/transmission:latest@sha256:6b78970a0cb00709d3817fcb47b7cf74da56a43384bbd50d03955ca87e38c5f0
     restart: unless-stopped
     environment:
       PUID: "1000"
@@ -48,7 +48,7 @@ services:
       TZ: "UTC"
       TRANSMISSION_WEB_HOME: "/combustion-release/"
       USER: ${TRANSMISSION_USER:-admin}
-      PASS: ${TRANSMISSION_PASS:-flux}
+      PASS: ${TRANSMISSION_PASS:?Set a strong Transmission password}
       PEERPORT: 51413
       TRANSMISSION_DOWNLOAD_DIR: /data/downloads
       TRANSMISSION_INCOMPLETE_DIR: /data/downloads/incomplete
@@ -67,9 +67,8 @@ services:
       - ${FLUX_EXTRA_PATH:-/storage/flux-extra}:/data/extra
 
   backend:
-    image: ${FLUX_IMAGE_PREFIX:-ghcr.io/idkdeadxd/flux}-backend:${FLUX_IMAGE_TAG:-latest}
+    image: ${FLUX_IMAGE_PREFIX:-ghcr.io/idkdeadxd/flux}-backend:${FLUX_IMAGE_TAG:?Set FLUX_IMAGE_TAG to an immutable sha-* tag}
     restart: unless-stopped
-    network_mode: host
     depends_on:
       postgres:
         condition: service_healthy
@@ -77,8 +76,8 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public
-      REDIS_URL: redis://localhost:6379
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
       TMDB_API_KEY: ${TMDB_API_KEY}
@@ -90,9 +89,9 @@ services:
       DOWNLOAD_ROOT: ${DOWNLOAD_ROOT}
       TRANSCODE_ROOT: ${TRANSCODE_ROOT}
       ANDROID_RELEASE_ROOT: /data/releases/android
-      TRANSMISSION_RPC_URL: ${TRANSMISSION_RPC_URL:-http://localhost:9091/transmission/rpc}
+      TRANSMISSION_RPC_URL: http://transmission:9091/transmission/rpc
       TRANSMISSION_USER: ${TRANSMISSION_USER:-admin}
-      TRANSMISSION_PASS: ${TRANSMISSION_PASS:-flux}
+      TRANSMISSION_PASS: ${TRANSMISSION_PASS:?Set a strong Transmission password}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
     volumes:
@@ -101,17 +100,20 @@ services:
       - transcode:/data/transcode
       - ${FLUX_EXTRA_PATH:-/storage/flux-extra}:/data/extra
       - ./releases/android:/data/releases/android:ro
+    expose:
+      - "${BACKEND_PORT:-6948}"
 
   frontend:
-    image: ${FLUX_IMAGE_PREFIX:-ghcr.io/idkdeadxd/flux}-frontend:${FLUX_IMAGE_TAG:-latest}
+    image: ${FLUX_IMAGE_PREFIX:-ghcr.io/idkdeadxd/flux}-frontend:${FLUX_IMAGE_TAG:?Set FLUX_IMAGE_TAG to an immutable sha-* tag}
     restart: unless-stopped
-    network_mode: host
     depends_on:
       - backend
     environment:
       NODE_ENV: production
-      FLUX_INTERNAL_API_BASE_URL: ${FLUX_INTERNAL_API_BASE_URL:-http://127.0.0.1:${BACKEND_PORT:-6948}}
+      FLUX_INTERNAL_API_BASE_URL: http://backend:${BACKEND_PORT:-6948}
       PORT: ${FRONTEND_PORT:-4938}
+    ports:
+      - "${FRONTEND_PORT:-4938}:${FRONTEND_PORT:-4938}"
 
 volumes:
   pgdata:

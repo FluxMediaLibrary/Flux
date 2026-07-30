@@ -5,7 +5,11 @@ import { config } from '../../config.js';
 
 function derivedServerId(): string {
   if (config.FLUX_SERVER_ID) return config.FLUX_SERVER_ID;
-  const hex = createHash('sha256').update(`flux-server:${config.JWT_SECRET}`).digest('hex').slice(0, 32);
+  // Server identity must never expose a verifier derived from an authentication secret.
+  const hex = createHash('sha256')
+    .update(`flux-server:${config.FRONTEND_ORIGIN}:${config.FLUX_SERVER_NAME}`)
+    .digest('hex')
+    .slice(0, 32);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 

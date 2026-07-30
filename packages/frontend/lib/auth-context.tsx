@@ -39,6 +39,7 @@ import {
 import type {
   AccountDTO,
   CreateProfileRequest,
+  DeleteProfileRequest,
   LoginRequest,
   ProfileDTO,
   Role,
@@ -67,13 +68,13 @@ export interface AuthState {
   isAdmin: boolean;
   login: (body: LoginRequest) => Promise<void>;
   signup: (body: SignupRequest) => Promise<void>;
-  activateProfile: (profileId: string) => Promise<void>;
+  activateProfile: (profileId: string, pin?: string) => Promise<void>;
   addProfile: (body: CreateProfileRequest) => Promise<ProfileDTO>;
   editProfile: (
     profileId: string,
     body: UpdateProfileRequest,
   ) => Promise<ProfileDTO>;
-  removeProfile: (profileId: string) => Promise<void>;
+  removeProfile: (profileId: string, body?: DeleteProfileRequest) => Promise<void>;
   switchProfile: () => void;
   logout: () => void;
 }
@@ -151,8 +152,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistAuth(res.token, res.account, res.profiles);
   }, []);
 
-  const activateProfile = useCallback(async (profileId: string) => {
-    const res = await api.activateProfile(profileId, getBaseToken());
+  const activateProfile = useCallback(async (profileId: string, pin?: string) => {
+    const res = await api.activateProfile(profileId, pin ? { pin } : {}, getBaseToken());
     // The activation response carries a NEW token with activeProfileId — it
     // becomes the effective Bearer; the base token is preserved for switching.
     setTokens({ token: res.token });
@@ -189,8 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const removeProfile = useCallback(async (profileId: string) => {
-    await api.deleteProfile(profileId, getBaseToken());
+  const removeProfile = useCallback(async (profileId: string, body: DeleteProfileRequest = {}) => {
+    await api.deleteProfile(profileId, body, getBaseToken());
     setProfiles((prev) => {
       const next = prev.filter((p) => p.id !== profileId);
       writeCache(PROFILES_KEY, next);

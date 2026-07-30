@@ -4,7 +4,7 @@
 # below are relative to the monorepo root and include `shared/`.
 
 # ── Stage 1: install workspace dependencies ──────────────────────────────────
-FROM node:22-alpine AS deps
+FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS deps
 WORKDIR /app
 
 # Workspace manifests only, for a cacheable dependency layer.
@@ -17,7 +17,7 @@ COPY packages/backend/package.json ./packages/backend/
 RUN npm install -w @flux/frontend -w @flux/shared
 
 # ── Stage 2: build ───────────────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -35,7 +35,7 @@ RUN npm run build -w @flux/shared \
   && npm run build -w @flux/frontend
 
 # ── Stage 3: runtime ─────────────────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

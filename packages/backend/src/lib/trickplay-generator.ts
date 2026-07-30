@@ -9,6 +9,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { mkdir, writeFile, stat } from 'node:fs/promises';
+import { config } from '../config.js';
 
 /** How often to sample a frame (seconds). */
 const INTERVAL_SEC = 10;
@@ -17,8 +18,12 @@ const TILES_PER_ROW = 10;
 /** Fixed thumbnail dimensions used by both the sprite and VTT coordinates. */
 const THUMB_WIDTH = 160;
 const THUMB_HEIGHT = 90;
+/** Avoid enormous single JPEGs for unusually long recordings. */
+const MAX_FRAMES = 1200;
+const TRICKPLAY_TIMEOUT_MS = 10 * 60 * 1000;
 
 const trickplayJobs = new Map<string, Promise<boolean>>();
+let activeTrickplayJobs = 0;
 
 export const TRICKPLAY_FILES = new Set(['trickplay.vtt', 'trickplay-sprite.jpg']);
 
@@ -39,6 +44,10 @@ export function ensureTrickplay(sourceFile: string, durationSec: number): Promis
   const vttPath = path.join(outputDir, 'trickplay.vtt');
   const existing = trickplayJobs.get(sourceFile);
   if (existing) return existing;
+  if (activeTrickplayJobs >= config.MAX_CONCURRENT_TRICKPLAY) {
+    return Promise.resolve(false);
+  }
+  activeTrickplayJobs += 1;
 
   const job = Promise.all([
     stat(spritePath).catch(() => null),
@@ -49,7 +58,10 @@ export function ensureTrickplay(sourceFile: string, durationSec: number): Promis
       return generateTrickplay(sourceFile, outputDir, durationSec).then(Boolean);
     })
     .catch(() => false)
-    .finally(() => trickplayJobs.delete(sourceFile));
+    .finally(() => {
+      trickplayJobs.delete(sourceFile);
+      activeTrickplayJobs = Math.max(0, activeTrickplayJobs - 1);
+    });
 
   trickplayJobs.set(sourceFile, job);
   return job;
@@ -67,7 +79,7 @@ export async function generateTrickplay(
   outputDir: string,
   durationSec: number,
 ): Promise<string | null> {
-  if (durationSec <= 0) return null;
+  if (!Number.isFinite(durationSec) || durationSec <= 0) return null;
 
   const spritePath = path.join(outputDir, 'trickplay-sprite.jpg');
   const vttPath = path.join(outputDir, 'trickplay.vtt');
@@ -77,7 +89,8 @@ export async function generateTrickplay(
   // ffmpeg: extract frames at intervals, tile into sprite sheet
   // tile=10xN: 10 columns, auto rows
   // fps=1/10: one frame every 10 seconds
-  const frameCount = Math.ceil(durationSec / INTERVAL_SEC);
+  const sampleIntervalSec = Math.max(INTERVAL_SEC, Math.ceil(durationSec / MAX_FRAMES));
+  const frameCount = Math.min(MAX_FRAMES, Math.ceil(durationSec / sampleIntervalSec));
   const rows = Math.ceil(frameCount / TILES_PER_ROW);
 
   if (frameCount === 0) return null;
@@ -85,7 +98,7 @@ export async function generateTrickplay(
   const args = [
     '-skip_frame', 'nokey',  // only keyframes (faster)
     '-i', sourceFile,
-    '-vf', `fps=1/${INTERVAL_SEC},scale=${THUMB_WIDTH}:${THUMB_HEIGHT}:force_original_aspect_ratio=decrease,pad=${THUMB_WIDTH}:${THUMB_HEIGHT}:(ow-iw)/2:(oh-ih)/2,tile=${TILES_PER_ROW}x${rows}`,
+    '-vf', `fps=1/${sampleIntervalSec},scale=${THUMB_WIDTH}:${THUMB_HEIGHT}:force_original_aspect_ratio=decrease,pad=${THUMB_WIDTH}:${THUMB_HEIGHT}:(ow-iw)/2:(oh-ih)/2,tile=${TILES_PER_ROW}x${rows}`,
     '-frames:v', '1',
     '-q:v', '4',
     '-y',
@@ -94,24 +107,35 @@ export async function generateTrickplay(
 
   return new Promise((resolve) => {
     const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let settled = false;
+    const finish = (result: string | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(result);
+    };
+    const timeout = setTimeout(() => {
+      proc.kill('SIGKILL');
+      finish(null);
+    }, TRICKPLAY_TIMEOUT_MS);
     let stderr = '';
     proc.stderr?.on('data', (c: Buffer) => { stderr += c.toString(); });
-    proc.on('error', () => resolve(null));
+    proc.on('error', () => finish(null));
     proc.on('exit', async (code) => {
       if (code !== 0) {
         console.error(`[Trickplay] ffmpeg failed: ${stderr.slice(-500)}`);
-        resolve(null);
+        finish(null);
         return;
       }
       // Verify sprite was created
       const s = await stat(spritePath).catch(() => null);
-      if (!s || s.size === 0) { resolve(null); return; }
+      if (!s || s.size === 0) { finish(null); return; }
 
       // Generate VTT metadata
       const vttLines: string[] = ['WEBVTT', ''];
       for (let i = 0; i < frameCount; i++) {
-        const startTime = fmtVtt(i * INTERVAL_SEC);
-        const endTime = fmtVtt(Math.min((i + 1) * INTERVAL_SEC, durationSec));
+        const startTime = fmtVtt(i * sampleIntervalSec);
+        const endTime = fmtVtt(Math.min((i + 1) * sampleIntervalSec, durationSec));
         const col = i % TILES_PER_ROW;
         const row = Math.floor(i / TILES_PER_ROW);
         const x = col * THUMB_WIDTH;
@@ -123,7 +147,7 @@ export async function generateTrickplay(
       }
 
       await writeFile(vttPath, vttLines.join('\n'));
-      resolve(spritePath);
+      finish(spritePath);
     });
   });
 }

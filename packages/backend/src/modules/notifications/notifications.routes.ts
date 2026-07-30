@@ -9,10 +9,14 @@ import { z } from 'zod';
 import type { FastifyPluginAsync } from 'fastify';
 import { getSettings, updateSettings } from './notifications.service.js';
 import { writeAuditEvent } from '../admin/admin-control.service.js';
+import { isAllowedDiscordWebhook } from '../../lib/discord-webhook.js';
 
 const updateSettingsSchema = z.object({
   discordEnabled: z.boolean().optional(),
-  discordWebhookUrl: z.string().url().nullable().optional(),
+  discordWebhookUrl: z.string().url()
+    .refine(isAllowedDiscordWebhook, 'Enter a valid HTTPS Discord webhook URL')
+    .nullable()
+    .optional(),
   smtpEnabled: z.boolean().optional(),
   smtpHost: z.string().nullable().optional(),
   smtpPort: z.number().int().positive().nullable().optional(),

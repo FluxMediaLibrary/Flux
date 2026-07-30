@@ -32,6 +32,7 @@ export function toProfileDTO(profile: Profile): ProfileDTO {
     id: profile.id,
     name: profile.name,
     avatar: profile.avatar,
+    hasPin: Boolean(profile.pinHash),
     createdAt: profile.createdAt.toISOString(),
   };
 }

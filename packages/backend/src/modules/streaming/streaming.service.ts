@@ -364,7 +364,7 @@ export async function getPlaybackInfo(
   filePath: string,
   mediaItemId: string,
   episodeId?: string,
-): Promise<PlaybackInfoDTO> {
+): Promise<Omit<PlaybackInfoDTO, 'streamToken' | 'streamTokenExpiresAt'>> {
   const decision = await decidePlayback(filePath, mediaItemId, episodeId);
   const where = episodeId ? { episodeId } : { mediaItemId };
   const streams = await prisma.mediaStream.findMany({

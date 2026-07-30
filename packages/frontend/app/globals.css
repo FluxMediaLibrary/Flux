@@ -3497,6 +3497,98 @@ table.data tr:last-child td {
 .browse-page {
   padding-top: 24px;
 }
+
+.profile-lock-badge {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 2px solid #0d0f12;
+  border-radius: 50%;
+  background: #f4f4f5;
+  color: #111318;
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 45%);
+}
+
+.profile-pin-field {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid rgb(255 255 255 / 10%);
+}
+
+.profile-pin-input {
+  max-width: 320px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .18em;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: .8rem;
+  line-height: 1.5;
+}
+
+.profile-pin-modal {
+  width: min(430px, calc(100vw - 32px));
+  text-align: center;
+}
+
+.profile-pin-avatar {
+  position: relative;
+  display: inline-flex;
+  margin: 0 auto 18px;
+}
+
+.profile-pin-kicker {
+  margin: 0 0 7px;
+  color: #b7a8ff;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.profile-pin-entry {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: .01;
+}
+
+.profile-pin-dots {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin: 28px 0 24px;
+}
+
+.profile-pin-dots span {
+  width: 17px;
+  height: 17px;
+  border: 2px solid rgb(255 255 255 / 36%);
+  border-radius: 50%;
+  background: transparent;
+  transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.profile-pin-dots span.filled {
+  border-color: #f5f3ff;
+  background: #f5f3ff;
+  transform: scale(1.08);
+}
+
+.profile-pin-actions {
+  justify-content: center;
+}
 .browse-workbench {
   display: grid;
   gap: 16px;

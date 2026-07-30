@@ -33,12 +33,33 @@ export async function buildServer(): Promise<FastifyInstance> {
           level: 'debug',
           transport: { target: 'pino-pretty', options: { colorize: true } },
         },
-    // Trust the reverse proxy (single-VPS deployment behind the frontend/proxy).
-    trustProxy: true,
+    // The backend is private to the Compose network. Trust only local/private
+    // reverse-proxy hops so rate limits still see the originating client.
+    trustProxy: ['loopback', 'linklocal', 'uniquelocal'],
+    // Media credentials are query parameters; never emit raw request URLs.
+    disableRequestLogging: true,
     bodyLimit: 2 * 1024 * 1024, // 2 MiB JSON limit (torrent uploads handled later)
   });
 
   registerErrorHandler(app);
+
+  app.addHook('onRequest', async (_request, reply) => {
+    reply
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('Referrer-Policy', 'no-referrer')
+      .header('X-Frame-Options', 'DENY')
+      .header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+      .header('Cross-Origin-Resource-Policy', 'same-site');
+  });
+
+  app.addHook('onResponse', async (request, reply) => {
+    request.log.info({
+      method: request.method,
+      route: request.routeOptions.url,
+      statusCode: reply.statusCode,
+      responseTimeMs: Math.round(reply.elapsedTime),
+    }, 'request completed');
+  });
 
   await app.register(cors, {
     origin: config.FRONTEND_ORIGIN,

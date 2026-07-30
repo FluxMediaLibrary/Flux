@@ -54,8 +54,8 @@ final class FluxServerConfig {
         Uri uri = Uri.parse(trimmed);
         String scheme = uri.getScheme();
         String host = uri.getHost();
-        if (!"https".equalsIgnoreCase(scheme) && !"http".equalsIgnoreCase(scheme)) {
-            throw new IllegalArgumentException("Use an http:// or https:// URL.");
+        if (!"https".equalsIgnoreCase(scheme)) {
+            throw new IllegalArgumentException("Flux for Android requires an https:// server URL.");
         }
         if (host == null || host.trim().isEmpty()) {
             throw new IllegalArgumentException("Enter a valid host, like https://domain.com.");
