@@ -1,5 +1,15 @@
 import fs from 'node:fs/promises';
-import { ADMIN_PERMISSIONS, type AdminActivityEventDTO, type AdminOverviewDTO, type AdminPermission, type AdminPlaybackSessionDTO, type AdminSignalDTO, type AdminUserDTO, type UpdateAdminUserRequest } from '@flux/shared';
+import {
+  ADMIN_PERMISSIONS,
+  normalizeProfileAvatarReference,
+  type AdminActivityEventDTO,
+  type AdminOverviewDTO,
+  type AdminPermission,
+  type AdminPlaybackSessionDTO,
+  type AdminSignalDTO,
+  type AdminUserDTO,
+  type UpdateAdminUserRequest,
+} from '@flux/shared';
 import { Prisma } from '@prisma/client';
 import { config } from '../../config.js';
 import { prisma } from '../../lib/db.js';
@@ -260,7 +270,11 @@ export async function listAdminUsers(): Promise<AdminUserDTO[]> {
       disabled: user.disabled,
       requestLimit: user.requestLimit,
       streamLimit: user.streamLimit,
-      profiles: user.profiles.map(({ id, name, avatar }) => ({ id, name, avatar })),
+      profiles: user.profiles.map(({ id, name, avatar }) => ({
+        id,
+        name,
+        avatar: normalizeProfileAvatarReference(avatar),
+      })),
       requestCount: user.profiles.reduce((sum, profile) => sum + profile._count.requests, 0),
       currentStreamCount,
       lastActiveAt: lastActive?.toISOString() ?? null,
