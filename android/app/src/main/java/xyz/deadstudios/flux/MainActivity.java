@@ -2,6 +2,7 @@ package xyz.deadstudios.flux;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
@@ -27,6 +28,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -197,6 +199,12 @@ public final class MainActivity extends AppCompatActivity {
         retry.setText("Retry");
         retry.setOnClickListener(view -> loadStartUrl());
         errorPanel.addView(retry);
+
+        Button changeServer = new Button(this);
+        changeServer.setText("Change URL");
+        changeServer.setOnClickListener(view -> showServerUrlPrompt(true));
+        errorPanel.addView(changeServer);
+
         root.addView(errorPanel, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
@@ -261,13 +269,47 @@ public final class MainActivity extends AppCompatActivity {
 
     private void loadStartUrl() {
         errorPanel.setVisibility(View.GONE);
+        String url = FluxServerConfig.getStartUrl(this);
+        if (url == null) {
+            showServerUrlPrompt(false);
+            return;
+        }
         if (!isOnline()) {
             showError("Offline", "No network connection is available.");
             return;
         }
-        String url = getString(R.string.flux_start_url);
         Log.i(TAG, "Loading start URL: " + redact(url));
         webView.loadUrl(url);
+    }
+
+    private void showServerUrlPrompt(boolean allowCancel) {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHint("https://domain.com or http://102.3.214.3");
+        input.setText(FluxServerConfig.getBaseUrl(this) == null ? "" : FluxServerConfig.getBaseUrl(this));
+        input.setSelectAllOnFocus(true);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Flux server URL")
+            .setMessage("Enter the URL for your Flux web app.")
+            .setView(input)
+            .setPositiveButton("Continue", null)
+            .setNegativeButton(allowCancel ? "Cancel" : "Exit", (d, which) -> {
+                if (!allowCancel) finish();
+            })
+            .setCancelable(allowCancel)
+            .create();
+
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+            try {
+                FluxServerConfig.setBaseUrl(this, input.getText().toString());
+                dialog.dismiss();
+                loadStartUrl();
+            } catch (IllegalArgumentException error) {
+                input.setError(error.getMessage());
+            }
+        }));
+        dialog.show();
     }
 
     private boolean isOnline() {
@@ -282,10 +324,7 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private boolean isAllowedInternalUrl(Uri uri) {
-        String scheme = uri.getScheme();
-        String host = uri.getHost();
-        return ("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme))
-            && getString(R.string.flux_allowed_host).equalsIgnoreCase(host);
+        return FluxServerConfig.isConfiguredInternalUrl(this, uri);
     }
 
     private void openExternal(Uri uri) {
@@ -362,7 +401,7 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private CastPlaybackInfo fetchCastPlaybackInfo(NativePlaybackContext request, String token) throws Exception {
-        String url = getString(R.string.flux_api_base_url) + "/api/cast/sessions";
+        String url = FluxServerConfig.requireBaseUrl(this) + "/api/cast/sessions";
         Log.i(TAG, "Creating scoped cast session at " + redact(url));
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setConnectTimeout(10000);

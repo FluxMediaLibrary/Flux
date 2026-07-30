@@ -46,6 +46,10 @@ final class UpdateManager {
     }
 
     static void checkForUpdate(Context context, boolean manual) {
+        if (FluxServerConfig.getBaseUrl(context) == null) {
+            if (manual) toast(context, "Set the Flux server URL before checking for updates.");
+            return;
+        }
         if (!manual && (!areAutomaticUpdatesEnabled(context) ||
             System.currentTimeMillis() - context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("last_update_check", 0) < CHECK_INTERVAL_MS)) return;
         WORKER.execute(() -> {
@@ -74,7 +78,7 @@ final class UpdateManager {
     }
 
     private static Manifest fetchManifest(Context context) throws Exception {
-        String base = context.getString(R.string.flux_api_base_url).replaceAll("/+$", "");
+        String base = FluxServerConfig.requireBaseUrl(context);
         List<Exception> failures = new ArrayList<>();
         for (String path : new String[] { "/api/app/android/latest", "/app-version.json" }) {
             URL url = new URL(base + path);

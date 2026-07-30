@@ -40,7 +40,7 @@ final class FluxNativeBridge {
             info.put("versionName", BuildConfig.VERSION_NAME);
             info.put("versionCode", BuildConfig.VERSION_CODE);
             info.put("automaticUpdates", UpdateManager.areAutomaticUpdatesEnabled(activity));
-            info.put("updateServer", activity.getString(R.string.flux_api_base_url));
+            info.put("updateServer", FluxServerConfig.getBaseUrl(activity));
             return info.toString();
         } catch (Exception error) {
             Log.w("FluxNativeBridge", "Could not build app info", error);
