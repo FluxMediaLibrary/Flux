@@ -253,9 +253,12 @@ location / {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 }
 
-# Backend remains private
-# `/api/*` is forwarded privately by the frontend container. Do not publish
-# the backend port or add a second public nginx route for it.
+# Backend API and media; Compose binds this port to 127.0.0.1 only.
+location /api/ {
+    proxy_pass http://127.0.0.1:6948;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
 ```
 
 ### 7. First Login

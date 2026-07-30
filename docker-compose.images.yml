@@ -102,6 +102,10 @@ services:
       - ./releases/android:/data/releases/android:ro
     expose:
       - "${BACKEND_PORT:-6948}"
+    # Keep compatibility with the host nginx route without exposing Fastify
+    # to the LAN/public network.
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-6948}:${BACKEND_PORT:-6948}"
 
   frontend:
     image: ${FLUX_IMAGE_PREFIX:-ghcr.io/idkdeadxd/flux}-frontend:${FLUX_IMAGE_TAG:?Set FLUX_IMAGE_TAG to an immutable sha-* tag}

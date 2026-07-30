@@ -100,6 +100,23 @@ server {
         proxy_read_timeout 86400;
     }
 
+    # Backend is bound to host loopback only, so nginx can serve API and media
+    # without making the Fastify port publicly reachable.
+    location /api/ {
+        proxy_pass http://127.0.0.1:6948;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        client_max_body_size 10M;
+        proxy_read_timeout 86400;
+    }
+
+    location /health {
+        proxy_pass http://127.0.0.1:6948;
+    }
+
 }
 NGINXEOF
 
