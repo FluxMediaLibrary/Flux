@@ -94,9 +94,6 @@ function EditProfileModal({
   const { editProfile, removeProfile } = useAuth();
   const [name, setName] = useState(profile.name);
   const [avatar, setAvatar] = useState<string | null>(profile.avatar);
-  const [pin, setPin] = useState('');
-  const [removePin, setRemovePin] = useState(false);
-  const [accountPassword, setAccountPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,22 +104,7 @@ function EditProfileModal({
     setError(null);
     setSaving(true);
     try {
-      if (pin && !/^\d{4}$/.test(pin)) {
-        setError('PIN must be exactly four digits.');
-        setSaving(false);
-        return;
-      }
-      if ((pin || removePin) && !accountPassword) {
-        setError('Enter the account password to change this profile PIN.');
-        setSaving(false);
-        return;
-      }
-      await editProfile(profile.id, {
-        name: name.trim(),
-        avatar,
-        ...(removePin ? { pin: null } : pin ? { pin } : {}),
-        ...(pin || removePin ? { accountPassword } : {}),
-      });
+      await editProfile(profile.id, { name: name.trim(), avatar });
       onClose();
     } catch (err) {
       setError(err instanceof FluxApiError ? err.message : 'Could not save changes.');
@@ -131,17 +113,13 @@ function EditProfileModal({
   }
 
   async function remove() {
-    if (profile.hasPin && !accountPassword) {
-      setError('Enter the account password before deleting this protected profile.');
-      return;
-    }
     if (!window.confirm(`Delete the profile "${profile.name}"? This cannot be undone.`)) {
       return;
     }
     setError(null);
     setDeleting(true);
     try {
-      await removeProfile(profile.id, profile.hasPin ? { accountPassword } : {});
+      await removeProfile(profile.id);
       onClose();
     } catch (err) {
       setError(err instanceof FluxApiError ? err.message : 'Could not delete profile.');
@@ -183,52 +161,6 @@ function EditProfileModal({
             <AvatarPicker name={name} value={avatar} onChange={setAvatar} />
           </div>
 
-          <div className="field profile-pin-field">
-            <label htmlFor="edit-pin">{profile.hasPin ? 'Change profile PIN' : 'Add a profile PIN'}</label>
-            <input
-              id="edit-pin"
-              className="input profile-pin-input"
-              type="password"
-              inputMode="numeric"
-              autoComplete="new-password"
-              pattern="\d{4}"
-              maxLength={4}
-              value={pin}
-              disabled={removePin}
-              placeholder={profile.hasPin ? 'Leave blank to keep current PIN' : 'Optional 4-digit PIN'}
-              onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
-            />
-            <span className="field-hint">This PIN locks only this profile. Your account password remains the recovery key.</span>
-            {profile.hasPin && (
-              <button
-                className="btn btn-ghost danger"
-                type="button"
-                onClick={() => {
-                  setRemovePin((value) => !value);
-                  setPin('');
-                }}
-              >
-                {removePin ? 'Keep current PIN' : 'Remove PIN'}
-              </button>
-            )}
-          </div>
-
-          {(profile.hasPin || pin || removePin) && (
-            <div className="field">
-              <label htmlFor="profile-account-password">Account password</label>
-              <input
-                id="profile-account-password"
-                className="input"
-                type="password"
-                autoComplete="current-password"
-                value={accountPassword}
-                onChange={(event) => setAccountPassword(event.target.value)}
-                placeholder="Required for PIN changes or protected-profile deletion"
-              />
-              <span className="field-hint">Prevents someone at the profile picker from removing the lock.</span>
-            </div>
-          )}
-
           <div className="modal-actions">
             {canDelete && (
               <button
@@ -260,71 +192,6 @@ function EditProfileModal({
   );
 }
 
-function ProfilePinModal({
-  profile,
-  busy,
-  error,
-  onSubmit,
-  onClose,
-}: {
-  profile: ProfileDTO;
-  busy: boolean;
-  error: string | null;
-  onSubmit: (pin: string) => void;
-  onClose: () => void;
-}) {
-  const [pin, setPin] = useState('');
-
-  return (
-    <div className="modal-overlay profile-pin-overlay" role="presentation" onClick={onClose}>
-      <form
-        className="modal-card profile-pin-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="profile-pin-title"
-        onClick={(event) => event.stopPropagation()}
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (pin.length === 4) onSubmit(pin);
-        }}
-      >
-        <div className="profile-pin-avatar">
-          <Avatar name={profile.name} avatar={profile.avatar} size={82} />
-          <span className="profile-lock-badge" aria-hidden>⌁</span>
-        </div>
-        <p className="profile-pin-kicker">Protected profile</p>
-        <h2 id="profile-pin-title">Enter {profile.name}&apos;s PIN</h2>
-        <p className="muted">Four digits unlock this profile for watching.</p>
-        <input
-          className="input profile-pin-entry"
-          type="password"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          aria-label="Four-digit profile PIN"
-          pattern="\d{4}"
-          maxLength={4}
-          value={pin}
-          autoFocus
-          disabled={busy}
-          onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
-        />
-        <div className="profile-pin-dots" aria-hidden>
-          {[0, 1, 2, 3].map((index) => (
-            <span key={index} className={index < pin.length ? 'filled' : ''} />
-          ))}
-        </div>
-        {error && <div className="form-error">{error}</div>}
-        <div className="modal-actions profile-pin-actions">
-          <button className="btn btn-ghost" type="button" onClick={onClose} disabled={busy}>Back</button>
-          <button className="btn btn-primary" type="submit" disabled={busy || pin.length !== 4}>
-            {busy ? 'Unlocking…' : 'Continue'}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 function ProfilePicker() {
   const { profiles, activateProfile, addProfile } = useAuth();
   const router = useRouter();
@@ -334,30 +201,18 @@ function ProfilePicker() {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newAvatar, setNewAvatar] = useState<string | null>(null);
-  const [newPin, setNewPin] = useState('');
   const [creating, setCreating] = useState(false);
   const [managing, setManaging] = useState(false);
   const [editing, setEditing] = useState<ProfileDTO | null>(null);
-  const [lockedProfile, setLockedProfile] = useState<ProfileDTO | null>(null);
-  const [pinError, setPinError] = useState<string | null>(null);
 
-  async function choose(profile: ProfileDTO, pin?: string) {
-    if (profile.hasPin && !pin) {
-      setPinError(null);
-      setLockedProfile(profile);
-      return;
-    }
+  async function choose(profile: ProfileDTO) {
     setError(null);
-    setPinError(null);
     setBusyId(profile.id);
     try {
-      await activateProfile(profile.id, pin);
-      setLockedProfile(null);
+      await activateProfile(profile.id);
       router.replace('/library');
     } catch (err) {
-      const message = err instanceof FluxApiError ? err.message : 'Could not select profile.';
-      if (profile.hasPin) setPinError(message);
-      else setError(message);
+      setError(err instanceof FluxApiError ? err.message : 'Could not select profile.');
       setBusyId(null);
     }
   }
@@ -368,17 +223,14 @@ function ProfilePicker() {
     setError(null);
     setCreating(true);
     try {
-      const createdPin = newPin;
       const profile = await addProfile({
         name: newName.trim(),
         ...(newAvatar ? { avatar: newAvatar } : {}),
-        ...(createdPin ? { pin: createdPin } : {}),
       });
       setNewName('');
       setNewAvatar(null);
-      setNewPin('');
       setAdding(false);
-      await choose(profile, createdPin || undefined);
+      await choose(profile);
     } catch (err) {
       setError(err instanceof FluxApiError ? err.message : 'Could not create profile.');
       setCreating(false);
@@ -409,9 +261,6 @@ function ProfilePicker() {
               <span className="profile-avatar-wrap">
                 <Avatar name={p.name} avatar={p.avatar} size={118} />
                 {managing && <span className="profile-edit-badge">✎</span>}
-                {p.hasPin && !managing && (
-                  <span className="profile-lock-badge" title="PIN protected" aria-label="PIN protected">⌁</span>
-                )}
                 {busyId === p.id && <span className="profile-avatar-busy">…</span>}
               </span>
               <span className="profile-card-name">{p.name}</span>
@@ -449,21 +298,6 @@ function ProfilePicker() {
               <label>Avatar</label>
               <AvatarPicker name={newName} value={newAvatar} onChange={setNewAvatar} />
             </div>
-            <div className="field">
-              <label htmlFor="new-pin">Profile PIN</label>
-              <input
-                id="new-pin"
-                className="input profile-pin-input"
-                type="password"
-                inputMode="numeric"
-                autoComplete="new-password"
-                pattern="\d{4}"
-                maxLength={4}
-                value={newPin}
-                placeholder="Optional 4-digit PIN"
-                onChange={(event) => setNewPin(event.target.value.replace(/\D/g, '').slice(0, 4))}
-              />
-            </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn btn-primary" type="submit" disabled={creating}>
                 {creating ? 'Creating…' : 'Create & enter'}
@@ -475,7 +309,6 @@ function ProfilePicker() {
                   setAdding(false);
                   setNewName('');
                   setNewAvatar(null);
-                  setNewPin('');
                 }}
                 disabled={creating}
               >
@@ -503,19 +336,6 @@ function ProfilePicker() {
           profile={editing}
           canDelete={profiles.length > 1}
           onClose={() => setEditing(null)}
-        />
-      )}
-      {lockedProfile && (
-        <ProfilePinModal
-          profile={lockedProfile}
-          busy={busyId === lockedProfile.id}
-          error={pinError}
-          onSubmit={(pin) => void choose(lockedProfile, pin)}
-          onClose={() => {
-            if (busyId) return;
-            setLockedProfile(null);
-            setPinError(null);
-          }}
         />
       )}
     </main>

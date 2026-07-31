@@ -8,12 +8,7 @@
  */
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { ApiError } from '../../lib/errors.js';
-import {
-  activateProfileSchema,
-  createProfileSchema,
-  deleteProfileSchema,
-  updateProfileSchema,
-} from './profiles.schema.js';
+import { createProfileSchema, updateProfileSchema } from './profiles.schema.js';
 import {
   listProfiles,
   createProfile,
@@ -53,8 +48,7 @@ export const profileRoutes: FastifyPluginAsync = async (
     const account = request.account!;
     const { id } = request.params;
     if (!id) throw ApiError.badRequest('Profile id is required');
-    const input = deleteProfileSchema.parse(request.body ?? {});
-    await deleteProfile(account.id, id, input);
+    await deleteProfile(account.id, id);
     return reply.status(204).send();
   });
 
@@ -64,8 +58,7 @@ export const profileRoutes: FastifyPluginAsync = async (
       const account = request.account!;
       const { id } = request.params;
       if (!id) throw ApiError.badRequest('Profile id is required');
-      const { pin } = activateProfileSchema.parse(request.body ?? {});
-      const result = await activateProfile(account.id, account.role, id, pin);
+      const result = await activateProfile(account.id, account.role, id);
       return reply.send(result);
     },
   );

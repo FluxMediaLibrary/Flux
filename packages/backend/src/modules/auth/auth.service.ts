@@ -8,13 +8,7 @@
  *  - Login returns an AuthResponse whose token has NO active profile yet.
  */
 import argon2 from 'argon2';
-import {
-  ADMIN_PERMISSIONS,
-  normalizeProfileAvatarReference,
-  type AuthResponse,
-  type AccountDTO,
-  type ProfileDTO,
-} from '@flux/shared';
+import { ADMIN_PERMISSIONS, type AuthResponse, type AccountDTO, type ProfileDTO } from '@flux/shared';
 import type { User, Profile } from '@prisma/client';
 import { prisma } from '../../lib/db.js';
 import { signToken } from '../../lib/jwt.js';
@@ -37,8 +31,7 @@ export function toProfileDTO(profile: Profile): ProfileDTO {
   return {
     id: profile.id,
     name: profile.name,
-    avatar: normalizeProfileAvatarReference(profile.avatar),
-    hasPin: Boolean(profile.pinHash),
+    avatar: profile.avatar,
     createdAt: profile.createdAt.toISOString(),
   };
 }

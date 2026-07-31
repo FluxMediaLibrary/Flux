@@ -1,6 +1,5 @@
 import type {
   ActivateProfileResponse,
-  ActivateProfileRequest,
   AdminRequestFulfillmentSyncResultDTO,
   AdminBulkEpisodeSyncResultDTO,
   AdminBulkMediaAnalyzeResultDTO,
@@ -21,7 +20,6 @@ import type {
   ConfirmTorrentRequest,
   CreateInviteRequest,
   CreateProfileRequest,
-  DeleteProfileRequest,
   CreateRequestRequest,
   HomeRowsDTO,
   InviteDTO,
@@ -223,10 +221,10 @@ export const api = {
   },
 
   // Profiles
-  activateProfile(profileId: string, body: ActivateProfileRequest = {}, baseToken?: string | null) {
+  activateProfile(profileId: string, baseToken?: string | null) {
     return request<ActivateProfileResponse>(
       `/api/profiles/${encodeURIComponent(profileId)}/activate`,
-      { method: 'POST', body, token: baseToken ?? getBaseToken() },
+      { method: 'POST', token: baseToken ?? getBaseToken() },
     );
   },
   createProfile(body: CreateProfileRequest, baseToken?: string | null) {
@@ -245,10 +243,9 @@ export const api = {
       { method: 'PATCH', body, token: baseToken ?? getBaseToken() },
     );
   },
-  deleteProfile(profileId: string, body: DeleteProfileRequest = {}, baseToken?: string | null) {
+  deleteProfile(profileId: string, baseToken?: string | null) {
     return request<void>(`/api/profiles/${encodeURIComponent(profileId)}`, {
       method: 'DELETE',
-      body,
       token: baseToken ?? getBaseToken(),
     });
   },
@@ -415,13 +412,14 @@ export const api = {
   },
 
   // Streaming
-  // Media URLs carry a short-lived, media-scoped credential returned by /info.
-  // The long-lived account/profile token must never be placed in a URL.
-  getStreamUrl(mediaItemId: string, episodeId: string | undefined, streamToken: string): string {
+  // The token rides in the query string because <video> / hls.js segment
+  // requests cannot set an Authorization header (see requireProfileStream).
+  getStreamUrl(mediaItemId: string, episodeId?: string): string {
     if (typeof window === 'undefined') return '';
     const qs = new URLSearchParams();
     if (episodeId) qs.set('episodeId', episodeId);
-    qs.set('token', streamToken);
+    const token = getToken();
+    if (token) qs.set('token', token);
     const q = qs.toString();
     return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}${q ? `?${q}` : ''}`;
   },
@@ -432,8 +430,7 @@ export const api = {
   },
   getHlsUrl(
     mediaItemId: string,
-    episodeId: string | undefined,
-    streamToken: string,
+    episodeId?: string,
     audioStreamIndex?: number | null,
     startTimeSeconds = 0,
     reloadNonce = 0,
@@ -446,24 +443,27 @@ export const api = {
     if (startTimeSeconds > 0) qs.set('startTime', startTimeSeconds.toFixed(3));
     if (reloadNonce > 0) qs.set('reload', String(reloadNonce));
     if (forceAdaptive) qs.set('adaptive', '1');
-    qs.set('token', streamToken);
+    const token = getToken();
+    if (token) qs.set('token', token);
     const q = qs.toString();
     return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/hls/index.m3u8${q ? `?${q}` : ''}`;
   },
   /** Build a thumbnail frame URL for the seek-bar preview. */
-  getThumbUrl(mediaItemId: string, timeSeconds: number, episodeId: string | undefined, streamToken: string): string {
+  getThumbUrl(mediaItemId: string, timeSeconds: number, episodeId?: string): string {
     if (typeof window === 'undefined') return '';
     const qs = new URLSearchParams({ t: String(Math.floor(timeSeconds)) });
     if (episodeId) qs.set('episodeId', episodeId);
-    qs.set('token', streamToken);
+    const token = getToken();
+    if (token) qs.set('token', token);
     return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/thumb?${qs.toString()}`;
   },
   /** Build a trickplay asset URL (sprite sheet or VTT). */
-  getTrickplayUrl(mediaItemId: string, file: string, episodeId: string | undefined, streamToken: string): string {
+  getTrickplayUrl(mediaItemId: string, file: string, episodeId?: string): string {
     if (typeof window === 'undefined') return '';
     const qs = new URLSearchParams();
     if (episodeId) qs.set('episodeId', episodeId);
-    qs.set('token', streamToken);
+    const token = getToken();
+    if (token) qs.set('token', token);
     const q = qs.toString();
     return `${BASE_URL}/api/stream/${encodeURIComponent(mediaItemId)}/trickplay/${encodeURIComponent(file)}${q ? `?${q}` : ''}`;
   },

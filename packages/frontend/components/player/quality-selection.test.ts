@@ -9,8 +9,6 @@ import {
 
 function playbackInfo(sourceBitrate: number): PlaybackInfoDTO {
   return {
-    streamToken: 'test-media-token',
-    streamTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
     directPlay: true,
     hlsAvailable: true,
     videoCodec: 'h264',

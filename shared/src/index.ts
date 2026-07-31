@@ -59,7 +59,6 @@ export interface ProfileDTO {
   id: string;
   name: string;
   avatar: string | null;
-  hasPin: boolean;
   createdAt: string;
 }
 
@@ -110,36 +109,25 @@ export interface ActivateProfileResponse {
   profile: ProfileDTO;
 }
 
-export interface ActivateProfileRequest {
-  pin?: string;
-}
-
 export interface CreateProfileRequest {
   name: string;
   avatar?: string;
-  pin?: string;
 }
 
 export interface UpdateProfileRequest {
   name?: string;
   avatar?: string | null;
-  /** Four digits to set/change the PIN, or null to remove it. */
-  pin?: string | null;
-  /** Required whenever the profile PIN is added, changed, or removed. */
-  accountPassword?: string;
-}
-
-export interface DeleteProfileRequest {
-  /** Required when deleting a PIN-protected profile. */
-  accountPassword?: string;
 }
 
 // ─── Premade avatars ──────────────────────────────────────────────────────────
-// The catalogue is the shared source of truth for the backend allow-list and the
-// frontend picker. Every file is local, project-owned artwork or an explicitly
-// approved Flux zodiac asset.
+// A curated catalogue of selectable avatar images. `avatar` on a Profile stores
+// the preset `id`; the backend validates it against AVATAR_PRESET_IDS (or accepts
+// null for an initials fallback). The image files live in the frontend under
+// public/avatars/ and are rendered as `/avatars/${file}`. The catalogue itself is
+// AUTO-GENERATED into ./avatars.ts (see scripts) so the source images, the
+// backend allow-list, and the picker can never drift apart.
 
-export type AvatarCategory = 'Flux' | 'Sins' | 'Zodiac';
+export type AvatarCategory = 'Emotes' | 'Characters' | 'Zodiac' | 'Fallout' | 'Icons';
 
 export interface AvatarPreset {
   id: string;
@@ -152,37 +140,60 @@ export interface AvatarPreset {
 }
 
 export const AVATAR_CATEGORY_ORDER: readonly AvatarCategory[] = [
-  'Flux',
-  'Sins',
+  'Emotes',
+  'Characters',
   'Zodiac',
+  'Fallout',
+  'Icons',
 ];
 
-export const SAFE_DEFAULT_AVATAR_ID = 'flux-orbit';
-
+// Curated from the source images in packages/frontend/public/avatars/. Categories
+// were verified by eye (the filenames alone mixed Fallout Vault-Boy art into the
+// blue-smiley "Emotes" set).
 export const AVATAR_PRESETS: readonly AvatarPreset[] = [
-  // ── Original Flux symbols and creatures ──
-  { id: SAFE_DEFAULT_AVATAR_ID, file: 'flux-orbit.svg', label: 'Flux Orbit', category: 'Flux' },
-  { id: 'flux-robot', file: 'flux-robot.svg', label: 'Robot', category: 'Flux' },
-  { id: 'flux-astronaut', file: 'flux-astronaut.svg', label: 'Astronaut', category: 'Flux' },
-  { id: 'flux-cat', file: 'flux-cat.svg', label: 'Cat', category: 'Flux' },
-  { id: 'flux-fox', file: 'flux-fox.svg', label: 'Fox', category: 'Flux' },
-  { id: 'flux-ghost', file: 'flux-ghost.svg', label: 'Ghost', category: 'Flux' },
-  { id: 'flux-alien', file: 'flux-alien.svg', label: 'Alien', category: 'Flux' },
-  { id: 'flux-void-mask', file: 'flux-void-mask.svg', label: 'Void Mask', category: 'Flux' },
-  { id: 'flux-panda', file: 'flux-panda.svg', label: 'Panda', category: 'Flux' },
-  { id: 'flux-bear', file: 'flux-bear.svg', label: 'Bear', category: 'Flux' },
-  { id: 'flux-owl', file: 'flux-owl.svg', label: 'Owl', category: 'Flux' },
-  { id: 'flux-frog', file: 'flux-frog.svg', label: 'Frog', category: 'Flux' },
-  { id: 'flux-penguin', file: 'flux-penguin.svg', label: 'Penguin', category: 'Flux' },
+  // ── Emotes (the blue-smiley reaction faces) ──
+  { id: '60413-argue', file: '60413-argue.png', label: 'Argue', category: 'Emotes' },
+  { id: '96763-beg', file: '96763-beg.png', label: 'Beg', category: 'Emotes' },
+  { id: '91810-blank', file: '91810-blank.png', label: 'Blank', category: 'Emotes' },
+  { id: '9137-gasp', file: '9137-gasp.png', label: 'Gasp', category: 'Emotes' },
+  { id: '46615-goofy', file: '46615-goofy.png', label: 'Goofy', category: 'Emotes' },
+  { id: '87893-laugh', file: '87893-laugh.png', label: 'Laugh', category: 'Emotes' },
+  { id: '80808-nervous', file: '80808-nervous.png', label: 'Nervous', category: 'Emotes' },
+  { id: '36063-okay', file: '36063-okay.png', label: 'Okay', category: 'Emotes' },
+  { id: '7868-owo', file: '7868-owo.png', label: 'OwO', category: 'Emotes' },
+  { id: '84145-plead', file: '84145-plead.png', label: 'Plead', category: 'Emotes' },
+  { id: '58272-regret', file: '58272-regret.png', label: 'Regret', category: 'Emotes' },
+  { id: '9644-sad', file: '9644-sad.png', label: 'Sad', category: 'Emotes' },
+  { id: '73697-scared', file: '73697-scared.png', label: 'Scared', category: 'Emotes' },
+  { id: '38741-shades', file: '38741-shades.png', label: 'Shades', category: 'Emotes' },
+  { id: '40335-shrug', file: '40335-shrug.png', label: 'Shrug', category: 'Emotes' },
+  { id: '7938-shy', file: '7938-shy.png', label: 'Shy', category: 'Emotes' },
+  { id: '34928-suspicious', file: '34928-suspicious.png', label: 'Suspicious', category: 'Emotes' },
+  { id: '72467-tears', file: '72467-tears.png', label: 'Tears', category: 'Emotes' },
+  { id: '69470-think', file: '69470-think.png', label: 'Think', category: 'Emotes' },
+  { id: '92984-thumbsup', file: '92984-thumbsup.png', label: 'Thumbs Up', category: 'Emotes' },
+  { id: '79627-innocent', file: '79627-innocent.png', label: 'Innocent', category: 'Emotes' },
+  { id: 'tribal', file: 'tribal.png', label: 'Tribal', category: 'Emotes' },
 
-  // ── Flux Seven Sins collection ──
-  { id: 'sin-pride', file: 'sin-pride.svg', label: 'Pride', category: 'Sins' },
-  { id: 'sin-greed', file: 'sin-greed.svg', label: 'Greed', category: 'Sins' },
-  { id: 'sin-lust', file: 'sin-lust.svg', label: 'Lust', category: 'Sins' },
-  { id: 'sin-envy', file: 'sin-envy.svg', label: 'Envy', category: 'Sins' },
-  { id: 'sin-gluttony', file: 'sin-gluttony.svg', label: 'Gluttony', category: 'Sins' },
-  { id: 'sin-wrath', file: 'sin-wrath.svg', label: 'Wrath', category: 'Sins' },
-  { id: 'sin-sloth', file: 'sin-sloth.svg', label: 'Sloth', category: 'Sins' },
+  // ── Characters (animated) ──
+  { id: '27221-arielfacepalm', file: '27221-arielfacepalm.gif', label: 'Ariel Facepalm', category: 'Characters' },
+  { id: '78677-arielhi', file: '78677-arielhi.gif', label: 'Ariel Hi', category: 'Characters' },
+  { id: '71980-ariellove', file: '71980-ariellove.gif', label: 'Ariel Love', category: 'Characters' },
+  { id: '90370-arielsad', file: '90370-arielsad.gif', label: 'Ariel Sad', category: 'Characters' },
+  { id: '36305-arielsteam', file: '36305-arielsteam.gif', label: 'Ariel Steam', category: 'Characters' },
+  { id: '54371-arielwhat', file: '54371-arielwhat.gif', label: 'Ariel What', category: 'Characters' },
+  { id: '74336-aristocathappy', file: '74336-aristocathappy.gif', label: 'Aristocat Happy', category: 'Characters' },
+  { id: '79985-aristocathi', file: '79985-aristocathi.gif', label: 'Aristocat Hi', category: 'Characters' },
+  { id: '13350-aristocatlove', file: '13350-aristocatlove.gif', label: 'Aristocat Love', category: 'Characters' },
+  { id: '74926-aristocatmad', file: '74926-aristocatmad.gif', label: 'Aristocat Mad', category: 'Characters' },
+  { id: '97162-aristocatno', file: '97162-aristocatno.gif', label: 'Aristocat No', category: 'Characters' },
+  { id: '53848-aristocattongue', file: '53848-aristocattongue.gif', label: 'Aristocat Tongue', category: 'Characters' },
+  { id: '77535-aristocatwhat', file: '77535-aristocatwhat.gif', label: 'Aristocat What', category: 'Characters' },
+  { id: '50074-bambigrimace', file: '50074-bambigrimace.gif', label: 'Bambi Grimace', category: 'Characters' },
+  { id: '39738-funkymothman', file: '39738-funkymothman.gif', label: 'Funky Mothman', category: 'Characters' },
+  { id: '3031-princess', file: '3031-princess.png', label: 'Princess', category: 'Characters' },
+  { id: '62157-sebhuh', file: '62157-sebhuh.gif', label: 'Seb Huh', category: 'Characters' },
+  { id: '75618-sebshock', file: '75618-sebshock.gif', label: 'Seb Shock', category: 'Characters' },
 
   // ── Zodiac ──
   { id: '9692_zodiac_aquarius', file: '9692_zodiac_aquarius.png', label: 'Aquarius', category: 'Zodiac' },
@@ -198,57 +209,52 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
   { id: '3649_zodiac_taurus', file: '3649_zodiac_taurus.png', label: 'Taurus', category: 'Zodiac' },
   { id: '2303_zodiac_virgo', file: '2303_zodiac_virgo.png', label: 'Virgo', category: 'Zodiac' },
 
+  // ── Fallout (Vault Boy poses + Nuka-Cola) ──
+  { id: '5002-fallout', file: '5002-fallout.png', label: 'Vault Boy', category: 'Fallout' },
+  { id: '1734-vaultboy', file: '1734-vaultboy.png', label: 'Vault Boy', category: 'Fallout' },
+  { id: '3139-vaultboyholdup', file: '3139-vaultboyholdup.png', label: 'Vault Boy Hold Up', category: 'Fallout' },
+  { id: '8364_fallout_ok', file: '8364_fallout_ok.png', label: 'Thumbs Up', category: 'Fallout' },
+  { id: '2902-hola', file: '2902-hola.png', label: 'Wave', category: 'Fallout' },
+  { id: '9368-enojo', file: '9368-enojo.png', label: 'Angry', category: 'Fallout' },
+  { id: '4912-triste', file: '4912-triste.png', label: 'Sad', category: 'Fallout' },
+  { id: '1612-mareo', file: '1612-mareo.png', label: 'Dizzy', category: 'Fallout' },
+  { id: '3718-muerto', file: '3718-muerto.png', label: 'Dead', category: 'Fallout' },
+  { id: '2408_gross_boy', file: '2408_gross_boy.png', label: 'Tongue Out', category: 'Fallout' },
+  { id: '72568-hesitant', file: '72568-hesitant.png', label: 'Silly', category: 'Fallout' },
+  { id: '6844-fiesta', file: '6844-fiesta.png', label: 'Party', category: 'Fallout' },
+  { id: '4299-santoperonotanto', file: '4299-santoperonotanto.png', label: 'Angel', category: 'Fallout' },
+  { id: '4299-sabiondo', file: '4299-sabiondo.png', label: 'Know-It-All', category: 'Fallout' },
+  { id: '7285-fachero', file: '7285-fachero.png', label: 'Cool', category: 'Fallout' },
+  { id: '5623-postolero', file: '5623-postolero.png', label: 'Pistol', category: 'Fallout' },
+  { id: '1826-tecreo', file: '1826-tecreo.png', label: 'Heavy Gun', category: 'Fallout' },
+  { id: '5703-cuchillo', file: '5703-cuchillo.png', label: 'Knife', category: 'Fallout' },
+  { id: '5558-misterio', file: '5558-misterio.png', label: 'Detective', category: 'Fallout' },
+  { id: '3718-nukacola', file: '3718-nukacola.png', label: 'Nuka-Cola', category: 'Fallout' },
+  { id: '8871-chapa', file: '8871-chapa.png', label: 'Nuka Cap', category: 'Fallout' },
+  { id: '1826-pipboy', file: '1826-pipboy.png', label: 'Pip-Boy', category: 'Fallout' },
+  { id: '7968_fallout_pip_boy', file: '7968_fallout_pip_boy.png', label: 'Pip-Boy', category: 'Fallout' },
+  { id: '79732-quantum-queers-logo', file: '79732-quantum-queers-logo.png', label: 'Quantum Queers', category: 'Fallout' },
+
+  // ── Icons (small objects + critters) ──
+  { id: '422848-bunny', file: '422848-bunny.png', label: 'Bunny', category: 'Icons' },
+  { id: '532883-cash', file: '532883-cash.png', label: 'Cash', category: 'Icons' },
+  { id: '421918-cat', file: '421918-cat.png', label: 'Cat', category: 'Icons' },
+  { id: '809351-crown', file: '809351-crown.png', label: 'Crown', category: 'Icons' },
+  { id: '618492-diamond', file: '618492-diamond.png', label: 'Diamond', category: 'Icons' },
+  { id: '96311-dog', file: '96311-dog.png', label: 'Dog', category: 'Icons' },
+  { id: '391926-frog', file: '391926-frog.png', label: 'Frog', category: 'Icons' },
+  { id: '605187-goat', file: '605187-goat.png', label: 'Goat', category: 'Icons' },
+  { id: '1545-1000031285', file: '1545-1000031285.png', label: 'Owl', category: 'Icons' },
+  { id: '647772-pouch', file: '647772-pouch.png', label: 'Pouch', category: 'Icons' },
+  { id: '55902-trophy', file: '55902-trophy.png', label: 'Trophy', category: 'Icons' },
 ];
 
 export const AVATAR_PRESET_IDS: readonly string[] = AVATAR_PRESETS.map((a) => a.id);
-const AVATAR_PRESET_BY_ID = new Map(AVATAR_PRESETS.map((preset) => [preset.id, preset]));
-const LEGACY_FLUX_AVATAR_IDS = new Map<string, string>([
-  ['robot', 'flux-robot'],
-  ['astronaut', 'flux-astronaut'],
-  ['cat', 'flux-cat'],
-  ['fox', 'flux-fox'],
-  ['ghost', 'flux-ghost'],
-  ['alien', 'flux-alien'],
-  ['ninja', 'flux-void-mask'],
-  ['panda', 'flux-panda'],
-  ['bear', 'flux-bear'],
-  ['owl', 'flux-owl'],
-  ['frog', 'flux-frog'],
-  ['penguin', 'flux-penguin'],
-]);
 
-/**
- * Preserve an explicit initials choice (`null`) while replacing stale bundled
- * preset ids with Flux's safe local default.
- */
-export function normalizeAvatarPresetId(id: string | null | undefined): string | null {
-  if (!id) return null;
-  const migratedFluxId = LEGACY_FLUX_AVATAR_IDS.get(id);
-  if (migratedFluxId) return migratedFluxId;
-  return AVATAR_PRESET_BY_ID.has(id) ? id : SAFE_DEFAULT_AVATAR_ID;
-}
-
-/** Existing user-owned image references are data, not bundled preset ids. */
-export function isUserAvatarReference(value: string | null | undefined): value is string {
-  if (!value || value.startsWith('/avatars/')) return false;
-  return value.startsWith('/')
-    || value.startsWith('data:image/')
-    || /^https?:\/\//i.test(value);
-}
-
-/** Normalize bundled ids while leaving existing user-owned images untouched. */
-export function normalizeProfileAvatarReference(
-  value: string | null | undefined,
-): string | null {
-  if (isUserAvatarReference(value)) return value;
-  return normalizeAvatarPresetId(value);
-}
-
-/** Look up a preset, resolving a stale non-null id to the safe Flux default. */
+/** Look up a preset by id (undefined when the id is unknown or null). */
 export function getAvatarPreset(id: string | null | undefined): AvatarPreset | undefined {
-  if (isUserAvatarReference(id)) return undefined;
-  const normalized = normalizeAvatarPresetId(id);
-  return normalized ? AVATAR_PRESET_BY_ID.get(normalized) : undefined;
+  if (!id) return undefined;
+  return AVATAR_PRESETS.find((a) => a.id === id);
 }
 
 export interface InviteDTO {
@@ -511,9 +517,6 @@ export interface PlaybackInfoDTO {
     available: boolean;
     source: 'direct' | 'hls';
   }[];
-  /** Short-lived media-only credential. Never use the account JWT in media URLs. */
-  streamToken: string;
-  streamTokenExpiresAt: string;
 }
 
 export interface CastPlaybackInfoDTO {

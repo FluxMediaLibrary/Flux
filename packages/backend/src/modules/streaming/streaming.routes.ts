@@ -27,9 +27,6 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { isValidCastSession } from '../../lib/cast-sessions.js';
-import { signStreamToken } from '../../lib/jwt.js';
-import { prisma } from '../../lib/db.js';
-import { enforceRateLimit } from '../../lib/rate-limit.js';
 
 // ── In-memory session tracking ──────────────────────────────────────────────
 // Maps a (mediaItemId, episodeId) pair → sessionDir so segment routes know
@@ -40,7 +37,6 @@ interface HlsSession {
   manifest: 'index.m3u8' | 'master.m3u8';
   transcode: TranscodeState;
   lastAccessAt: number;
-  accountId: string;
 }
 
 interface TranscodeState {
@@ -51,40 +47,6 @@ interface TranscodeState {
 }
 
 const hlsSessions = new Map<string, HlsSession>();
-let transcodeReservations = 0;
-const accountTranscodeReservations = new Map<string, number>();
-let activeThumbnailProcesses = 0;
-
-async function reserveTranscode(accountId: string): Promise<() => void> {
-  const account = await prisma.user.findUnique({
-    where: { id: accountId },
-    select: { streamLimit: true, disabled: true },
-  });
-  if (!account || account.disabled) {
-    throw ApiError.forbidden('This account cannot start playback', 'ACCOUNT_DISABLED');
-  }
-  const running = [...hlsSessions.values()].filter((session) => !session.transcode.exited);
-  const accountRunning = running.filter((session) => session.accountId === accountId).length;
-  const accountReserved = accountTranscodeReservations.get(accountId) ?? 0;
-  const accountLimit = account.streamLimit ?? 2;
-  if (accountRunning + accountReserved >= accountLimit) {
-    throw ApiError.tooManyRequests('This account has reached its simultaneous stream limit', 'STREAM_LIMIT_REACHED');
-  }
-  if (running.length + transcodeReservations >= config.MAX_CONCURRENT_TRANSCODES) {
-    throw ApiError.tooManyRequests('The media server is at transcode capacity. Try again shortly.', 'TRANSCODE_CAPACITY');
-  }
-  transcodeReservations += 1;
-  accountTranscodeReservations.set(accountId, accountReserved + 1);
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    transcodeReservations = Math.max(0, transcodeReservations - 1);
-    const remaining = Math.max(0, (accountTranscodeReservations.get(accountId) ?? 1) - 1);
-    if (remaining) accountTranscodeReservations.set(accountId, remaining);
-    else accountTranscodeReservations.delete(accountId);
-  };
-}
 
 function sessionBaseKey(mediaItemId: string, episodeId?: string, audioStreamIndex?: number): string {
   return `${mediaItemId}::${episodeId ?? ''}::audio=${audioStreamIndex ?? 'default'}`;
@@ -103,16 +65,7 @@ function sessionKey(
 function parseStartTime(value: string | undefined): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return 0;
-  return Math.min(24 * 60 * 60, Math.round(parsed * 1000) / 1000);
-}
-
-function parseAudioStreamIndex(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 64) {
-    throw ApiError.badRequest('Invalid audio stream', 'INVALID_AUDIO_STREAM');
-  }
-  return parsed;
+  return Math.round(parsed * 1000) / 1000;
 }
 
 function publicApiBaseUrl(request: { protocol: string; headers: { host?: string } }): { baseUrl: string; warnings: string[] } {
@@ -254,24 +207,9 @@ function assertCastPlaybackAccess(
   }
 }
 
-function assertScopedPlaybackAccess(
-  request: {
-    streamPlayback?: { mediaItemId: string; episodeId?: string };
-    castPlayback?: { mediaItemId: string; episodeId?: string };
-  },
-  mediaItemId: string,
-  episodeId?: string,
-): void {
-  const grant = request.streamPlayback ?? request.castPlayback;
-  if (!grant || grant.mediaItemId !== mediaItemId || (grant.episodeId ?? undefined) !== episodeId) {
-    throw ApiError.forbidden('This media token cannot access the requested title', 'MEDIA_SCOPE_INVALID');
-  }
-}
-
 function receiverCors(reply: { header: (name: string, value: string) => unknown }): void {
   reply.header('Access-Control-Allow-Origin', '*');
   reply.header('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
-  reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
 }
 
 /**
@@ -393,7 +331,6 @@ async function ensureHlsSessionReady(
   startTimeSeconds: number,
   log: Pick<FastifyInstance['log'], 'info' | 'error'>,
   waitForRunway: boolean,
-  accountId: string,
 ): Promise<HlsSession> {
   const baseKey = sessionBaseKey(mediaItemId, episodeId, audioStreamIndex);
   const key = sessionKey(mediaItemId, episodeId, audioStreamIndex, startTimeSeconds);
@@ -403,8 +340,6 @@ async function ensureHlsSessionReady(
     const { filePath: sourceFile } = await getMediaFilePath(mediaItemId, episodeId);
     session = hlsSessions.get(key);
     if (!session) {
-      const releaseReservation = await reserveTranscode(accountId);
-      try {
       await discardOtherSessions(baseKey, key);
       const sessionDir = safeJoin(config.TRANSCODE_ROOT, randomUUID());
       await fs.promises.mkdir(sessionDir, { recursive: true });
@@ -414,7 +349,7 @@ async function ensureHlsSessionReady(
         audioStreamIndex,
         startTimeSeconds,
       );
-      session = { dir: sessionDir, manifest: started.manifest, transcode: started.transcode, lastAccessAt: Date.now(), accountId };
+      session = { dir: sessionDir, manifest: started.manifest, transcode: started.transcode, lastAccessAt: Date.now() };
       hlsSessions.set(key, session);
       log.info({
         mediaItemId,
@@ -423,9 +358,6 @@ async function ensureHlsSessionReady(
         startTimeSeconds,
         manifestType: started.manifest,
       }, '[Cast/HLS] started transcode session');
-      } finally {
-        releaseReservation();
-      }
     }
   }
   session.lastAccessAt = Date.now();
@@ -489,7 +421,6 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { episodeId } = request.query as { episodeId?: string };
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
-      assertScopedPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
       const { filePath, mimeType, size } = await getMediaFilePath(mediaItemId, episodeId);
 
@@ -512,8 +443,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
           .header('Content-Range', `bytes ${start}-${end}/${size}`)
           .header('Accept-Ranges', 'bytes')
           .header('Content-Length', chunkSize)
-          .header('Content-Type', mimeType)
-          .header('Cache-Control', 'private, no-store');
+          .header('Content-Type', mimeType);
 
         request.log.info({ mediaItemId, episodeId, mimeType, start, end, size }, '[Stream] serving byte range');
         const stream = fs.createReadStream(filePath, { start, end });
@@ -525,8 +455,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
         .status(200)
         .header('Accept-Ranges', 'bytes')
         .header('Content-Length', size)
-        .header('Content-Type', mimeType)
-        .header('Cache-Control', 'private, no-store');
+        .header('Content-Type', mimeType);
 
       request.log.info({ mediaItemId, episodeId, mimeType, size }, '[Stream] serving full file');
       const stream = fs.createReadStream(filePath);
@@ -543,17 +472,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { episodeId } = request.query as { episodeId?: string };
       const { filePath } = await getMediaFilePath(mediaItemId, episodeId);
-      const info = await getPlaybackInfo(filePath, mediaItemId, episodeId);
-      const expiresAt = new Date(Date.now() + config.STREAM_TOKEN_TTL_SECONDS * 1000);
-      const streamToken = signStreamToken(
-        {
-          sub: request.account!.id,
-          role: request.account!.role,
-          activeProfileId: request.activeProfileId!,
-        },
-        { mediaItemId, episodeId },
-      );
-      return { ...info, streamToken, streamTokenExpiresAt: expiresAt.toISOString() };
+      return getPlaybackInfo(filePath, mediaItemId, episodeId);
     },
   );
 
@@ -572,11 +491,13 @@ export const streamingRoutes: FastifyPluginAsync = async (
         startTime?: string;
         adaptive?: string;
       };
-      const audioStreamIndex = parseAudioStreamIndex(audioStream);
+      const audioStreamIndex =
+        audioStream !== undefined && Number.isInteger(Number(audioStream))
+          ? Number(audioStream)
+          : undefined;
       const startTimeSeconds = parseStartTime(startTime);
       const forceAdaptive = adaptive === '1';
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
-      assertScopedPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
       const baseKey = sessionBaseKey(mediaItemId, episodeId, audioStreamIndex);
       const key = sessionKey(
@@ -613,8 +534,6 @@ export const streamingRoutes: FastifyPluginAsync = async (
         // concurrent requests can't both spawn a transcode for the same key.
         session = hlsSessions.get(key);
         if (!session) {
-          const releaseReservation = await reserveTranscode(request.account!.id);
-          try {
           await discardOtherSessions(baseKey, key);
           const sessionDir = safeJoin(config.TRANSCODE_ROOT, randomUUID());
           await fs.promises.mkdir(sessionDir, { recursive: true });
@@ -626,13 +545,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
             forceAdaptive,
           );
           manifestType = started.manifest;
-          session = {
-            dir: sessionDir,
-            manifest: manifestType,
-            transcode: started.transcode,
-            lastAccessAt: Date.now(),
-            accountId: request.account!.id,
-          };
+          session = { dir: sessionDir, manifest: manifestType, transcode: started.transcode, lastAccessAt: Date.now() };
           hlsSessions.set(key, session);
           request.log.info({
             mediaItemId,
@@ -642,9 +555,6 @@ export const streamingRoutes: FastifyPluginAsync = async (
             forceAdaptive,
             manifestType,
           }, '[Cast/HLS] started transcode session');
-          } finally {
-            releaseReservation();
-          }
         }
       } else {
         manifestType = session.manifest;
@@ -726,12 +636,14 @@ export const streamingRoutes: FastifyPluginAsync = async (
         startTime?: string;
         adaptive?: string;
       };
-      const audioStreamIndex = parseAudioStreamIndex(audioStream);
+      const audioStreamIndex =
+        audioStream !== undefined && Number.isInteger(Number(audioStream))
+          ? Number(audioStream)
+          : undefined;
       const startTimeSeconds = parseStartTime(startTime);
       const forceAdaptive = adaptive === '1';
 
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
-      assertScopedPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
 
       const key = sessionKey(
@@ -794,10 +706,9 @@ export const streamingRoutes: FastifyPluginAsync = async (
 
       request.log.debug({ mediaItemId, episodeId, relPath, contentType }, '[Cast/HLS] serving segment');
       const stream = fs.createReadStream(filePath);
-        return reply
-          .header('Content-Type', contentType)
-          .header('Cache-Control', 'private, no-store')
-          .send(stream);
+      return reply
+        .header('Content-Type', contentType)
+        .send(stream);
     },
   );
 
@@ -813,29 +724,12 @@ export const streamingRoutes: FastifyPluginAsync = async (
         episodeId?: string;
       };
       const time = parseFloat(t ?? '');
-      if (!Number.isFinite(time) || time < 0 || time > 24 * 60 * 60) {
+      if (!Number.isFinite(time) || time < 0) {
         throw ApiError.badRequest('Invalid timestamp', 'INVALID_THUMB_TIME');
       }
-      assertScopedPlaybackAccess(request, mediaItemId, episodeId);
-      await enforceRateLimit('stream-thumbnail', request.account!.id, 120, 60);
-      if (activeThumbnailProcesses >= config.MAX_CONCURRENT_THUMBNAILS) {
-        throw ApiError.tooManyRequests('Thumbnail generation is busy. Try again shortly.', 'THUMBNAIL_CAPACITY');
-      }
-      activeThumbnailProcesses += 1;
-      let thumbnailReleased = false;
-      const releaseThumbnail = () => {
-        if (thumbnailReleased) return;
-        thumbnailReleased = true;
-        activeThumbnailProcesses = Math.max(0, activeThumbnailProcesses - 1);
-      };
 
-      let filePath: string;
-      try {
-        ({ filePath } = await getMediaFilePath(mediaItemId, episodeId));
-      } catch (error) {
-        releaseThumbnail();
-        throw error;
-      }
+      const { filePath } = await getMediaFilePath(mediaItemId, episodeId);
+
       const args = [
         '-ss', String(time),
         '-i', filePath,
@@ -851,21 +745,9 @@ export const streamingRoutes: FastifyPluginAsync = async (
         const proc = spawn('ffmpeg', args, {
           stdio: ['ignore', 'pipe', 'ignore'],
         });
-        const timeout = setTimeout(() => {
-          proc.kill('SIGKILL');
-          releaseThumbnail();
-          if (!reply.sent) reply.status(504).send();
-          resolve();
-        }, 15_000);
         const chunks: Buffer[] = [];
         proc.stdout!.on('data', (c: Buffer) => chunks.push(c));
         proc.stdout!.on('end', () => {
-          clearTimeout(timeout);
-          releaseThumbnail();
-          if (reply.sent) {
-            resolve();
-            return;
-          }
           const buf = Buffer.concat(chunks);
           if (buf.length === 0) {
             reply.status(404).send();
@@ -874,13 +756,11 @@ export const streamingRoutes: FastifyPluginAsync = async (
           }
           reply
             .header('Content-Type', 'image/jpeg')
-            .header('Cache-Control', 'private, max-age=300')
+            .header('Cache-Control', 'public, max-age=86400')
             .send(buf);
           resolve();
         });
         proc.on('error', () => {
-          clearTimeout(timeout);
-          releaseThumbnail();
           if (!reply.sent) reply.status(500).send();
           resolve();
         });
@@ -898,7 +778,6 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const { episodeId } = request.query as { episodeId?: string };
 
       const { filePath: sourceFile } = await getMediaFilePath(mediaItemId, episodeId);
-      assertScopedPlaybackAccess(request, mediaItemId, episodeId);
       const assetPath = trickplayAssetPath(sourceFile, file);
       if (!assetPath) {
         throw ApiError.badRequest('Invalid trickplay asset', 'INVALID_TRICKPLAY_ASSET');
@@ -926,7 +805,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const stream = fs.createReadStream(assetPath);
       return reply
         .header('Content-Type', contentType)
-        .header('Cache-Control', 'private, max-age=300')
+        .header('Cache-Control', 'public, max-age=86400, immutable')
         .send(stream);
     },
   );

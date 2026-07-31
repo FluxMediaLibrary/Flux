@@ -25,13 +25,6 @@ const envSchema = z.object({
     .string()
     .min(16, 'JWT_SECRET must be at least 16 characters'),
   JWT_EXPIRES_IN: z.string().min(1).default('7d'),
-  // Playback tokens are restricted to one profile and one title. Keep them long
-  // enough for films, live seeking, and TV marathons without exposing the
-  // reusable account session in media URLs.
-  STREAM_TOKEN_TTL_SECONDS: z.coerce.number().int().min(300).max(86_400).default(43_200),
-  MAX_CONCURRENT_TRANSCODES: z.coerce.number().int().min(1).max(32).default(4),
-  MAX_CONCURRENT_THUMBNAILS: z.coerce.number().int().min(1).max(32).default(4),
-  MAX_CONCURRENT_TRICKPLAY: z.coerce.number().int().min(1).max(16).default(2),
 
   TMDB_API_KEY: z.string().min(1, 'TMDB_API_KEY is required'),
 
@@ -85,12 +78,7 @@ const envSchema = z.object({
     .url()
     .default('http://localhost:9091/transmission/rpc'),
   TRANSMISSION_USER: z.string().min(1).default('admin'),
-  // Existing installations may have a legacy short password. Accept it so an
-  // upgrade cannot take the media server offline; setup enforces strong values
-  // for new installs and startup emits a warning until the legacy value rotates.
-  TRANSMISSION_PASS: z.string()
-    .min(1, 'TRANSMISSION_PASS is required')
-    .default('development-only-password'),
+  TRANSMISSION_PASS: z.string().min(1).default('flux'),
 
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(8).optional(),

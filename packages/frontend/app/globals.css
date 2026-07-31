@@ -12,10 +12,11 @@
   --text: #f4f4f5;
   --text-muted: rgba(255,255,255,.66);
   --text-dim: rgba(255,255,255,.42);
-  /* Ember accent: cinema-first, less generic SaaS blue. */
-  --accent: #c45224;
-  --accent-2: #f0b35a;
-  --accent-glow: rgba(196,82,36,.22);
+  /* Single accent instead of 5 */
+  --accent: #3b82f6;
+  --accent-2: #60a5fa;
+  --accent-blue: var(--accent);
+  --accent-glow: rgba(59,130,246,.18);
   --ok: #22c55e;
   --warn: #f59e0b;
   --danger: #ef4444;
@@ -627,7 +628,6 @@ label {
 /* ── Avatar tile (shared by picker grid + nav) ─────────────────────────────── */
 
 .avatar-tile {
-  position: relative;
   border-radius: 16px;
   display: grid;
   place-items: center;
@@ -643,15 +643,12 @@ label {
 .avatar-tile.has-icon {
   background: #0d1117;
 }
-.avatar-tile-fallback,
-.avatar-tile img {
-  grid-area: 1 / 1;
-}
 .avatar-tile img {
   display: block;
   width: 100%;
   height: 100%;
-  /* Keep the complete local symbol visible at small profile sizes. */
+  /* contain (not cover) shows the whole icon without cropping — these are
+     emote/sticker art, so cropping made them look cut-off and low quality. */
   object-fit: contain;
 }
 /* Nav trigger keeps its tighter radius/size. */
@@ -1472,9 +1469,9 @@ table.data tr:last-child td {
   display: inline-flex;
   max-width: 100%;
   padding: 2px 6px;
-  border: 1px solid rgba(240,179,90,.28);
+  border: 1px solid rgba(96,165,250,.26);
   border-radius: 999px;
-  background: rgba(196,82,36,.12);
+  background: rgba(96,165,250,.1);
   color: var(--text-muted);
   font-size: 0.68rem;
 }
@@ -1915,7 +1912,7 @@ table.data tr:last-child td {
   outline: none;
 }
 .request-status-tab.active {
-  background: rgba(196,82,36,.12);
+  background: rgba(96,165,250,.11);
   color: var(--text);
   box-shadow: inset 0 -2px var(--accent-2);
 }
@@ -2025,8 +2022,8 @@ table.data tr:last-child td {
 .request-genre-rail button.active,
 .request-top-genres button:hover,
 .request-top-genres button:focus-visible {
-  border-color: rgba(240,179,90,.45);
-  background: rgba(196,82,36,.14);
+  border-color: rgba(96,165,250,.45);
+  background: rgba(96,165,250,.12);
   color: var(--text);
   outline: none;
 }
@@ -2165,7 +2162,7 @@ table.data tr:last-child td {
 }
 .request-status-pill.tone-approved,
 .request-status-pill.tone-active {
-  background: rgba(196,82,36,.14);
+  background: rgba(96,165,250,.13);
   color: var(--accent-2);
 }
 .request-status-pill.tone-ok {
@@ -2286,9 +2283,9 @@ table.data tr:last-child td {
   cursor: pointer;
 }
 .request-action.primary {
-  border-color: rgba(240,179,90,.44);
-  background: rgba(196,82,36,.18);
-  color: #ffe8c2;
+  border-color: rgba(96,165,250,.42);
+  background: rgba(96,165,250,.16);
+  color: #d9ebff;
 }
 .request-action.danger {
   border-color: rgba(239,68,68,.36);
@@ -3117,8 +3114,8 @@ table.data tr:last-child td {
   opacity: .72;
 }
 .nfx-ep-request-status {
-  border: 1px solid rgba(240,179,90,.26);
-  background: rgba(196,82,36,.12);
+  border: 1px solid rgba(96,165,250,.24);
+  background: rgba(96,165,250,.1);
   color: var(--accent-2);
 }
 .nfx-ep-request-status.status-approved,
@@ -3500,108 +3497,15 @@ table.data tr:last-child td {
 .browse-page {
   padding-top: 24px;
 }
-
-.profile-lock-badge {
-  position: absolute;
-  right: -5px;
-  bottom: -5px;
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border: 2px solid #0d0f12;
-  border-radius: 50%;
-  background: #f4f4f5;
-  color: #111318;
-  font-size: 19px;
-  font-weight: 900;
-  line-height: 1;
-  box-shadow: 0 8px 22px rgb(0 0 0 / 45%);
-}
-
-.profile-pin-field {
-  margin-top: 22px;
-  padding-top: 20px;
-  border-top: 1px solid rgb(255 255 255 / 10%);
-}
-
-.profile-pin-input {
-  max-width: 320px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: .18em;
-}
-
-.field-hint {
-  display: block;
-  margin-top: 7px;
-  color: var(--muted);
-  font-size: .8rem;
-  line-height: 1.5;
-}
-
-.profile-pin-modal {
-  width: min(430px, calc(100vw - 32px));
-  text-align: center;
-}
-
-.profile-pin-avatar {
-  position: relative;
-  display: inline-flex;
-  margin: 0 auto 18px;
-}
-
-.profile-pin-kicker {
-  margin: 0 0 7px;
-  color: #b7a8ff;
-  font-size: .72rem;
-  font-weight: 800;
-  letter-spacing: .18em;
-  text-transform: uppercase;
-}
-
-.profile-pin-entry {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  opacity: .01;
-}
-
-.profile-pin-dots {
-  display: flex;
-  justify-content: center;
-  gap: 15px;
-  margin: 28px 0 24px;
-}
-
-.profile-pin-dots span {
-  width: 17px;
-  height: 17px;
-  border: 2px solid rgb(255 255 255 / 36%);
-  border-radius: 50%;
-  background: transparent;
-  transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
-}
-
-.profile-pin-dots span.filled {
-  border-color: #f5f3ff;
-  background: #f5f3ff;
-  transform: scale(1.08);
-}
-
-.profile-pin-actions {
-  justify-content: center;
-}
 .browse-workbench {
   display: grid;
   gap: 16px;
   margin-bottom: 20px;
   padding: 16px;
-  border: 1px solid rgba(240,179,90,.16);
+  border: 1px solid var(--surface-border);
   border-radius: var(--radius-sm);
   background:
-    repeating-linear-gradient(90deg, rgba(240,179,90,.045) 0 1px, transparent 1px 22px),
-    linear-gradient(180deg, rgba(255,255,255,.052), rgba(255,255,255,.018)),
+    linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.024)),
     rgba(10,12,16,.46);
   box-shadow: 0 16px 42px rgba(0,0,0,.24);
   backdrop-filter: blur(18px);
@@ -3623,7 +3527,7 @@ table.data tr:last-child td {
   color: var(--accent-2);
   font-size: .72rem;
   font-weight: 900;
-  letter-spacing: .12em;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 .browse-type-switch {
@@ -3631,9 +3535,9 @@ table.data tr:last-child td {
   grid-template-columns: repeat(2, minmax(94px, 1fr));
   min-height: 40px;
   padding: 3px;
-  border: 1px solid rgba(240,179,90,.16);
+  border: 1px solid var(--surface-border);
   border-radius: 8px;
-  background: rgba(0,0,0,.28);
+  background: rgba(0,0,0,.18);
 }
 .browse-type-switch button {
   border: 0;
@@ -3652,9 +3556,8 @@ table.data tr:last-child td {
   outline: none;
 }
 .browse-type-switch button.active {
-  background: linear-gradient(180deg, #f0b35a, #c45224);
-  color: #160d08;
-  box-shadow: 0 8px 18px rgba(196,82,36,.22);
+  background: var(--accent);
+  color: #fff;
 }
 .browse-search-panel {
   display: grid;
@@ -3680,9 +3583,9 @@ table.data tr:last-child td {
 .browse-genre-select select {
   width: 100%;
   min-height: 42px;
-  border: 1px solid rgba(255,255,255,.08);
+  border: 1px solid var(--surface-border);
   border-radius: 8px;
-  background: rgba(7,8,10,.78);
+  background: rgba(6,8,12,.72);
   color: var(--text);
   padding: 10px 12px;
   font: inherit;
@@ -3692,7 +3595,7 @@ table.data tr:last-child td {
 .browse-genre-select select:focus {
   border-color: var(--accent-2);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(196,82,36,.18);
+  box-shadow: 0 0 0 3px rgba(96,165,250,.12);
 }
 .browse-search-actions {
   display: flex;
@@ -3714,9 +3617,9 @@ table.data tr:last-child td {
   justify-content: center;
   min-height: 34px;
   min-width: 0;
-  border: 1px solid rgba(255,255,255,.08);
+  border: 1px solid var(--surface-border);
   border-radius: 8px;
-  background: rgba(255,255,255,.035);
+  background: rgba(255,255,255,.045);
   color: var(--text-muted);
   padding: 7px 10px;
   font: inherit;
@@ -3726,14 +3629,14 @@ table.data tr:last-child td {
 }
 .genre-chip:hover,
 .genre-chip:focus-visible {
-  border-color: rgba(240,179,90,.34);
+  border-color: rgba(255,255,255,.22);
   color: var(--text);
   outline: none;
 }
 .genre-chip.active {
-  border-color: rgba(240,179,90,.58);
-  background: rgba(196,82,36,.2);
-  color: #ffe8c2;
+  border-color: rgba(96,165,250,.58);
+  background: rgba(96,165,250,.17);
+  color: #d9ebff;
 }
 .browse-context-note {
   margin: 5px 0 0;
@@ -4530,7 +4433,7 @@ table.data tr:last-child td {
   background: var(--accent);
 }
 .lib-badge.count {
-  background: var(--accent);
+  background: var(--accent-blue);
 }
 .lib-badge svg {
   width: 14px;
@@ -5280,7 +5183,7 @@ media-player.fx-player .fx-scrub-time {
 }
 .fx-player .fx-timeline:focus-visible .fx-seek-track {
   height: 7px;
-  box-shadow: 0 0 0 2px rgba(240,179,90,.42);
+  box-shadow: 0 0 0 2px rgba(96,165,250,.42);
 }
 .fx-player .fx-seek-preview {
   position: absolute;

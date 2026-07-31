@@ -5,7 +5,6 @@
  * so callers (e.g. postprocess.ts) don't need to wrap them in try/catch.
  */
 import { prisma } from '../../lib/db.js';
-import { isAllowedDiscordWebhook } from '../../lib/discord-webhook.js';
 
 // ─── Public API ────────────────────────────────────────────────────────────────
 
@@ -129,26 +128,15 @@ async function sendDiscord(
   content: string,
 ): Promise<void> {
   try {
-    // Re-check stored values so legacy database rows cannot bypass the route
-    // validator and turn this worker into an SSRF primitive.
-    if (!isAllowedDiscordWebhook(webhookUrl)) {
-      console.error('[Notifications] Refused an invalid Discord webhook target');
-      return;
-    }
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content,
-        allowed_mentions: { parse: [] },
-      }),
-      redirect: 'manual',
-      signal: AbortSignal.timeout(10_000),
+      body: JSON.stringify({ content }),
     });
 
     if (!response.ok) {
       console.error(
-        `[Notifications] Discord webhook returned ${response.status}`,
+        `[Notifications] Discord webhook returned ${response.status}: ${await response.text().catch(() => '?')}`,
       );
     }
   } catch (err) {

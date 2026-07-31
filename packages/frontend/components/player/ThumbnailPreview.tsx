@@ -15,7 +15,6 @@ interface VttEntry {
 interface ThumbnailPreviewProps {
   mediaItemId: string;
   episodeId?: string;
-  streamToken: string;
   /** The time position in seconds the user is hovering over */
   time: number;
   /** Left offset in pixels from the timeline edge */
@@ -77,7 +76,6 @@ function fmt(t: number): string {
 export function ThumbnailPreview({
   mediaItemId,
   episodeId,
-  streamToken,
   time,
   left,
   visible,
@@ -86,13 +84,13 @@ export function ThumbnailPreview({
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
   const [spriteReady, setSpriteReady] = useState(false);
   const spriteUrl = useMemo(
-    () => api.getTrickplayUrl(mediaItemId, 'trickplay-sprite.jpg', episodeId, streamToken),
-    [episodeId, mediaItemId, streamToken],
+    () => api.getTrickplayUrl(mediaItemId, 'trickplay-sprite.jpg', episodeId),
+    [episodeId, mediaItemId],
   );
 
   // Fetch VTT metadata when media changes
   useEffect(() => {
-    const vttUrl = api.getTrickplayUrl(mediaItemId, 'trickplay.vtt', episodeId, streamToken);
+    const vttUrl = api.getTrickplayUrl(mediaItemId, 'trickplay.vtt', episodeId);
     if (!vttUrl) return;
 
     const controller = new AbortController();
@@ -118,7 +116,7 @@ export function ThumbnailPreview({
       });
 
     return () => controller.abort();
-  }, [mediaItemId, episodeId, streamToken]);
+  }, [mediaItemId, episodeId]);
 
   useEffect(() => {
     if (status !== 'ready') return;

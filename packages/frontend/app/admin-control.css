@@ -7,9 +7,9 @@
   --control-text: var(--text, #f4f4f5);
   --control-muted: var(--text-muted, rgba(255,255,255,.66));
   --control-dim: var(--text-dim, rgba(255,255,255,.42));
-  --control-accent: var(--accent, #c45224);
-  --control-accent-2: var(--accent-2, #f0b35a);
-  --control-accent-soft: var(--accent-glow, rgba(196,82,36,.22));
+  --control-accent: var(--accent, #3b82f6);
+  --control-accent-2: var(--accent-2, #60a5fa);
+  --control-accent-soft: var(--accent-glow, rgba(59,130,246,.18));
   --control-good: var(--ok, #22c55e);
   --control-warn: var(--warn, #f59e0b);
   --control-bad: var(--danger, #ef4444);
@@ -349,7 +349,7 @@
 .control-center .input { background: #0e1011; border-color: var(--control-line); border-radius: 7px; color: var(--control-text); font-size: 11px; }
 .control-center .input:focus { border-color: var(--control-accent-2); box-shadow: 0 0 0 2px var(--control-accent-soft); }
 .control-center .toggle { border-color: var(--control-line); background: #121416; color: var(--control-muted); font-size: 10px; }
-.control-center .toggle.active { border-color: rgba(240,179,90,.45); background: var(--control-accent-soft); color: var(--control-accent-2); }
+.control-center .toggle.active { border-color: rgba(96,165,250,.45); background: var(--control-accent-soft); color: var(--control-accent-2); }
 .control-center .pill { border-radius: 5px; font-size: 9px; }
 .control-center .form-error { border-color: rgba(225,111,100,.35); background: rgba(225,111,100,.08); color: #e8a39d; font-size: 11px; }
 .control-center .admin-health-grid { grid-template-columns: repeat(5,minmax(120px,1fr)); gap: 8px; }

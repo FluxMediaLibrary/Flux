@@ -63,15 +63,12 @@ model AuditEvent {
 /// A Netflix-style profile under an account. Unlimited per account in v1.
 /// No PINs / restrictions in v1 (deferred).
 model Profile {
-  id                String    @id @default(cuid())
-  userId            String
-  name              String
-  avatar            String?
-  pinHash           String?
-  pinFailedAttempts Int       @default(0)
-  pinLockedUntil    DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   watchProgress  WatchProgress[]
