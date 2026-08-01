@@ -26,6 +26,7 @@ import {
   getLiveStats,
   stopSeeding,
   removeTorrent,
+  type AddTorrentResult,
   type TorrentLiveStats,
 } from '../../lib/webtorrent.js';
 import type { ConfirmTorrentInput } from './torrents.schema.js';
@@ -607,9 +608,10 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
     );
   }
 
+  let added: AddTorrentResult;
   try {
     const dataCheck = await detectExistingData(buffer);
-    const added = await addTorrent(buffer, {
+    added = await addTorrent(buffer, {
       verifyExisting: dataCheck.filesOnDisk > 0,
     });
     if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {

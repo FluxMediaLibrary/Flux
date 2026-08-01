@@ -393,6 +393,27 @@ export interface PlaybackMarkerDTO {
   endSeconds: number;
 }
 
+/** Segment types stored in the reusable media_segments table. */
+export type MediaSegmentType = 'INTRO' | 'RECAP' | 'CREDITS' | 'PREVIEW';
+/** How a media segment was created. */
+export type MediaSegmentSource = 'AUTOMATIC' | 'MANUAL';
+
+/**
+ * A reusable episode segment (intro/recap/credits/preview). Timestamps are
+ * milliseconds from the start of the episode. `AUTOMATIC` rows are produced by
+ * the intro-detection job and may be replaced by rescans; `MANUAL` rows are
+ * admin-authored and are protected from automatic overwrites.
+ */
+export interface MediaSegmentDTO {
+  id: string;
+  episodeId: string;
+  type: MediaSegmentType;
+  startMs: number;
+  endMs: number;
+  confidence: number;
+  source: MediaSegmentSource;
+}
+
 export interface EpisodeDTO {
   id: string;
   season: number;
@@ -402,6 +423,8 @@ export interface EpisodeDTO {
   runtime: number | null;
   available: boolean; // has a file
   playbackMarkers?: PlaybackMarkerDTO[];
+  /** Reusable segment markers for this episode (intro/recap/credits/preview). */
+  segments?: MediaSegmentDTO[];
   /** Per-profile watch progress for this episode (present on detail views). */
   progress?: WatchProgressDTO | null;
 }
@@ -508,6 +531,8 @@ export interface PlaybackInfoDTO {
   videoCodec: string | null;
   audioCodec: string | null;
   durationSeconds: number | null;
+  /** Reusable segment markers for the requested episode. */
+  segments?: MediaSegmentDTO[];
   streams: MediaStreamDTO[];
   qualities: {
     label: 'Auto' | 'Original' | '4K' | '1440p' | '1080p' | '720p' | '480p' | '360p';
@@ -517,6 +542,27 @@ export interface PlaybackInfoDTO {
     available: boolean;
     source: 'direct' | 'hls';
   }[];
+}
+
+export interface AdminIntroRescanResultDTO {
+  mediaItemId: string;
+  season: number;
+  force: boolean;
+  queued: boolean;
+}
+
+export interface CreateMediaSegmentRequest {
+  type: MediaSegmentType;
+  startMs: number;
+  endMs: number;
+  confidence?: number;
+}
+
+export interface UpdateMediaSegmentRequest {
+  type?: MediaSegmentType;
+  startMs?: number;
+  endMs?: number;
+  confidence?: number;
 }
 
 export interface CastPlaybackInfoDTO {

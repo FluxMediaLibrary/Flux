@@ -11,6 +11,14 @@ test('uses the credits marker when one exists', () => {
   ]), 1500);
 });
 
+test('prefers a CREDITS segment over the legacy marker', () => {
+  assert.equal(nextEpisodePromptStart(
+    1800,
+    [{ type: 'credits', startSeconds: 1500, endSeconds: 1780 }],
+    [{ id: 's1', episodeId: 'e1', type: 'CREDITS', startMs: 1_560_000, endMs: 1_790_000, confidence: 1, source: 'AUTOMATIC' }],
+  ), 1560);
+});
+
 test('falls back to the shared 92 percent completion point', () => {
   assert.equal(nextEpisodePromptStart(1000), 920);
 });

@@ -8,6 +8,7 @@ import { isVideoFile, fileExtension } from '../../lib/filename.js';
 import { analyzeAndStoreMedia } from '../../lib/media-analyzer.js';
 import { ensureTrickplay } from '../../lib/trickplay-generator.js';
 import {
+  enqueueIntroDetection,
   type TorrentPostprocessJob,
 } from '../../jobs/queues.js';
 import {
@@ -272,6 +273,18 @@ export async function processTorrentPostprocess(
         mediaItemId,
       },
     });
+
+    // Trigger automatic intro detection per season (best-effort, non-blocking).
+    // The deterministic jobId dedupes imports; manual markers are preserved by
+    // the job unless a forced admin rescan runs later.
+    if (torrent.category === 'SHOW' && placedEpisodeMappings.length > 0) {
+      const importedSeasons = [...new Set(placedEpisodeMappings.map((mapping) => mapping.season))];
+      for (const season of importedSeasons) {
+        enqueueIntroDetection(mediaItemId, season).catch((err) => {
+          console.error(`[PostProcess] Intro detection enqueue failed for ${mediaItemId} S${season}:`, err);
+        });
+      }
+    }
 
     // Trigger background media analysis (best-effort, non-blocking).
     // Runs ffprobe on each file and stores codec/stream info in the DB so

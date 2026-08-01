@@ -41,9 +41,10 @@ RUN (npm ci --omit=dev || npm install --omit=dev) \
 
 # ─── Runtime ──────────────────────────────────────────────────────────────────
 FROM base AS runtime
-# FFmpeg for transcoding (phase 6). Installed in the runtime image.
+# FFmpeg for transcoding + libchromaprint-tools (fpcalc) for intro detection.
+# Installed in the runtime image.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+  && apt-get install -y --no-install-recommends ffmpeg libchromaprint-tools ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 # Production node_modules (workspace symlinks preserved).

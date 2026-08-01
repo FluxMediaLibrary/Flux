@@ -32,6 +32,13 @@ import {
 } from './admin-control.service.js';
 import { approveRequest, listAllRequests, rejectRequest, syncFulfilledRequests } from '../requests/requests.service.js';
 import { getTorrentClientHealth, listTorrents, removeTorrentById, retryTorrentDownload, stopTorrent } from '../torrents/torrents.service.js';
+import { enqueueIntroDetection } from '../../jobs/queues.js';
+import {
+  createManualSegment,
+  deleteSegment,
+  listMediaSegments,
+  updateSegment,
+} from '../media-segments/media-segments.service.js';
 import { prisma } from '../../lib/db.js';
 
 const updateUserSchema = z.object({
@@ -52,6 +59,22 @@ const playbackMarkersSchema = z.object({
 const pruneTranscodeCacheSchema = z.object({
   maxAgeSeconds: z.number().int().min(0).max(30 * 24 * 60 * 60).optional(),
 });
+const mediaSegmentTypeSchema = z.enum(['INTRO', 'RECAP', 'CREDITS', 'PREVIEW']);
+const createSegmentSchema = z.object({
+  type: mediaSegmentTypeSchema,
+  startMs: z.number().int().min(0),
+  endMs: z.number().int().positive(),
+  confidence: z.number().min(0).max(1).optional(),
+}).refine((segment) => segment.endMs > segment.startMs, 'Segment end must be after its start');
+const updateSegmentSchema = z.object({
+  type: mediaSegmentTypeSchema.optional(),
+  startMs: z.number().int().min(0).optional(),
+  endMs: z.number().int().positive().optional(),
+  confidence: z.number().min(0).max(1).optional(),
+}).refine(
+  (segment) => segment.startMs === undefined || segment.endMs === undefined || segment.endMs > segment.startMs,
+  'Segment end must be after its start',
+);
 
 export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.get('/overview', { preHandler: [app.requirePermission('VIEW_SYSTEM')] }, async () => {
@@ -200,6 +223,56 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     return result;
   });
 
+  app.get('/library/:id/segments', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const { id } = request.params as { id: string };
+    const { season: rawSeason, episodeId } = request.query as { season?: string; episodeId?: string };
+    const season = rawSeason !== undefined ? Number(rawSeason) : undefined;
+    if (season !== undefined && (!Number.isInteger(season) || season <= 0)) {
+      throw ApiError.badRequest('Season must be a positive integer', 'INVALID_SEASON');
+    }
+    return listMediaSegments(id, { season, episodeId });
+  });
+
+  app.post('/library/episodes/:episodeId/segments', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const { episodeId } = request.params as { episodeId: string };
+    const body = createSegmentSchema.parse(request.body);
+    const segment = await createManualSegment(episodeId, body);
+    await writeAuditEvent({
+      actorId: request.account!.id,
+      action: 'MEDIA_SEGMENT_CREATED',
+      targetType: 'EPISODE',
+      targetId: episodeId,
+      details: { segmentId: segment.id, type: segment.type, startMs: segment.startMs, endMs: segment.endMs },
+    });
+    return segment;
+  });
+
+  app.patch('/library/segments/:segmentId', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const { segmentId } = request.params as { segmentId: string };
+    const body = updateSegmentSchema.parse(request.body);
+    const segment = await updateSegment(segmentId, body);
+    await writeAuditEvent({
+      actorId: request.account!.id,
+      action: 'MEDIA_SEGMENT_UPDATED',
+      targetType: 'MEDIA_SEGMENT',
+      targetId: segmentId,
+      details: { type: segment.type, startMs: segment.startMs, endMs: segment.endMs },
+    });
+    return segment;
+  });
+
+  app.delete('/library/segments/:segmentId', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request, reply) => {
+    const { segmentId } = request.params as { segmentId: string };
+    await deleteSegment(segmentId);
+    await writeAuditEvent({
+      actorId: request.account!.id,
+      action: 'MEDIA_SEGMENT_DELETED',
+      targetType: 'MEDIA_SEGMENT',
+      targetId: segmentId,
+    });
+    return reply.status(204).send();
+  });
+
   app.post('/library/analyze-missing', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
     const result = await analyzeMissingLibraryMedia();
     await writeAuditEvent({ actorId: request.account!.id, action: 'LIBRARY_ANALYZED', targetType: 'LIBRARY', details: result });
@@ -236,6 +309,33 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     const result = await syncShowEpisodes(id, { season });
     await writeAuditEvent({ actorId: request.account!.id, action: 'SEASON_EPISODES_SYNCED', targetType: 'MEDIA_ITEM', targetId: id, details: { season, ...result } });
     return result;
+  });
+
+  app.post('/library/:id/seasons/:season/rescan-intros', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const { id, season: rawSeason } = request.params as { id: string; season: string };
+    const season = Number(rawSeason);
+    if (!Number.isInteger(season) || season <= 0) {
+      throw ApiError.badRequest('Season must be a positive integer', 'INVALID_SEASON');
+    }
+    const force = (request.query as { force?: string }).force === 'true';
+    const item = await prisma.mediaItem.findUnique({
+      where: { id },
+      select: { id: true, type: true, title: true },
+    });
+    if (!item) throw ApiError.notFound('Media item not found');
+    if (item.type !== 'SHOW') {
+      throw ApiError.badRequest('Intro detection only applies to shows', 'NOT_A_SHOW');
+    }
+    await enqueueIntroDetection(id, season, { force });
+    await writeAuditEvent({
+      actorId: request.account!.id,
+      action: force ? 'INTROS_FORCED_RESCAN_QUEUED' : 'INTROS_RESCAN_QUEUED',
+      targetType: 'MEDIA_ITEM',
+      targetId: id,
+      targetLabel: item.title,
+      details: { season, force },
+    });
+    return { mediaItemId: id, season, force, queued: true };
   });
 
   app.post('/library/:id/analyze', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {

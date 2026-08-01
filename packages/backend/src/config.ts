@@ -80,6 +80,24 @@ const envSchema = z.object({
   TRANSMISSION_USER: z.string().min(1).default('admin'),
   TRANSMISSION_PASS: z.string().min(1).default('flux'),
 
+  /**
+   * Automatic intro detection (FFmpeg audio extraction + Chromaprint fpcalc).
+   * Runs as a background job when episodes are imported or an admin rescans a
+   * season. Detected segments are stored as AUTOMATIC rows in media_segments
+   * and never overwrite MANUAL markers unless a forced rescan is requested.
+   */
+  INTRO_DETECTION_ENABLED: envBoolean(true),
+  /** Audio window (minutes) fingerprinted per episode. Default 15. */
+  INTRO_DETECTION_WINDOW_MINUTES: z.coerce.number().int().min(1).max(60).default(15),
+  /** Minimum accepted intro duration in seconds. Default 40. */
+  INTRO_MIN_SECONDS: z.coerce.number().min(10).max(600).default(40),
+  /** Minimum frame-match ratio (0..1) to accept a repeated segment. Default 0.65. */
+  INTRO_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.65),
+  /** Minimum fraction of season episodes that must contain the segment. Default 0.6. */
+  INTRO_MIN_COVERAGE: z.coerce.number().min(0.2).max(1).default(0.6),
+  INTRO_FFMPEG_PATH: z.string().min(1).default('ffmpeg'),
+  INTRO_FPCALC_PATH: z.string().min(1).default('fpcalc'),
+
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(8).optional(),
 });

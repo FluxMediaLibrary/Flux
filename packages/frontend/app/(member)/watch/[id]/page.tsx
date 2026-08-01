@@ -124,6 +124,7 @@ export default function WatchPage() {
         onNearEnd={handleNearEnd}
         nextEpisode={nextEpisodePrompt}
         nextEpisodeMarkers={activeEpisode?.playbackMarkers ?? item?.playbackMarkers}
+        segments={activeEpisode?.segments ?? []}
         onNextEpisode={nextEpisode ? handleNextEpisode : undefined}
         onBack={() => router.push(`/library/${id}`)}
       />

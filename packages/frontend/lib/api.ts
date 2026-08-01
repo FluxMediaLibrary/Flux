@@ -14,10 +14,12 @@ import type {
   AdminMediaDeleteResultDTO,
   AdminLibraryRepairResultDTO,
   AdminMediaAnalyzeResultDTO,
+  AdminIntroRescanResultDTO,
   AdminStorageCleanupResultDTO,
   ApiError,
   AuthResponse,
   ConfirmTorrentRequest,
+  CreateMediaSegmentRequest,
   CreateInviteRequest,
   CreateProfileRequest,
   CreateRequestRequest,
@@ -26,6 +28,7 @@ import type {
   LibraryItemDTO,
   LoginRequest,
   MediaItemDetailDTO,
+  MediaSegmentDTO,
   MediaType,
   NotificationSettingsDTO,
   PlaybackInfoDTO,
@@ -45,6 +48,7 @@ import type {
   TorrentParseResult,
   UpdateNotificationSettingsRequest,
   UpdateAdminUserRequest,
+  UpdateMediaSegmentRequest,
   WatchProgressDTO,
 } from '@flux/shared';
 
@@ -564,6 +568,41 @@ export const api = {
     return request<AdminMediaDeleteResultDTO>(
       `/api/admin/library/episodes/${encodeURIComponent(episodeId)}`,
       { method: 'DELETE' },
+    );
+  },
+
+  // Media segments (intro/recap/credits/preview markers)
+  getAdminMediaSegments(mediaItemId: string, season?: number) {
+    const qs = new URLSearchParams();
+    if (season !== undefined && season > 0) qs.set('season', String(season));
+    const q = qs.toString();
+    return request<MediaSegmentDTO[]>(
+      `/api/admin/library/${encodeURIComponent(mediaItemId)}/segments${q ? `?${q}` : ''}`,
+    );
+  },
+  createAdminMediaSegment(episodeId: string, body: CreateMediaSegmentRequest) {
+    return request<MediaSegmentDTO>(
+      `/api/admin/library/episodes/${encodeURIComponent(episodeId)}/segments`,
+      { method: 'POST', body },
+    );
+  },
+  updateAdminMediaSegment(segmentId: string, body: UpdateMediaSegmentRequest) {
+    return request<MediaSegmentDTO>(
+      `/api/admin/library/segments/${encodeURIComponent(segmentId)}`,
+      { method: 'PATCH', body },
+    );
+  },
+  deleteAdminMediaSegment(segmentId: string) {
+    return request<void>(
+      `/api/admin/library/segments/${encodeURIComponent(segmentId)}`,
+      { method: 'DELETE' },
+    );
+  },
+  rescanAdminSeasonIntros(mediaItemId: string, season: number, force = false) {
+    const qs = force ? '?force=true' : '';
+    return request<AdminIntroRescanResultDTO>(
+      `/api/admin/library/${encodeURIComponent(mediaItemId)}/seasons/${encodeURIComponent(String(season))}/rescan-intros${qs}`,
+      { method: 'POST' },
     );
   },
 };
