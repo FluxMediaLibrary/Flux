@@ -4,6 +4,7 @@ UPDATE "profiles"
 SET "avatar" = NULL
 WHERE "avatar" IN (
   '13350-aristocatlove',
+  '1545-1000031285',
   '1612-mareo',
   '1734-vaultboy',
   '1826-pipboy',
@@ -16,6 +17,7 @@ WHERE "avatar" IN (
   '36305-arielsteam',
   '3718-muerto',
   '3718-nukacola',
+  '39738-funkymothman',
   '4299-sabiondo',
   '4299-santoperonotanto',
   '4912-triste',
@@ -36,6 +38,7 @@ WHERE "avatar" IN (
   '75618-sebshock',
   '77535-aristocatwhat',
   '78677-arielhi',
+  '7868-owo',
   '7968_fallout_pip_boy',
   '79732-quantum-queers-logo',
   '79985-aristocathi',
@@ -43,5 +46,6 @@ WHERE "avatar" IN (
   '8871-chapa',
   '90370-arielsad',
   '9368-enojo',
-  '97162-aristocatno'
+  '97162-aristocatno',
+  'tribal'
 );

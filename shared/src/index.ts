@@ -127,7 +127,7 @@ export interface UpdateProfileRequest {
 // AUTO-GENERATED into ./avatars.ts (see scripts) so the source images, the
 // backend allow-list, and the picker can never drift apart.
 
-export type AvatarCategory = 'Emotes' | 'Characters' | 'Zodiac' | 'Icons';
+export type AvatarCategory = 'Emotes' | 'Zodiac' | 'Icons';
 
 export interface AvatarPreset {
   id: string;
@@ -141,7 +141,6 @@ export interface AvatarPreset {
 
 export const AVATAR_CATEGORY_ORDER: readonly AvatarCategory[] = [
   'Emotes',
-  'Characters',
   'Zodiac',
   'Icons',
 ];
@@ -158,7 +157,6 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
   { id: '87893-laugh', file: '87893-laugh.png', label: 'Laugh', category: 'Emotes' },
   { id: '80808-nervous', file: '80808-nervous.png', label: 'Nervous', category: 'Emotes' },
   { id: '36063-okay', file: '36063-okay.png', label: 'Okay', category: 'Emotes' },
-  { id: '7868-owo', file: '7868-owo.png', label: 'OwO', category: 'Emotes' },
   { id: '84145-plead', file: '84145-plead.png', label: 'Plead', category: 'Emotes' },
   { id: '58272-regret', file: '58272-regret.png', label: 'Regret', category: 'Emotes' },
   { id: '9644-sad', file: '9644-sad.png', label: 'Sad', category: 'Emotes' },
@@ -171,10 +169,6 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
   { id: '69470-think', file: '69470-think.png', label: 'Think', category: 'Emotes' },
   { id: '92984-thumbsup', file: '92984-thumbsup.png', label: 'Thumbs Up', category: 'Emotes' },
   { id: '79627-innocent', file: '79627-innocent.png', label: 'Innocent', category: 'Emotes' },
-  { id: 'tribal', file: 'tribal.png', label: 'Tribal', category: 'Emotes' },
-
-  // ── Characters (animated) ──
-  { id: '39738-funkymothman', file: '39738-funkymothman.gif', label: 'Funky Mothman', category: 'Characters' },
 
   // ── Zodiac ──
   { id: '9692_zodiac_aquarius', file: '9692_zodiac_aquarius.png', label: 'Aquarius', category: 'Zodiac' },
@@ -199,7 +193,6 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
   { id: '96311-dog', file: '96311-dog.png', label: 'Dog', category: 'Icons' },
   { id: '391926-frog', file: '391926-frog.png', label: 'Frog', category: 'Icons' },
   { id: '605187-goat', file: '605187-goat.png', label: 'Goat', category: 'Icons' },
-  { id: '1545-1000031285', file: '1545-1000031285.png', label: 'Owl', category: 'Icons' },
   { id: '647772-pouch', file: '647772-pouch.png', label: 'Pouch', category: 'Icons' },
   { id: '55902-trophy', file: '55902-trophy.png', label: 'Trophy', category: 'Icons' },
 ];
