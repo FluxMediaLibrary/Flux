@@ -8,10 +8,12 @@ import { Worker, type Job } from 'bullmq';
 import { bullConnection } from '../lib/redis.js';
 import {
   QUEUE_NAMES,
+  type IntroDetectionJob,
   type TorrentPostprocessJob,
   type TranscodeJob,
 } from './queues.js';
 import { processTorrentPostprocess } from '../modules/torrents/postprocess.js';
+import { runIntroDetectionForSeason } from '../modules/media-segments/intro-detection/intro-detection.service.js';
 
 let workers: Worker[] = [];
 
@@ -24,6 +26,12 @@ async function processTorrentPostprocessJob(
 async function processTranscode(job: Job<TranscodeJob>): Promise<void> {
   // TODO(phase 6): spawn FFmpeg to produce HLS segments for the session.
   job.log(`transcode stub for session ${job.data.sessionId}`);
+}
+
+async function processIntroDetection(
+  job: Job<IntroDetectionJob>,
+): Promise<void> {
+  await runIntroDetectionForSeason(job);
 }
 
 /** Start all background workers. Called from server bootstrap. */
@@ -40,7 +48,14 @@ export function startWorkers(): Worker[] {
     { connection: bullConnection, concurrency: 2 },
   );
 
-  workers = [torrentWorker, transcodeWorker];
+  const introDetectionWorker = new Worker<IntroDetectionJob>(
+    QUEUE_NAMES.introDetection,
+    processIntroDetection,
+    // Fingerprinting is FFmpeg/CPU heavy; one at a time keeps imports stable.
+    { connection: bullConnection, concurrency: 1 },
+  );
+
+  workers = [torrentWorker, transcodeWorker, introDetectionWorker];
   return workers;
 }
 

@@ -19,8 +19,9 @@ import type {
   ContinueWatchingItemDTO,
   MediaType,
 } from '@flux/shared';
-import type { MediaItem, Episode, PlaybackMarker, WatchProgress } from '@prisma/client';
+import type { MediaItem, Episode, MediaSegment, PlaybackMarker, WatchProgress } from '@prisma/client';
 import { isProgressComplete } from './progress-policy.js';
+import { mapMediaSegmentToDTO } from '../media-segments/media-segments.service.js';
 
 function metadataNumber(metadata: unknown, key: string): number | null {
   if (!metadata || typeof metadata !== 'object') return null;
@@ -88,8 +89,14 @@ export function mapPlaybackMarkerToDTO(row: PlaybackMarker): PlaybackMarkerDTO {
 }
 
 /** Map a Prisma Episode row to the EpisodeDTO wire shape. */
-export function mapEpisodeToDTO(row: Episode & { playbackMarkers?: PlaybackMarker[] }): EpisodeDTO {
+export function mapEpisodeToDTO(
+  row: Episode & {
+    playbackMarkers?: PlaybackMarker[];
+    mediaSegments?: MediaSegment[];
+  },
+): EpisodeDTO {
   const markers = row.playbackMarkers?.map(mapPlaybackMarkerToDTO);
+  const segments = row.mediaSegments?.map(mapMediaSegmentToDTO);
   return {
     id: row.id,
     season: row.season,
@@ -99,6 +106,7 @@ export function mapEpisodeToDTO(row: Episode & { playbackMarkers?: PlaybackMarke
     runtime: row.runtime,
     available: row.filePath != null,
     ...(markers ? { playbackMarkers: markers } : {}),
+    ...(segments ? { segments } : {}),
   };
 }
 
@@ -337,6 +345,7 @@ export async function getMediaItemDetail(
         orderBy: [{ season: 'asc' }, { episode: 'asc' }],
         include: {
           playbackMarkers: { orderBy: { startSeconds: 'asc' } },
+          mediaSegments: { orderBy: { startMs: 'asc' } },
         },
       },
     },

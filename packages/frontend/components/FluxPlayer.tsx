@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   MediaPlayer,
   MediaProvider,
@@ -24,7 +24,7 @@ declare global {
     };
   }
 }
-import type { MediaStreamDTO, PlaybackInfoDTO, PlaybackMarkerDTO } from '@flux/shared';
+import type { MediaSegmentDTO, MediaStreamDTO, PlaybackInfoDTO, PlaybackMarkerDTO } from '@flux/shared';
 import { ControlBar } from './player/ControlBar';
 import { DebugOverlay } from './player/DebugOverlay';
 import { ErrorOverlay } from './player/ErrorOverlay';
@@ -59,6 +59,8 @@ interface FluxPlayerProps {
     subtitle: string;
   } | null;
   nextEpisodeMarkers?: PlaybackMarkerDTO[];
+  /** Reusable segment markers for the current episode (intro/recap/credits). */
+  segments?: MediaSegmentDTO[];
   onNextEpisode?: () => void;
 }
 
@@ -261,6 +263,7 @@ function FluxMediaPlayer({
   onNearEnd,
   nextEpisode,
   nextEpisodeMarkers,
+  segments,
   onNextEpisode,
   source,
   onQualityChange,
@@ -445,6 +448,7 @@ function FluxMediaPlayer({
         onNearEnd={onNearEnd}
         nextEpisode={nextEpisode}
         nextEpisodeMarkers={nextEpisodeMarkers}
+        segments={segments}
         onNextEpisode={onNextEpisode}
         playerRef={playerRef}
         debugOpen={debugOpen}
@@ -508,6 +512,7 @@ function FluxPlayerChrome({
   onNearEnd,
   nextEpisode,
   nextEpisodeMarkers,
+  segments,
   onNextEpisode,
   playerRef,
   debugOpen,
@@ -539,6 +544,7 @@ function FluxPlayerChrome({
   | 'onNearEnd'
   | 'nextEpisode'
   | 'nextEpisodeMarkers'
+  | 'segments'
   | 'onNextEpisode'
 > & {
   playerRef: RefObject<MediaPlayerInstance | null>;
@@ -601,7 +607,25 @@ function FluxPlayerChrome({
       currentTimeSeconds: absoluteCurrentTime,
       durationSeconds: stableDuration,
       markers: nextEpisodeMarkers,
+      segments,
     }),
+  );
+  const introSegment = useMemo(
+    () =>
+      (segments ?? [])
+        .filter((segment) => segment.type === 'INTRO')
+        .find((segment) => segment.endMs > segment.startMs) ?? null,
+    [segments],
+  );
+  const introSkippedRef = useRef(false);
+  const introStartSeconds = introSegment ? introSegment.startMs / 1000 : null;
+  const introEndSeconds = introSegment ? introSegment.endMs / 1000 : null;
+  const inIntroRange = Boolean(
+    introStartSeconds !== null &&
+    introEndSeconds !== null &&
+    absoluteCurrentTime >= introStartSeconds &&
+    absoluteCurrentTime < introEndSeconds - 1 &&
+    !introSkippedRef.current,
   );
 
   // Android owns the single Cast sender. The WebView only publishes the
@@ -1020,6 +1044,19 @@ function FluxPlayerChrome({
           <span>Next Episode</span>
           <strong>{nextEpisode.title}</strong>
           <small>{nextEpisode.subtitle}</small>
+        </button>
+      )}
+      {inIntroRange && introEndSeconds !== null && (
+        <button
+          className="fx-skip-intro"
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            introSkippedRef.current = true;
+            seekTo(introEndSeconds);
+          }}
+        >
+          Skip Intro
         </button>
       )}
       <ControlBar

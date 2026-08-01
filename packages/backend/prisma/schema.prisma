@@ -149,6 +149,7 @@ model Episode {
   mediaStreams  MediaStream[]
   mediaInfo     MediaInfo?
   playbackMarkers PlaybackMarker[]
+  mediaSegments MediaSegment[]
 
   @@unique([mediaItemId, season, episode])
   @@index([mediaItemId])
@@ -171,6 +172,38 @@ model PlaybackMarker {
   @@index([mediaItemId, type])
   @@index([episodeId, type])
   @@map("playback_markers")
+}
+
+enum MediaSegmentType {
+  INTRO
+  RECAP
+  CREDITS
+  PREVIEW
+}
+
+enum MediaSegmentSource {
+  AUTOMATIC
+  MANUAL
+}
+
+/// Reusable media segment markers (intro/recap/credits/preview) with
+/// millisecond timestamps, confidence, and provenance (automatic vs manual).
+/// Automatic rescans must never overwrite MANUAL segments unless forced.
+model MediaSegment {
+  id         String             @id @default(cuid())
+  episodeId  String
+  type       MediaSegmentType
+  startMs    Int
+  endMs      Int
+  confidence Float              @default(1)
+  source     MediaSegmentSource @default(AUTOMATIC)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@index([episodeId, type])
+  @@map("media_segments")
 }
 
 model MediaStream {

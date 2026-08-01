@@ -10,6 +10,7 @@ import type {
   AdminLibraryRequestDTO,
   AdminLibrarySeasonDTO,
   AdminMediaDeleteResultDTO,
+  MediaSegmentDTO,
   MediaType,
 } from '@flux/shared';
 import { api, FluxApiError } from '@/lib/api';
@@ -207,6 +208,9 @@ export default function AdminLibraryPage() {
   const [deletingTarget, setDeletingTarget] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<'sync' | 'analyze' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [scanTarget, setScanTarget] = useState<string | null>(null);
+  const [forceScanTarget, setForceScanTarget] = useState<{ item: AdminLibraryItemDTO; season: number } | null>(null);
+  const [segmentEditor, setSegmentEditor] = useState<{ item: AdminLibraryItemDTO; episode: AdminLibraryEpisodeDTO } | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -391,6 +395,28 @@ export default function AdminLibraryPage() {
     }
   }
 
+  async function rescanSeasonIntros(item: AdminLibraryItemDTO, season: number, force: boolean) {
+    const key = `${item.id}:s${season}`;
+    setScanTarget(key);
+    setNotice(null);
+    setError(null);
+    setForceScanTarget(null);
+    try {
+      await api.rescanAdminSeasonIntros(item.id, season, force);
+      setNotice(
+        `Queued intro scan for ${item.title} S${season}` +
+          (force ? ' (will overwrite manual markers)' : '') +
+          '. It runs in the background; refresh to see results.',
+      );
+    } catch (err) {
+      setError(
+        err instanceof FluxApiError ? err.message : 'Failed to queue intro scan.',
+      );
+    } finally {
+      setScanTarget(null);
+    }
+  }
+
   return (
     <div className="admin-library control-page">
       <PageHeader title="Library" description="File availability, episode coverage, metadata, and media analysis state." actions={
@@ -493,11 +519,15 @@ export default function AdminLibraryPage() {
                   analyzing={analyzingId === item.id}
                   clearingTarget={clearingTarget}
                   deletingTarget={deletingTarget}
+                  scanningTarget={scanTarget}
                   onToggle={() => toggleExpanded(item.id)}
                   onSync={(season) => void syncEpisodes(item, season)}
                   onAnalyze={() => void analyzeMedia(item)}
                   onClearMissing={(episode) => void clearMissingFile(item, episode)}
                   onDelete={(episode) => setDeleteTarget({ item, episode })}
+                  onScanSeason={(season) => void rescanSeasonIntros(item, season, false)}
+                  onForceScanSeason={(season) => setForceScanTarget({ item, season })}
+                  onEditIntro={(episode) => setSegmentEditor({ item, episode })}
                 />
               ))}
             </div>
@@ -518,6 +548,31 @@ export default function AdminLibraryPage() {
         }}
         onConfirm={() => void deleteSelectedMedia()}
       />
+      <ConfirmDialog
+        open={forceScanTarget !== null}
+        title="Overwrite manual intro markers?"
+        description={`Rescanning ${forceScanTarget?.item.title ?? ''} S${forceScanTarget?.season ?? ''} with overwrite will delete manual intro markers set by an admin before running detection.`}
+        confirmLabel="Overwrite and rescan"
+        dangerous
+        busy={
+          forceScanTarget !== null &&
+          scanTarget === `${forceScanTarget.item.id}:s${forceScanTarget.season}`
+        }
+        onClose={() => {
+          if (scanTarget === null) setForceScanTarget(null);
+        }}
+        onConfirm={() => {
+          if (forceScanTarget) void rescanSeasonIntros(forceScanTarget.item, forceScanTarget.season, true);
+        }}
+      />
+      {segmentEditor && (
+        <SegmentEditorDialog
+          item={segmentEditor.item}
+          episode={segmentEditor.episode}
+          onClose={() => setSegmentEditor(null)}
+          onSaved={() => void load()}
+        />
+      )}
     </div>
   );
 }
@@ -632,11 +687,15 @@ function LibraryHealthRow({
   analyzing,
   clearingTarget,
   deletingTarget,
+  scanningTarget,
   onToggle,
   onSync,
   onAnalyze,
   onClearMissing,
   onDelete,
+  onScanSeason,
+  onForceScanSeason,
+  onEditIntro,
 }: {
   item: AdminLibraryItemDTO;
   expanded: boolean;
@@ -644,11 +703,15 @@ function LibraryHealthRow({
   analyzing: boolean;
   clearingTarget: string | null;
   deletingTarget: string | null;
+  scanningTarget: string | null;
   onToggle: () => void;
   onSync: (season?: number) => void;
   onAnalyze: () => void;
   onClearMissing: (episode?: AdminLibraryEpisodeDTO) => void;
   onDelete: (episode?: AdminLibraryEpisodeDTO) => void;
+  onScanSeason: (season: number) => void;
+  onForceScanSeason: (season: number) => void;
+  onEditIntro: (episode: AdminLibraryEpisodeDTO) => void;
 }) {
   const tone = issueTone(item);
   const issues = item.issues.length > 0 ? item.issues : ['Healthy'];
@@ -793,6 +856,28 @@ function LibraryHealthRow({
                     {syncingSeason ? 'Syncing' : 'Sync'}
                   </button>
                 )}
+                {season.availableEpisodes > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      className="admin-season-action"
+                      title="Scan for intros without touching manual markers"
+                      onClick={() => onScanSeason(season.season)}
+                      disabled={scanningTarget === `${item.id}:s${season.season}`}
+                    >
+                      {scanningTarget === `${item.id}:s${season.season}` ? 'Scanning' : 'Scan intros'}
+                    </button>
+                    <button
+                      type="button"
+                      className="admin-season-action"
+                      title="Rescan and overwrite manual intro markers"
+                      onClick={() => onForceScanSeason(season.season)}
+                      disabled={scanningTarget === `${item.id}:s${season.season}`}
+                    >
+                      Overwrite
+                    </button>
+                  </>
+                )}
               </div>
             );
           })}
@@ -887,6 +972,16 @@ function LibraryHealthRow({
                   >
                     {deletingTarget === `episode:${episode.id}` ? 'Deleting' : 'Delete episode'}
                   </button>
+                  {episode.filePath && (
+                    <button
+                      type="button"
+                      className="admin-episode-action"
+                      title="Set or edit this episode's intro marker"
+                      onClick={() => onEditIntro(episode)}
+                    >
+                      Intro
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -912,6 +1007,189 @@ function Metric({
     <div className="admin-library-metric">
       <span>{label}</span>
       <strong className={bad ? 'bad' : warn ? 'warn' : undefined}>{value}</strong>
+    </div>
+  );
+}
+
+function formatSegmentTime(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, '0');
+  return `${minutes}:${seconds}`;
+}
+
+function SegmentEditorDialog({
+  item,
+  episode,
+  onClose,
+  onSaved,
+}: {
+  item: AdminLibraryItemDTO;
+  episode: AdminLibraryEpisodeDTO;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [segments, setSegments] = useState<MediaSegmentDTO[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [startSeconds, setStartSeconds] = useState('');
+  const [endSeconds, setEndSeconds] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const intro = segments?.find((segment) => segment.type === 'INTRO') ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadError(null);
+    api.getAdminMediaSegments(item.id, episode.season).then(
+      (rows) => {
+        if (cancelled) return;
+        const episodeSegments = rows.filter((row) => row.episodeId === episode.id);
+        const match = episodeSegments.find((row) => row.type === 'INTRO');
+        setSegments(episodeSegments);
+        setStartSeconds(match ? String(Math.round((match.startMs / 1000) * 10) / 10) : '');
+        setEndSeconds(match ? String(Math.round((match.endMs / 1000) * 10) / 10) : '');
+      },
+      (err) => {
+        if (!cancelled) {
+          setLoadError(err instanceof FluxApiError ? err.message : 'Failed to load markers.');
+        }
+      },
+    );
+    return () => { cancelled = true; };
+  }, [episode.id, episode.season, item.id]);
+
+  useEffect(() => {
+    if (!intro) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !saving) onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [intro, onClose, saving]);
+
+  async function save() {
+    const start = Number(startSeconds);
+    const end = Number(endSeconds);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) {
+      setSaveError('Enter valid start and end times (end must be after start).');
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      if (intro) {
+        await api.updateAdminMediaSegment(intro.id, {
+          type: 'INTRO',
+          startMs: Math.round(start * 1000),
+          endMs: Math.round(end * 1000),
+        });
+      } else {
+        await api.createAdminMediaSegment(episode.id, {
+          type: 'INTRO',
+          startMs: Math.round(start * 1000),
+          endMs: Math.round(end * 1000),
+        });
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      setSaveError(err instanceof FluxApiError ? err.message : 'Failed to save marker.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove() {
+    if (!intro) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await api.deleteAdminMediaSegment(intro.id);
+      onSaved();
+      onClose();
+    } catch (err) {
+      setSaveError(err instanceof FluxApiError ? err.message : 'Failed to delete marker.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="control-dialog-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target && !saving) onClose();
+      }}
+    >
+      <div className="control-dialog" role="dialog" aria-modal="true" aria-labelledby="segment-dialog-title">
+        <h2 id="segment-dialog-title">Intro marker</h2>
+        <p>
+          {item.title} S{episode.season} E{episode.episode}
+          {episode.title ? ` - ${episode.title}` : ''}
+        </p>
+        {loadError ? (
+          <p className="control-error" role="alert" style={{ marginTop: 10 }}>{loadError}</p>
+        ) : (
+          <>
+            <div className="control-field-grid" style={{ marginTop: 14 }}>
+              <div className="control-field">
+                <label htmlFor="intro-start">Start (seconds)</label>
+                <input
+                  id="intro-start"
+                  className="control-input"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={startSeconds}
+                  onChange={(event) => setStartSeconds(event.target.value)}
+                  disabled={saving}
+                />
+              </div>
+              <div className="control-field">
+                <label htmlFor="intro-end">End (seconds)</label>
+                <input
+                  id="intro-end"
+                  className="control-input"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={endSeconds}
+                  onChange={(event) => setEndSeconds(event.target.value)}
+                  disabled={saving}
+                />
+              </div>
+            </div>
+            {intro && (
+              <p style={{ marginTop: 10, fontSize: 11, color: 'var(--control-muted)' }}>
+                Current: {formatSegmentTime(intro.startMs)} - {formatSegmentTime(intro.endMs)} ·{' '}
+                {intro.source === 'MANUAL' ? 'manual' : 'automatic'} · confidence {(intro.confidence * 100).toFixed(0)}%
+              </p>
+            )}
+            {saveError && (
+              <p className="control-error" role="alert" style={{ marginTop: 10 }}>{saveError}</p>
+            )}
+          </>
+        )}
+        <div>
+          <button className="control-button" disabled={saving} onClick={onClose}>
+            Cancel
+          </button>
+          {intro && (
+            <button className="control-button danger" disabled={saving} onClick={() => void remove()}>
+              Delete
+            </button>
+          )}
+          <button
+            className="control-button primary"
+            disabled={saving || loadError !== null}
+            onClick={() => void save()}
+          >
+            {saving ? 'Saving…' : intro ? 'Save' : 'Set intro'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

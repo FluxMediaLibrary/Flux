@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { QUALITY_TIERS, applicableTiers } from '../../lib/adaptive-hls.js';
 import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
 import type { MediaStream } from '@prisma/client';
+import { mapMediaSegmentToDTO } from '../media-segments/media-segments.service.js';
 
 /** Map a file extension to its MIME type for direct-play streaming. */
 function mimeTypeFromExt(ext: string): string {
@@ -372,6 +373,12 @@ export async function getPlaybackInfo(
     orderBy: { index: 'asc' },
   });
   const videoStream = primaryVideoStream(streams);
+  const segments = episodeId
+    ? await prisma.mediaSegment.findMany({
+        where: { episodeId },
+        orderBy: { startMs: 'asc' },
+      })
+    : [];
 
   return {
     directPlay: decision.directPlay,
@@ -379,6 +386,7 @@ export async function getPlaybackInfo(
     videoCodec: decision.videoCodec,
     audioCodec: decision.audioCodec,
     durationSeconds: decision.durationSeconds,
+    ...(segments.length > 0 ? { segments: segments.map(mapMediaSegmentToDTO) } : {}),
     streams: streams.map(mapMediaStream),
     qualities: buildQualityOptions(decision.directPlay, videoStream),
   };
