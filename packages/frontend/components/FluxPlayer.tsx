@@ -9,7 +9,12 @@ import {
   type MediaPlayerInstance,
 } from '@vidstack/react';
 import { api } from '@/lib/api';
-import { isCurrentCastMedia, useNativeCast } from '@/lib/native-cast';
+import {
+  isCastSessionActive,
+  isCurrentCastMedia,
+  shouldAutoplayLocalMedia,
+  useNativeCast,
+} from '@/lib/native-cast';
 
 import type { MediaSegmentDTO, MediaStreamDTO, PlaybackInfoDTO, PlaybackMarkerDTO } from '@flux/shared';
 import { ControlBar } from './player/ControlBar';
@@ -291,6 +296,7 @@ function FluxMediaPlayer({
   const recoverableErrorRef = useRef(false);
   const hlsRecoveryRef = useRef({ time: 0, at: 0 });
   const hlsMediaTimeOriginRef = useRef(0);
+  const nativeCast = useNativeCast();
 
   useEffect(() => {
     setPlaybackReady(false);
@@ -399,6 +405,11 @@ function FluxMediaPlayer({
   const videoLabel = getStreamLabel(source.info?.streams ?? [], 'video');
   const audioLabel = getStreamLabel(source.info?.streams ?? [], 'audio');
   const autoplayEnabled = source.info?.preferences.autoplayEnabled ?? true;
+  const localAutoplayEnabled = shouldAutoplayLocalMedia(
+    autoplayEnabled,
+    nativeCast.ready,
+    nativeCast.state.connected,
+  );
   const configuredStartPosition = source.info?.preferences.resumeBehavior === 'RESTART' ? 0 : startPositionSeconds;
   const configuredSegments = source.info?.preferences.skipIntroEnabled === false
     ? segments?.filter((segment) => segment.type !== 'INTRO')
@@ -412,7 +423,7 @@ function FluxMediaPlayer({
       className={fill ? 'fx-player fx-player--fill' : 'fx-player'}
       aspectRatio={fill ? undefined : '16/9'}
       load="visible"
-      autoPlay={autoplayEnabled}
+      autoPlay={localAutoplayEnabled}
       playsInline
       crossOrigin
       controls={false}
@@ -456,7 +467,8 @@ function FluxMediaPlayer({
         nextEpisodeMarkers={nextEpisodeMarkers}
         segments={configuredSegments}
         onNextEpisode={onNextEpisode}
-        autoplayEnabled={autoplayEnabled}
+        autoplayEnabled={localAutoplayEnabled}
+        nativeCast={nativeCast}
         playerRef={playerRef}
         debugOpen={debugOpen}
         methodLabel={methodLabel}
@@ -540,6 +552,7 @@ function FluxPlayerChrome({
   onPlaybackIntent,
   onPlaybackStateChange,
   autoplayEnabled,
+  nativeCast,
 }: Pick<
   FluxPlayerProps,
   | 'mediaItemId'
@@ -574,6 +587,7 @@ function FluxPlayerChrome({
   onPlaybackIntent: (wantsPlayback: boolean) => void;
   onPlaybackStateChange: (state: { paused: boolean; started: boolean }) => void;
   autoplayEnabled: boolean;
+  nativeCast: ReturnType<typeof useNativeCast>;
 }) {
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
@@ -586,10 +600,12 @@ function FluxPlayerChrome({
   const seekableStart = useMediaState('seekableStart');
   const seekableEnd = useMediaState('seekableEnd');
   const remote = useMediaRemote();
-  const nativeCast = useNativeCast();
   const nativeCastStateRef = useRef(nativeCast.state);
   nativeCastStateRef.current = nativeCast.state;
-  const castRemoteActive = isCurrentCastMedia(nativeCast.state, mediaItemId, episodeId);
+  const castConnected = nativeCast.state.connected;
+  const castRemoteActive = isCastSessionActive(nativeCast.state);
+  const castMediaCurrent = isCurrentCastMedia(nativeCast.state, mediaItemId, episodeId);
+  const castTransitioning = castRemoteActive && !castMediaCurrent;
   const resumeTargetRef = useRef(playbackMethod === 'direct' ? (startPositionSeconds ?? 0) : 0);
   const nearEndFiredRef = useRef(false);
   const autoplayAttemptedRef = useRef(false);
@@ -614,10 +630,10 @@ function FluxPlayerChrome({
     mediaTimeOrigin,
   );
   const absoluteCurrentTime = castRemoteActive
-    ? nativeCast.state.currentTimeSeconds
+    ? castMediaCurrent ? nativeCast.state.currentTimeSeconds : 0
     : localAbsoluteCurrentTime;
   const controlsPaused = castRemoteActive
-    ? nativeCast.state.playerState !== 'PLAYING'
+    ? castTransitioning || nativeCast.state.playerState !== 'PLAYING'
     : paused;
   const showNextEpisode = Boolean(
     nextEpisode &&
@@ -665,14 +681,19 @@ function FluxPlayerChrome({
     };
   }, []);
 
+  const pauseForNativeCast = useCallback(() => {
+    onPlaybackIntent(false);
+    remote.pause();
+  }, [onPlaybackIntent, remote]);
+
   useEffect(() => {
-    const pauseForNativeCast = () => {
-      onPlaybackIntent(false);
-      remote.pause();
-    };
+    if (castConnected) pauseForNativeCast();
+  }, [castConnected, pauseForNativeCast]);
+
+  useEffect(() => {
     document.addEventListener('flux:native-cast-local-pause', pauseForNativeCast);
     return () => document.removeEventListener('flux:native-cast-local-pause', pauseForNativeCast);
-  }, [onPlaybackIntent, remote]);
+  }, [pauseForNativeCast]);
 
   useEffect(() => {
     onPlaybackStateChange({ paused, started });
@@ -719,6 +740,7 @@ function FluxPlayerChrome({
       const hardMax = stableDuration > 0 ? stableDuration : Number.POSITIVE_INFINITY;
       const target = Math.max(0, Math.min(time, hardMax));
       if (castRemoteActive) {
+        if (!castMediaCurrent) return;
         nativeCast.seek(target);
         return;
       }
@@ -750,6 +772,7 @@ function FluxPlayerChrome({
       playerRef,
       remote,
       castRemoteActive,
+      castMediaCurrent,
       nativeCast.seek,
       mediaTimeOrigin,
       seekableEnd,
@@ -782,6 +805,7 @@ function FluxPlayerChrome({
   const togglePlayback = useCallback(
     (trigger?: Event) => {
       if (castRemoteActive) {
+        if (!castMediaCurrent) return;
         if (nativeCast.state.playerState === 'PLAYING') nativeCast.pause();
         else nativeCast.play();
         return;
@@ -794,7 +818,7 @@ function FluxPlayerChrome({
         remote.pause(trigger);
       }
     },
-    [castRemoteActive, enterFullscreenForPlay, nativeCast.pause, nativeCast.play, nativeCast.state.playerState, onPlaybackIntent, paused, remote],
+    [castMediaCurrent, castRemoteActive, enterFullscreenForPlay, nativeCast.pause, nativeCast.play, nativeCast.state.playerState, onPlaybackIntent, paused, remote],
   );
 
   useEffect(() => {
@@ -844,6 +868,7 @@ function FluxPlayerChrome({
 
   const reportProgress = useCallback(() => {
     if (castRemoteActive) {
+      if (!castMediaCurrent) return;
       const castState = nativeCastStateRef.current;
       const position = castState.currentTimeSeconds;
       const totalDuration = stableDuration > 0 ? stableDuration : castState.durationSeconds;
@@ -898,6 +923,7 @@ function FluxPlayerChrome({
     onProgress?.(position, totalDuration);
   }, [
     castRemoteActive,
+    castMediaCurrent,
     episodeId,
     mediaItemId,
     mediaTimeOrigin,
@@ -1047,14 +1073,16 @@ function FluxPlayerChrome({
       } else if (event.key.toLowerCase() === 'm') {
         event.preventDefault();
         setIdle(false);
-        if (castRemoteActive) nativeCast.toggleMute();
+        if (castRemoteActive) {
+          if (castMediaCurrent) nativeCast.toggleMute();
+        }
         else remote.toggleMuted(event);
       }
     };
 
     window.addEventListener('keydown', handleKey, { capture: true });
     return () => window.removeEventListener('keydown', handleKey, { capture: true });
-  }, [absoluteCurrentTime, castRemoteActive, nativeCast.toggleMute, remote, seekTo, togglePlayback]);
+  }, [absoluteCurrentTime, castMediaCurrent, castRemoteActive, nativeCast.toggleMute, remote, seekTo, togglePlayback]);
 
   return (
     <div ref={chromeRef} className={idle ? 'fx-chrome is-idle' : 'fx-chrome'}>
@@ -1073,10 +1101,10 @@ function FluxPlayerChrome({
         <div className="fx-cast-remote-banner" role="status">
           <span>CASTING TO</span>
           <strong>{nativeCast.state.deviceName ?? 'TV'}</strong>
-          <small>{nativeCast.state.title ?? title}{nativeCast.state.subtitle ? ` · ${nativeCast.state.subtitle}` : ''}</small>
+          <small>{castMediaCurrent ? nativeCast.state.title ?? title : title}{castMediaCurrent && nativeCast.state.subtitle ? ` · ${nativeCast.state.subtitle}` : ''}</small>
         </div>
       )}
-      <div className={(castRemoteActive ? nativeCast.state.playerState === 'BUFFERING' : (!started || (waiting && !playing))) ? 'fx-spinner-wrap is-visible' : 'fx-spinner-wrap'}>
+      <div className={(castRemoteActive ? castTransitioning || nativeCast.state.playerState === 'BUFFERING' : (!started || (waiting && !playing))) ? 'fx-spinner-wrap is-visible' : 'fx-spinner-wrap'}>
         <Spinner />
       </div>
       <Timeline
@@ -1084,7 +1112,7 @@ function FluxPlayerChrome({
         episodeId={episodeId}
         durationSeconds={stableDuration || null}
         positionOffset={castRemoteActive ? 0 : positionOffset}
-        currentTimeSeconds={castRemoteActive ? nativeCast.state.currentTimeSeconds : undefined}
+        currentTimeSeconds={castRemoteActive ? castMediaCurrent ? nativeCast.state.currentTimeSeconds : 0 : undefined}
         remotePlayback={castRemoteActive}
         onSeek={seekTo}
       />
@@ -1132,6 +1160,7 @@ function FluxPlayerChrome({
         onAudioStreamChange={onAudioStreamChange}
         playbackMethod={playbackMethod}
         castState={nativeCast.state}
+        castTransitioning={castTransitioning}
         onCastRequest={nativeCast.request}
         onCastSetVolume={nativeCast.setVolume}
         onCastToggleMute={nativeCast.toggleMute}

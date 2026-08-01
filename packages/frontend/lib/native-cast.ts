@@ -83,6 +83,20 @@ export function isCurrentCastMedia(
     && state.episodeId === (episodeId ?? null);
 }
 
+export function isCastSessionActive(
+  state: Pick<NativeCastState, 'connected'>,
+): boolean {
+  return state.connected;
+}
+
+export function shouldAutoplayLocalMedia(
+  autoplayEnabled: boolean,
+  castStateReady: boolean,
+  castConnected: boolean,
+): boolean {
+  return autoplayEnabled && castStateReady && !castConnected;
+}
+
 function normalizeState(value: unknown, current: NativeCastState): NativeCastState {
   if (!value || typeof value !== 'object') return current;
   const input = value as Record<string, unknown>;
@@ -117,6 +131,7 @@ function normalizeState(value: unknown, current: NativeCastState): NativeCastSta
 
 export function useNativeCast() {
   const [state, setState] = useState<NativeCastState>(EMPTY_STATE);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const bridge = window.FluxNative;
@@ -130,6 +145,7 @@ export function useNativeCast() {
         // A later native status event will hydrate the state.
       }
     }
+    setReady(true);
 
     const onState = (event: Event) => {
       const detail = (event as CustomEvent<unknown>).detail;
@@ -162,5 +178,5 @@ export function useNativeCast() {
   const toggleMute = useCallback(() => window.FluxNative?.castToggleMute?.(), []);
   const disconnect = useCallback(() => window.FluxNative?.disconnectCast?.(), []);
 
-  return { state, request, loadMedia, play, pause, seek, setVolume, toggleMute, disconnect };
+  return { state, ready, request, loadMedia, play, pause, seek, setVolume, toggleMute, disconnect };
 }

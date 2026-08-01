@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isCurrentCastMedia } from './native-cast';
+import {
+  isCastSessionActive,
+  isCurrentCastMedia,
+  shouldAutoplayLocalMedia,
+} from './native-cast';
 
 test('matches Cast state to the exact episode', () => {
   const state = {
@@ -23,6 +27,14 @@ test('does not expose stale receiver time while another episode is loading', () 
   };
 
   assert.equal(isCurrentCastMedia(previousEpisode, 'show-1', 'episode-2'), false);
+  assert.equal(isCastSessionActive(previousEpisode), true);
+});
+
+test('keeps local playback off while Cast state loads or a receiver is connected', () => {
+  assert.equal(shouldAutoplayLocalMedia(true, false, false), false);
+  assert.equal(shouldAutoplayLocalMedia(true, true, true), false);
+  assert.equal(shouldAutoplayLocalMedia(true, true, false), true);
+  assert.equal(isCastSessionActive({ connected: true }), true);
 });
 
 test('keeps legacy receiver sessions controllable until their next load', () => {
