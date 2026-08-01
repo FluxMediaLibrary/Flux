@@ -1698,6 +1698,16 @@ table.data tr:last-child td {
   color: var(--warn);
   font-weight: 700;
 }
+.existing-data-note {
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  border-left: 3px solid var(--ok);
+  background: rgba(34, 197, 94, 0.08);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 18px;
+  font-size: 0.85rem;
+}
 .mapping-row-warn td {
   background: rgba(245,158,11,.05);
 }

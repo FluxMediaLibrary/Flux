@@ -6,9 +6,10 @@
  * with it via its JSON-RPC API at http://localhost:9091/transmission/rpc.
  */
 import { config } from '../config.js';
-import { torrentDownloadDir, torrentFilePath } from './media-paths.js';
-import { writeFile, mkdir, readdir, readFile } from 'node:fs/promises';
+import { torrentDownloadDir, torrentFilePath, safeJoin } from './media-paths.js';
+import { writeFile, mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import parseTorrent from 'parse-torrent';
 
 let _sessionId: string | null = null;
 
@@ -176,13 +177,27 @@ export async function checkTorrentClient(): Promise<{
   }
 }
 
+export interface AddTorrentResult {
+  infoHash: string;
+  name: string;
+  /** True when Transmission already had this torrent (duplicate add). */
+  reused: boolean;
+}
+
 /**
  * Add a torrent to Transmission by its raw .torrent bytes.
  * Persists the .torrent file for seed-resume on boot.
+ *
+ * When `verifyExisting` is set and the torrent is newly added, Transmission is
+ * asked to hash-check the local data before starting: files already on disk are
+ * reused (complete torrents go straight to seeding, partial ones only download
+ * missing pieces). Duplicate adds are simply started — the existing entry is
+ * already in the right state.
  */
 export async function addTorrent(
   buffer: Buffer,
-): Promise<{ infoHash: string; name: string }> {
+  opts: { verifyExisting?: boolean } = {},
+): Promise<AddTorrentResult> {
   const b64 = buffer.toString('base64');
   const result = (await rpc('torrent-add', {
     'download-dir': config.DOWNLOAD_ROOT,
@@ -198,6 +213,11 @@ export async function addTorrent(
 
   // Explicitly start the torrent (paused: false doesn't always work), including
   // duplicate/existing torrents during admin retry.
+  if (opts.verifyExisting && !result['torrent-duplicate']) {
+    // Hash-check local data first so an already-downloaded file seeds instead
+    // of being downloaded again.
+    await rpc('torrent-verify', { ids: [added.hashString] });
+  }
   await rpc('torrent-start', { ids: [added.hashString] });
 
   // Persist .torrent bytes for seed-resume on boot
@@ -205,8 +225,14 @@ export async function addTorrent(
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, buffer);
 
-  console.log(`[Transmission] Added torrent: ${added.name} (${added.hashString})`);
-  return { infoHash: added.hashString, name: added.name };
+  console.log(
+    `[Transmission] ${result['torrent-duplicate'] ? 'Reused' : 'Added'} torrent: ${added.name} (${added.hashString})`,
+  );
+  return {
+    infoHash: added.hashString,
+    name: added.name,
+    reused: Boolean(result['torrent-duplicate']),
+  };
 }
 
 /** Return live stats for a torrent by its infoHash. */
@@ -235,6 +261,15 @@ export async function stopSeeding(infoHash: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Ask Transmission to hash-check a torrent's local data. Torrents that already
+ * have their data on disk move straight to seeding once the check completes;
+ * torrents with partial data only download the pieces that are missing.
+ */
+export async function verifyTorrent(infoHash: string): Promise<void> {
+  await rpc('torrent-verify', { ids: [infoHash] });
+}
+
 /** Remove a torrent and optionally delete its files. */
 export async function removeTorrent(
   infoHash: string,
@@ -252,6 +287,67 @@ export async function removeTorrent(
     'delete-local-data': deleteFiles,
   });
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Existing-data detection
+// ---------------------------------------------------------------------------
+
+export interface ExistingDataCheck {
+  /** Files found on disk whose size matches the torrent's expectation. */
+  filesOnDisk: number;
+  /** Total files this torrent expects. */
+  totalFiles: number;
+  /** True when every expected file is already present with the right size. */
+  complete: boolean;
+}
+
+/**
+ * Detect whether a torrent's data is already present in the download root.
+ *
+ * Transmission's layout is deterministic: multi-file torrents live in a
+ * subfolder named after the torrent, single-file torrents drop the file
+ * directly into the download dir. Size is compared per file (a cheap, reliable
+ * signal without hashing); Transmission's own `torrent-verify` does the real
+ * piece hash-check afterwards.
+ *
+ * Paths are asserted inside the download root, so a malicious torrent can't
+ * probe arbitrary filesystem locations.
+ */
+export async function detectExistingData(
+  buffer: Buffer,
+  downloadRoot: string = config.DOWNLOAD_ROOT,
+): Promise<ExistingDataCheck> {
+  const parsed = await parseTorrent(buffer);
+  // parse-torrent always flattens `files`. For multi-file torrents each
+  // `path` includes the torrent-name prefix (`Name/Season/File.mkv`), matching
+  // Transmission's subfolder layout; single-file torrents are just the
+  // filename, which Transmission drops directly into the download root.
+  const rawFiles = parsed.files ?? [];
+
+  let filesOnDisk = 0;
+  for (const file of rawFiles) {
+    let expected: string;
+    try {
+      expected = safeJoin(downloadRoot, file.path);
+    } catch {
+      continue; // path escapes the download root — treat as missing
+    }
+    try {
+      const entry = await stat(expected);
+      if (entry.isFile() && entry.size === file.length) {
+        filesOnDisk++;
+      }
+    } catch {
+      // file not present yet
+    }
+  }
+
+  return {
+    filesOnDisk,
+    totalFiles: rawFiles.length,
+    complete: rawFiles.length > 0 && filesOnDisk === rawFiles.length,
+  };
 }
 
 /** Resume all previously persisted torrents on boot. */

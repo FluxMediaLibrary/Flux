@@ -194,6 +194,21 @@ export function UploadConfirm({
       (category !== 'SHOW' || (rows.length > 0 && invalidMappingCount === 0)),
   );
 
+  const existingDataNote = useMemo(() => {
+    const existing = parsed?.existingData;
+    if (!existing || existing.filesOnDisk <= 0) return null;
+    if (existing.complete) {
+      return `All ${existing.totalFiles} file${existing.totalFiles === 1 ? '' : 's'} already exist on disk — this will verify the data and start seeding without re-downloading.`;
+    }
+    return `${existing.filesOnDisk} of ${existing.totalFiles} file${existing.totalFiles === 1 ? '' : 's'} already exist on disk — existing data will be reused and only missing pieces will download.`;
+  }, [parsed]);
+
+  const confirmLabel = useMemo(() => {
+    const existing = parsed?.existingData;
+    if (!existing || existing.filesOnDisk <= 0) return 'Confirm & download';
+    return existing.complete ? 'Verify & seed' : 'Reuse data & download';
+  }, [parsed]);
+
   const selectedRequestMatch = useMemo<TmdbSearchResult | null>(() => {
     if (!selectedRequest) return null;
     return {
@@ -570,6 +585,12 @@ export function UploadConfirm({
             </div>
           </div>
 
+          {existingDataNote && (
+            <div className="existing-data-note" role="status">
+              {existingDataNote}
+            </div>
+          )}
+
           <div className="field">
             <label>Category</label>
             <div className="toggle-group" role="group" aria-label="Category">
@@ -841,7 +862,7 @@ export function UploadConfirm({
               onClick={() => void submit()}
               disabled={!canSubmit}
             >
-              {submitting ? 'Starting...' : 'Confirm & download'}
+              {submitting ? 'Starting...' : confirmLabel}
             </button>
           </div>
           {!selected && (

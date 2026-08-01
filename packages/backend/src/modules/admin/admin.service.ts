@@ -34,21 +34,48 @@ import type { TorrentStatus, RequestStatus } from '@flux/shared';
 
 const ADMIN_HEALTH_METADATA_REFRESH_LIMIT = 6;
 
-async function getStorageRoot(path: string): Promise<StorageRootDTO> {
+const DIR_SIZE_CACHE_TTL_MS = 60_000;
+const DIR_SIZE_CONCURRENCY = 32;
+const dirSizeCache = new Map<string, { bytes: number; measuredAt: number }>();
+
+function clearDirectorySizeCache(): void {
+  dirSizeCache.clear();
+}
+
+async function mapWithConcurrency<T>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<number>,
+): Promise<number[]> {
+  const results = new Array<number>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      const item = items[index];
+      if (item !== undefined) results[index] = await fn(item);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+async function getStorageRoot(rootPath: string): Promise<StorageRootDTO> {
   try {
-    const stats = await fs.statfs(path);
+    const stats = await fs.statfs(rootPath);
     const totalBytes = stats.blocks * stats.bsize;
     const freeBytes = stats.bavail * stats.bsize;
+    const usedBytes = await directorySize(rootPath);
     return {
-      path,
+      path: rootPath,
       exists: true,
       totalBytes,
       freeBytes,
-      usedBytes: Math.max(0, totalBytes - freeBytes),
+      usedBytes,
     };
   } catch {
     return {
-      path,
+      path: rootPath,
       exists: false,
       totalBytes: null,
       freeBytes: null,
@@ -67,21 +94,30 @@ async function pathExists(filePath: string): Promise<boolean> {
 }
 
 async function directorySize(dir: string): Promise<number> {
+  const cached = dirSizeCache.get(dir);
+  if (cached && Date.now() - cached.measuredAt < DIR_SIZE_CACHE_TTL_MS) {
+    return cached.bytes;
+  }
+  let bytes = 0;
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    const sizes = await Promise.all(
-      entries.map(async (entry) => {
+    const sizes = await mapWithConcurrency(
+      entries,
+      DIR_SIZE_CONCURRENCY,
+      async (entry) => {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) return directorySize(fullPath);
         if (!entry.isFile()) return 0;
         const stat = await fs.stat(fullPath).catch(() => null);
         return stat?.size ?? 0;
-      }),
+      },
     );
-    return sizes.reduce((sum, value) => sum + value, 0);
+    bytes = sizes.reduce((sum, value) => sum + value, 0);
   } catch {
-    return 0;
+    bytes = 0;
   }
+  dirSizeCache.set(dir, { bytes, measuredAt: Date.now() });
+  return bytes;
 }
 
 function containingMediaRoot(filePath: string): string | null {
@@ -1119,6 +1155,7 @@ export async function deleteLibraryMediaItem(
   ]);
 
   const deleted = await deletePreparedFiles(prepared.files);
+  clearDirectorySizeCache();
 
   return {
     mediaItemId: item.id,
@@ -1149,6 +1186,7 @@ export async function deleteLibraryEpisode(
   const prepared = await buildDeletableFileList([episode.filePath]);
   await prisma.episode.delete({ where: { id: episode.id } });
   const deleted = await deletePreparedFiles(prepared.files);
+  clearDirectorySizeCache();
 
   return {
     mediaItemId: episode.mediaItemId,
@@ -1186,6 +1224,8 @@ export async function pruneTranscodeCache(
       skippedEntries.push(entry.name);
     }
   }
+
+  clearDirectorySizeCache();
 
   return {
     root,

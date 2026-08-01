@@ -22,6 +22,7 @@ import {
 import {
   addTorrent,
   checkTorrentClient,
+  detectExistingData,
   getLiveStats,
   stopSeeding,
   removeTorrent,
@@ -176,6 +177,10 @@ export async function parseUpload(
     guessedYear: guess.year,
     guessedType: guess.type,
     files,
+    // Best-effort snapshot of whether the data is already on disk so the admin
+    // knows the confirm step will reuse it (verify + seed) instead of
+    // re-downloading the whole torrent.
+    existingData: await detectExistingData(fileBuffer),
   };
 }
 
@@ -333,17 +338,6 @@ async function validateRequestCoverage(data: ConfirmTorrentInput, request: Reque
 export async function confirmTorrent(
   data: ConfirmTorrentInput,
 ): Promise<TorrentDTO> {
-  // Guard against duplicate infoHash.
-  const existing = await prisma.torrent.findUnique({
-    where: { infoHash: data.infoHash },
-  });
-  if (existing) {
-    throw ApiError.conflict(
-      `A torrent with infoHash ${data.infoHash} already exists.`,
-      'DUPLICATE_TORRENT',
-    );
-  }
-
   if (data.requestId) {
     const request = await prisma.request.findUnique({ where: { id: data.requestId } });
     if (!request) {
@@ -355,18 +349,66 @@ export async function confirmTorrent(
     await validateShowFileMapping(data);
   }
 
-  const row = await prisma.torrent.create({
-    data: {
-      infoHash: data.infoHash,
-      name: data.title,
-      category: data.category,
-      matchedTmdbId: data.tmdbId,
-      status: 'PENDING_CONFIRM',
-      fileMapping: data.fileMapping ?? undefined,
-      requests: data.requestId
-        ? { connect: { id: data.requestId } }
-        : undefined,
-    },
+  const existing = await prisma.torrent.findUnique({
+    where: { infoHash: data.infoHash },
+  });
+
+  let row: Torrent;
+  if (existing) {
+    // The same torrent already has a DB row. If Transmission still holds it,
+    // the transfer is already live — re-confirming just returns/resumes it and
+    // the route's startDownloading step becomes a no-op (duplicate → start).
+    // If Transmission lost it (e.g. the torrent was deleted by accident),
+    // refresh the row and let startDownloading re-add + verify the local data.
+    let live: TorrentLiveStats | null = null;
+    try {
+      live = await getLiveStats(existing.infoHash);
+    } catch {
+      live = null;
+    }
+
+    if (live) {
+      row = (existing.status === 'STOPPED' || existing.status === 'ERROR')
+        ? await prisma.torrent.update({
+            where: { id: existing.id },
+            data: { status: 'PENDING_CONFIRM', errorMessage: null },
+          })
+        : existing;
+    } else {
+      row = await prisma.torrent.update({
+        where: { id: existing.id },
+        data: {
+          name: data.title,
+          category: data.category,
+          matchedTmdbId: data.tmdbId,
+          fileMapping: data.fileMapping ?? undefined,
+          status: 'PENDING_CONFIRM',
+          errorMessage: null,
+        },
+      });
+    }
+  } else {
+    row = await prisma.torrent.create({
+      data: {
+        infoHash: data.infoHash,
+        name: data.title,
+        category: data.category,
+        matchedTmdbId: data.tmdbId,
+        status: 'PENDING_CONFIRM',
+        fileMapping: data.fileMapping ?? undefined,
+      },
+    });
+  }
+
+  if (data.requestId) {
+    await prisma.request.update({
+      where: { id: data.requestId },
+      data: { torrentId: row.id },
+    });
+  }
+
+  const withRequests = await prisma.torrent.findUniqueOrThrow({
+    where: { id: row.id },
     include: {
       requests: {
         include: {
@@ -382,15 +424,7 @@ export async function confirmTorrent(
       },
     },
   });
-
-  if (data.requestId) {
-    await prisma.request.update({
-      where: { id: data.requestId },
-      data: { torrentId: row.id },
-    });
-  }
-
-  return mapTorrentToDTO(row);
+  return mapTorrentToDTO(withRequests);
 }
 
 /** List all torrents ordered by creation date. Also triggers post-process on completion. */
@@ -574,7 +608,10 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
   }
 
   try {
-    const added = await addTorrent(buffer);
+    const dataCheck = await detectExistingData(buffer);
+    const added = await addTorrent(buffer, {
+      verifyExisting: dataCheck.filesOnDisk > 0,
+    });
     if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {
       throw new Error(`Transmission returned infoHash ${added.infoHash}, expected ${row.infoHash}`);
     }
@@ -598,11 +635,24 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
     data: { status: 'DOWNLOADING' },
   });
 
+  const live = await getLiveStats(row.infoHash);
+  // Only a duplicate add (Transmission already had it) goes straight back to
+  // SEEDING. A fresh add with complete data still passes through DOWNLOADING so
+  // the post-process pipeline imports/reconciles the library copy.
+  const seeded = added.reused && live?.done === true;
   const updated = await prisma.torrent.update({
     where: { id },
     data: {
-      status: 'DOWNLOADING',
+      status: seeded ? 'SEEDING' : 'DOWNLOADING',
       errorMessage: null,
+      progress: live?.progress ?? 0,
+      downloadSpeed: live?.downloadSpeed ?? 0,
+      uploadSpeed: live?.uploadSpeed ?? 0,
+      peers: live?.numPeers ?? 0,
+      totalBytes: live?.length ?? 0,
+      uploadedBytes: live?.uploaded ?? 0,
+      ratio: live?.ratio ?? 0,
+      seedingSince: seeded ? (row.seedingSince ?? new Date()) : null,
     },
     include: {
       requests: {
@@ -676,16 +726,23 @@ export async function startDownloading(
     throw ApiError.notFound(`Torrent ${torrentId} not found`);
   }
 
-  const added = await addTorrent(buffer);
+  const dataCheck = await detectExistingData(buffer);
+  const added = await addTorrent(buffer, {
+    verifyExisting: dataCheck.filesOnDisk > 0,
+  });
   if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {
     throw new Error(`Transmission returned infoHash ${added.infoHash}, expected ${row.infoHash}`);
   }
   const live = await getLiveStats(row.infoHash);
+  // Only a duplicate add (Transmission already had it) goes straight back to
+  // SEEDING. A fresh add with complete data still passes through DOWNLOADING so
+  // the post-process pipeline imports/reconciles the library copy.
+  const seeded = added.reused && live?.done === true;
 
   await prisma.torrent.update({
     where: { id: torrentId },
     data: {
-      status: 'DOWNLOADING',
+      status: seeded ? 'SEEDING' : 'DOWNLOADING',
       errorMessage: null,
       progress: live?.progress ?? 0,
       downloadSpeed: live?.downloadSpeed ?? 0,
@@ -694,6 +751,7 @@ export async function startDownloading(
       totalBytes: live?.length ?? 0,
       uploadedBytes: live?.uploaded ?? 0,
       ratio: live?.ratio ?? 0,
+      seedingSince: seeded ? (row.seedingSince ?? new Date()) : null,
     },
   });
 

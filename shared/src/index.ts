@@ -605,6 +605,16 @@ export interface TorrentParseResult {
   guessedYear: number | null;
   guessedType: MediaType;
   files: TorrentFileGuess[];
+  /**
+   * Best-effort snapshot of whether this torrent's data already exists in the
+   * download root. When `filesOnDisk > 0`, the confirm flow reuses the local
+   * files (verify + seed) instead of re-downloading what's already there.
+   */
+  existingData?: {
+    filesOnDisk: number;
+    totalFiles: number;
+    complete: boolean;
+  };
 }
 
 /** Admin's confirmed mapping before download starts. */

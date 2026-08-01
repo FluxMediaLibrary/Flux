@@ -90,14 +90,14 @@ export default function AdminStoragePage() {
                     </StatusBadge>
                   </header>
                   <div className="control-storage-number">
-                    {root.usedBytes === null ? '-' : formatBytes(root.usedBytes)} <span>used</span>
+                    {root.usedBytes === null ? '-' : formatBytes(root.usedBytes)} <span>used by this mount</span>
                   </div>
                   <div className="control-progress">
                     <span style={{ width: `${Math.round((usage ?? 0) * 100)}%`, background: usage !== null && usage >= .9 ? 'var(--control-bad)' : undefined }} />
                   </div>
                   <div className="control-storage-meta">
-                    <span>{usage === null ? 'Unknown capacity' : `${Math.round(usage * 100)}% full`}</span>
-                    <span>{root.freeBytes === null ? 'Free space unavailable' : `${formatBytes(root.freeBytes)} free`}</span>
+                    <span>{usage === null ? 'Unknown capacity' : `${Math.round(usage * 100)}% of volume capacity`}</span>
+                    <span>{root.freeBytes === null ? 'Free space unavailable' : `${formatBytes(root.freeBytes)} free on volume`}</span>
                   </div>
                   <code>{root.path}</code>
                 </article>
