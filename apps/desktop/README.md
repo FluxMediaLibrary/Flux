@@ -1,6 +1,6 @@
 # Flux Desktop
 
-Flux Desktop is a Windows-first Electron shell for a self-hosted Flux server. It loads the configured Flux deployment, keeps authentication cookies in an isolated persistent Electron session, and adds native integrations that a browser cannot provide.
+Flux Desktop is an Electron shell for Windows, macOS, and Linux that connects to a self-hosted Flux server. It loads the configured Flux deployment, keeps authentication cookies in an isolated persistent Electron session, and adds native integrations that a browser cannot provide.
 
 ## Local development
 
@@ -22,15 +22,16 @@ For GitHub builds, add the ID as the repository variable `FLUX_DISCORD_CLIENT_ID
 
 ## GitHub Releases and updates
 
-Publishing a semantic-version GitHub Release such as `v1.2.3` runs `.github/workflows/desktop-release.yml`. It builds and uploads:
+Publishing a desktop GitHub Release such as `pc-v1.2.3` runs `.github/workflows/desktop-release.yml`. Android releases use their own tags and never enter the desktop update channel. The workflow builds and uploads:
 
-- the NSIS installer;
-- its blockmap;
-- `latest.yml`, which `electron-updater` uses to discover and apply the release.
+- Windows NSIS installers for x64 and ARM64;
+- macOS DMG and ZIP packages for Intel and Apple Silicon;
+- Linux AppImage, Debian, and RPM packages for x64 and ARM64;
+- platform update metadata and blockmaps used by `electron-updater`.
 
 Installed builds check shortly after launch and every four hours. Updates download in the background, prompt for a restart when ready, and install automatically on a later quit if the user postpones the restart.
 
-The GitHub Release tag is the desktop version source of truth. A published tag must use semantic versioning. Add a base64 certificate/PFX and password as the Actions secrets `WINDOWS_CSC_LINK` and `WINDOWS_CSC_KEY_PASSWORD` to sign public installers. macOS auto-update support requires a separately signed/notarized macOS target.
+The highest published `pc-v` tag is the desktop version source of truth, even when a newer Android release exists. Desktop release tags must use `pc-v` followed by semantic versioning. Builds are currently unsigned, so Windows SmartScreen and macOS Gatekeeper can warn users. macOS automatic installation requires a future signed/notarized build; unsigned macOS packages remain available for manual installation.
 
 ## Security boundary
 

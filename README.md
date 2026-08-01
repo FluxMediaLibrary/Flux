@@ -363,7 +363,7 @@ NotificationSettings (singleton)
 
 ## Desktop app
 
-The Windows desktop client connects to any self-hosted Flux URL, stores that server choice locally, and renders the deployment's real frontend in a sandboxed Electron window. It adds automatic GitHub Release updates, Discord Rich Presence for active playback, a native update command, and an accessible change-server flow.
+The Windows, macOS, and Linux desktop clients connect to any self-hosted Flux URL, store that server choice locally, and render the deployment's real frontend in a sandboxed Electron window. They add automatic GitHub Release updates where the unsigned platform permits them, Discord Rich Presence for active playback, a native update command, and an accessible change-server flow. Desktop releases use `pc-v<version>` tags so they stay separate from Android releases.
 
 ```bash
 npm run dev:desktop

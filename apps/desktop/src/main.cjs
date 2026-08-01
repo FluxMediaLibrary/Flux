@@ -11,6 +11,7 @@ const {
 } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { DiscordPresenceService } = require('./discord-service.cjs');
+const { desktopReleaseFeedUrl, selectLatestDesktopRelease } = require('./release-channel.cjs');
 const { isSameServer, normalizeServerUrl } = require('./server-url.cjs');
 
 const REPOSITORY_URL = 'https://github.com/FluxMediaLibrary/Flux';
@@ -23,6 +24,20 @@ let manualUpdateCheck = false;
 let updateTimer = null;
 let quittingForUpdate = false;
 let discord = null;
+
+async function configureDesktopUpdateFeed() {
+  const response = await net.fetch(`${REPOSITORY_URL.replace('github.com', 'api.github.com/repos')}/releases?per_page=100`, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'Flux-Desktop',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  });
+  if (!response.ok) throw new Error(`GitHub Releases returned HTTP ${response.status}.`);
+  const release = selectLatestDesktopRelease(await response.json());
+  if (!release) throw new Error('No published Flux desktop release was found.');
+  autoUpdater.setFeedURL({ provider: 'generic', url: desktopReleaseFeedUrl(release.tag_name) });
+}
 
 function settingsPath() {
   return path.join(app.getPath('userData'), 'desktop-settings.json');
@@ -187,6 +202,7 @@ async function checkForUpdates(manual = false) {
   }
   manualUpdateCheck = manualUpdateCheck || manual;
   try {
+    await configureDesktopUpdateFeed();
     await autoUpdater.checkForUpdates();
   } catch (error) {
     if (manual) await dialog.showMessageBox(mainWindow, {
