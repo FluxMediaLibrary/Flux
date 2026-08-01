@@ -1,4 +1,5 @@
 const path = require('node:path');
+const packageMetadata = require('./package.json');
 
 module.exports = {
   appId: 'xyz.deadstudios.flux.desktop',
@@ -15,7 +16,11 @@ module.exports = {
     'package.json',
   ],
   extraMetadata: {
-    fluxDiscordClientId: (process.env.FLUX_DISCORD_CLIENT_ID || '').trim(),
+    fluxDiscordClientId: (
+      process.env.FLUX_DISCORD_CLIENT_ID
+      || packageMetadata.fluxDiscordClientId
+      || ''
+    ).trim(),
   },
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],

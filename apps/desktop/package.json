@@ -6,6 +6,7 @@
   "main": "src/main.cjs",
   "author": "Dead Studios",
   "license": "MIT",
+  "fluxDiscordClientId": "1533258699181658202",
   "repository": {
     "type": "git",
     "url": "https://github.com/FluxMediaLibrary/Flux.git"
