@@ -16,6 +16,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { config } from '../../../config.js';
+import { getFpcalcLengthSeconds } from './fingerprint-window.js';
 
 export interface EpisodeFingerprint {
   episodeId: string;
@@ -37,6 +38,8 @@ interface ProcessResult {
   stdout: string;
   stderr: string;
 }
+
+const FPCALC_DECODE_TAIL_SECONDS = 2;
 
 function runProcess(
   command: string,
@@ -92,11 +95,13 @@ export async function fingerprintEpisodeAudio(
       '-y',
       '-v', 'error',
       '-ss', '0',
-      '-t', String(windowSeconds),
+      // fpcalc must be able to decode beyond its requested fingerprint length.
+      '-t', String(windowSeconds + FPCALC_DECODE_TAIL_SECONDS),
       '-i', filePath,
       '-vn',
       '-ac', '1',
       '-ar', '22050',
+      '-c:a', 'pcm_s16le',
       '-f', 'wav',
       wavPath,
     ], 10 * 60 * 1000);
@@ -108,12 +113,28 @@ export async function fingerprintEpisodeAudio(
       return null;
     }
 
+    const probe = await runProcess('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'csv=p=0',
+      wavPath,
+    ], 60_000);
+    const extractedDurationSeconds = Number.parseFloat(probe.stdout.trim());
+    const fingerprintSeconds = getFpcalcLengthSeconds(windowSeconds, extractedDurationSeconds);
+    if (probe.code !== 0 || fingerprintSeconds < 1) {
+      await reportFailure(
+        `extracted audio is too short or unreadable for ${episodeId}: ` +
+        `${probe.stderr.trim() || `${extractedDurationSeconds || 0}s decoded`}`,
+      );
+      return null;
+    }
+
     const calc = await runProcess(config.INTRO_FPCALC_PATH, [
       '-raw',
       '-json',
-      // fpcalc only fingerprints the first 120s by default. Ask for the full
-      // extracted window so cold-open intros beyond 2 minutes are still found.
-      '-length', String(Math.max(1, Math.floor(windowSeconds))),
+      // fpcalc defaults to 120s. Use the full configured window, but never ask
+      // it to decode through the exact EOF boundary (fpcalc 1.5.x exits 1).
+      '-length', String(fingerprintSeconds),
       wavPath,
     ], 10 * 60 * 1000);
 
@@ -140,21 +161,10 @@ export async function fingerprintEpisodeAudio(
       return null;
     }
 
-    // fpcalc's reported duration is the *source file* duration, not the
-    // fingerprinted window. The frame rate must be derived from the actual
-    // analyzed audio (the extracted WAV) so frame<->time conversion is exact.
-    // ffprobe ships with ffmpeg and is already used elsewhere in the backend.
-    const probe = await runProcess('ffprobe', [
-      '-v', 'error',
-      '-show_entries', 'format=duration',
-      '-of', 'csv=p=0',
-      wavPath,
-    ], 60_000);
-    const probedDuration = Number.parseFloat(probe.stdout.trim());
-    const durationSeconds =
-      Number.isFinite(probedDuration) && probedDuration > 0
-        ? probedDuration
-        : Math.min(Number(parsed.duration) || windowSeconds, windowSeconds);
+    // fpcalc reports the intermediate file duration, not the requested range.
+    // The explicit safe request length is the analyzed duration used to map
+    // fingerprint frame offsets back to playback time.
+    const durationSeconds = fingerprintSeconds;
     const frames = Int32Array.from(raw);
     const rate = durationSeconds > 0 ? frames.length / durationSeconds : 0;
     if (rate <= 0 || !Number.isFinite(rate)) {
