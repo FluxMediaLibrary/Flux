@@ -43,7 +43,7 @@ interface FluxPlayerProps {
   subtitle?: string;
   startPositionSeconds?: number;
   fill?: boolean;
-  onProgress?: (positionSeconds: number, durationSeconds: number) => void;
+  onProgress?: (positionSeconds: number, durationSeconds: number, paused: boolean) => void;
   onBack?: () => void;
   onNearEnd?: () => void;
   nextEpisode?: {
@@ -875,7 +875,7 @@ function FluxPlayerChrome({
       if (!Number.isFinite(position) || position <= 0) return;
       if (totalDuration > 0 && position > totalDuration + 5) return;
       if (progressSaveInFlightRef.current) {
-        onProgress?.(position, totalDuration);
+        onProgress?.(position, totalDuration, controlsPaused);
         return;
       }
       const controller = new AbortController();
@@ -894,7 +894,7 @@ function FluxPlayerChrome({
             progressSaveInFlightRef.current = null;
           }
         });
-      onProgress?.(position, totalDuration);
+      onProgress?.(position, totalDuration, controlsPaused);
       return;
     }
     const player = playerRef.current;
@@ -913,7 +913,7 @@ function FluxPlayerChrome({
     if (totalDuration > 0 && position > totalDuration + 5) return;
 
     if (progressSaveInFlightRef.current) {
-      onProgress?.(position, totalDuration);
+      onProgress?.(position, totalDuration, controlsPaused);
       return;
     }
 
@@ -933,10 +933,11 @@ function FluxPlayerChrome({
           progressSaveInFlightRef.current = null;
         }
       });
-    onProgress?.(position, totalDuration);
+    onProgress?.(position, totalDuration, controlsPaused);
   }, [
     castRemoteActive,
     castMediaCurrent,
+    controlsPaused,
     episodeId,
     mediaItemId,
     mediaTimeOrigin,

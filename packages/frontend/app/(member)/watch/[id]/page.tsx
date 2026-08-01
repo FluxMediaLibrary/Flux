@@ -4,6 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import {
+  clearDesktopPlaybackPresence,
+  setDesktopPlaybackPresence,
+} from '@/lib/desktop';
 import { FluxPlayer } from '@/components/FluxPlayer';
 import type { EpisodeDTO, MediaItemDetailDTO } from '@flux/shared';
 
@@ -85,6 +89,39 @@ export default function WatchPage() {
       ? resumeProgress.positionSeconds
       : 0;
 
+  const posterUrl = item?.posterPath
+    ? `https://image.tmdb.org/t/p/w500${item.posterPath}`
+    : undefined;
+  const durationSeconds = Math.max(
+    0,
+    (activeEpisode?.runtime ?? item?.runtimeMinutes ?? 0) * 60,
+  );
+
+  const publishDesktopPresence = useCallback((
+    positionSeconds: number,
+    playbackDurationSeconds: number,
+    paused: boolean,
+  ) => {
+    if (!item) return;
+    setDesktopPlaybackPresence({
+      title: item.title,
+      mediaType: item.type === 'SHOW' ? 'show' : 'movie',
+      season: activeEpisode?.season,
+      episode: activeEpisode?.episode,
+      episodeTitle: activeEpisode?.title ?? undefined,
+      posterUrl,
+      positionSeconds,
+      durationSeconds: playbackDurationSeconds || durationSeconds,
+      paused,
+    });
+  }, [activeEpisode, durationSeconds, item, posterUrl]);
+
+  useEffect(() => {
+    if (!item || !target) return;
+    publishDesktopPresence(startPosition, durationSeconds, true);
+    return clearDesktopPlaybackPresence;
+  }, [durationSeconds, item, publishDesktopPresence, startPosition, target]);
+
   if (error) {
     return (
       <div className="centered-viewport">
@@ -121,6 +158,7 @@ export default function WatchPage() {
             : undefined
         }
         startPositionSeconds={startPosition}
+        onProgress={publishDesktopPresence}
         fill
         onNearEnd={handleNearEnd}
         nextEpisode={nextEpisodePrompt}

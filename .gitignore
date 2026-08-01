@@ -9,6 +9,10 @@ build/
 .next/
 out/
 *.tsbuildinfo
+apps/desktop/release/
+!apps/desktop/build/
+!apps/desktop/build/icon.ico
+!apps/desktop/build/icon.png
 
 # Environment
 .env

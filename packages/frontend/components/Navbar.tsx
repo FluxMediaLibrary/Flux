@@ -5,6 +5,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { SearchOverlay } from '@/components/SearchOverlay';
 import { Avatar } from '@/components/Avatar';
+import { isFluxDesktop } from '@/lib/desktop';
 
 const TABS = [
   { label: 'Library', href: '/library', query: ''},
@@ -21,7 +22,7 @@ export function Navbar() {
 
   const [menu, setMenu] = useState<null | 'nav' | 'profile'>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [nativeApp, setNativeApp] = useState(false);
+  const [nativeApp, setNativeApp] = useState<'android' | 'desktop' | null>(null);
   const barRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -33,7 +34,11 @@ export function Navbar() {
   }, []);
 
   useEffect(() => {
-    setNativeApp(Boolean(window.FLUX_NATIVE_APP || window.FluxNative?.isNativeApp?.()));
+    if (isFluxDesktop()) {
+      setNativeApp('desktop');
+      return;
+    }
+    if (window.FLUX_NATIVE_APP || window.FluxNative?.isNativeApp?.()) setNativeApp('android');
   }, []);
 
   const currentType = searchParams.get('type');
@@ -56,7 +61,11 @@ export function Navbar() {
 
   const handleUpdates = () => {
     setMenu(null);
-    if (nativeApp && window.FluxNative?.checkForUpdates) {
+    if (nativeApp === 'desktop') {
+      void window.FluxDesktop?.checkForUpdates();
+      return;
+    }
+    if (nativeApp === 'android' && window.FluxNative?.checkForUpdates) {
       window.FluxNative.checkForUpdates();
       return;
     }
@@ -141,6 +150,11 @@ export function Navbar() {
             <button onClick={handleUpdates}>
               {nativeApp ? 'Check for updates' : isAdmin ? 'Updates' : 'Download Android app'}
             </button>
+            {nativeApp === 'desktop' && (
+              <button onClick={() => { setMenu(null); void window.FluxDesktop?.changeServer(); }}>
+                Change Flux server
+              </button>
+            )}
             <button onClick={() => { setMenu(null); switchProfile(); router.replace('/profiles'); }}>
               Switch profile
             </button>

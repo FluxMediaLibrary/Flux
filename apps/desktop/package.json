@@ -1,0 +1,26 @@
+{
+  "name": "@flux/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Flux desktop client with automatic updates and Discord Rich Presence.",
+  "main": "src/main.cjs",
+  "author": "Dead Studios",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FluxMediaLibrary/Flux.git"
+  },
+  "scripts": {
+    "dev": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "dist": "electron-builder --config electron-builder.config.cjs --publish never"
+  },
+  "dependencies": {
+    "discord-rpc": "4.0.1",
+    "electron-updater": "6.8.9"
+  },
+  "devDependencies": {
+    "electron": "43.2.0",
+    "electron-builder": "26.15.3"
+  }
+}
