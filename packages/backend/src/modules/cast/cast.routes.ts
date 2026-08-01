@@ -5,6 +5,7 @@ import { ApiError } from '../../lib/errors.js';
 import { createCastSession } from '../../lib/cast-sessions.js';
 import { signCastPlaybackToken } from '../../lib/jwt.js';
 import { decideCastPlayback, getCastMediaMetadata, getMediaFilePath } from '../streaming/streaming.service.js';
+import { getServerSettings } from '../settings/settings.service.js';
 
 function publicApiBaseUrl(request: { protocol: string; headers: { host?: string } }): { baseUrl: string; warnings: string[] } {
   const inferred = request.headers.host ? `${request.protocol}://${request.headers.host}` : '';
@@ -31,7 +32,7 @@ export const castRoutes: FastifyPluginAsync = async (app) => {
     const decision = await decideCastPlayback(filePath, mediaItemId, episodeId);
     const metadata = await getCastMediaMetadata(mediaItemId, episodeId);
     const inferred = request.headers.host ? `${request.protocol}://${request.headers.host}` : '';
-    const baseUrl = (config.PUBLIC_API_BASE_URL ?? inferred).replace(/\/$/, '');
+    const baseUrl = ((await getServerSettings()).apiUrl ?? config.PUBLIC_API_BASE_URL ?? inferred).replace(/\/$/, '');
     if (!baseUrl) throw ApiError.internal('Could not determine public API base URL for Cast playback', 'CAST_PUBLIC_URL_MISSING');
     const parsedBase = new URL(baseUrl);
     const warnings: string[] = [];

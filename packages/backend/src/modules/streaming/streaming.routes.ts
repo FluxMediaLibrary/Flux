@@ -27,6 +27,7 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { isValidCastSession } from '../../lib/cast-sessions.js';
+import { getServerSettings } from '../settings/settings.service.js';
 
 // ── In-memory session tracking ──────────────────────────────────────────────
 // Maps a (mediaItemId, episodeId) pair → sessionDir so segment routes know
@@ -234,6 +235,8 @@ async function spawnTranscode(
   audioStreamIndex?: number,
   startTimeSeconds = 0,
   forceAdaptive = false,
+  maxBitrateMbps?: number | null,
+  hardwareAcceleration = 'NONE',
 ): Promise<{ manifest: 'index.m3u8' | 'master.m3u8'; transcode: TranscodeState }> {
   const probe = await probeMedia(sourceFile, audioStreamIndex);
 
@@ -251,6 +254,8 @@ async function spawnTranscode(
       probe.videoStreamIndex ?? undefined,
       probe.audioStreamIndex ?? undefined,
       startTimeSeconds,
+      maxBitrateMbps ? maxBitrateMbps * 1000 : null,
+      hardwareAcceleration,
     );
     console.log(
       `[Transcode] adaptive forced=${forceAdaptive} video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} ` +
@@ -266,6 +271,7 @@ async function spawnTranscode(
     sessionDir,
     audioStreamIndex,
     startTimeSeconds,
+    hardwareAcceleration,
   );
   console.log(
     `[Transcode] single video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} → ${args.includes('copy') ? 'remux/partial-copy' : 'transcode'}`,
@@ -418,6 +424,9 @@ export const streamingRoutes: FastifyPluginAsync = async (
     '/:mediaItemId',
     { preHandler: [app.requireProfileStream] },
     async (request, reply) => {
+      if (!(await getServerSettings()).directPlayEnabled) {
+        throw ApiError.badRequest('Direct Play is disabled in server settings', 'DIRECT_PLAY_DISABLED');
+      }
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { episodeId } = request.query as { episodeId?: string };
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
@@ -497,6 +506,13 @@ export const streamingRoutes: FastifyPluginAsync = async (
           : undefined;
       const startTimeSeconds = parseStartTime(startTime);
       const forceAdaptive = adaptive === '1';
+      const playbackSettings = await getServerSettings();
+      if (forceAdaptive && !playbackSettings.transcodingEnabled) {
+        throw ApiError.badRequest('Transcoding is disabled in server settings', 'TRANSCODING_DISABLED');
+      }
+      if (!playbackSettings.directStreamEnabled && !playbackSettings.transcodingEnabled) {
+        throw ApiError.badRequest('HLS playback is disabled in server settings', 'HLS_DISABLED');
+      }
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
       const baseKey = sessionBaseKey(mediaItemId, episodeId, audioStreamIndex);
@@ -530,6 +546,12 @@ export const streamingRoutes: FastifyPluginAsync = async (
           mediaItemId,
           episodeId,
         );
+        if (!playbackSettings.transcodingEnabled) {
+          const source = await probeMedia(sourceFile, audioStreamIndex);
+          if (source.videoCodec !== 'h264' || (source.audioCodec !== null && source.audioCodec !== 'aac')) {
+            throw ApiError.badRequest('This file requires transcoding, which is disabled in server settings', 'TRANSCODING_DISABLED');
+          }
+        }
         // Re-check after the await: the set below is synchronous, so two
         // concurrent requests can't both spawn a transcode for the same key.
         session = hlsSessions.get(key);
@@ -537,12 +559,18 @@ export const streamingRoutes: FastifyPluginAsync = async (
           await discardOtherSessions(baseKey, key);
           const sessionDir = safeJoin(config.TRANSCODE_ROOT, randomUUID());
           await fs.promises.mkdir(sessionDir, { recursive: true });
+          const requestedAcceleration = playbackSettings.hardwareAcceleration;
+          const hardwareAcceleration = requestedAcceleration === 'AUTO'
+            ? (process.platform === 'darwin' ? 'VIDEOTOOLBOX' : fs.existsSync('/dev/dri/renderD128') ? 'VAAPI' : 'NONE')
+            : requestedAcceleration;
           const started = await spawnTranscode(
             sourceFile,
             sessionDir,
             audioStreamIndex,
             startTimeSeconds,
             forceAdaptive,
+            playbackSettings.remoteBitrateLimitMbps ?? playbackSettings.localBitrateLimitMbps,
+            hardwareAcceleration,
           );
           manifestType = started.manifest;
           session = { dir: sessionDir, manifest: manifestType, transcode: started.transcode, lastAccessAt: Date.now() };

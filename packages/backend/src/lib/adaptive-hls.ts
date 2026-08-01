@@ -35,9 +35,11 @@ const MAX_ADAPTIVE_VARIANTS = 2;
  * Filter quality tiers to those not exceeding source resolution.
  * Always includes at least the lowest tier (360p).
  */
-export function applicableTiers(sourceWidth: number, sourceHeight: number): QualityTier[] {
+export function applicableTiers(sourceWidth: number, sourceHeight: number, maxVideoBitrateKbps?: number | null): QualityTier[] {
   const tiers = QUALITY_TIERS.filter(
-    (tier) => tier.height <= sourceHeight && tier.height <= MAX_SOFTWARE_TRANSCODE_HEIGHT,
+    (tier) => tier.height <= sourceHeight
+      && tier.height <= MAX_SOFTWARE_TRANSCODE_HEIGHT
+      && (maxVideoBitrateKbps == null || tier.videoBitrate <= maxVideoBitrateKbps),
   ).slice(0, MAX_ADAPTIVE_VARIANTS);
 
   return tiers.length > 0 ? tiers : [QUALITY_TIERS[QUALITY_TIERS.length - 1]!];
@@ -69,13 +71,17 @@ export function buildAdaptiveHlsArgs(
   videoStreamIndex?: number,
   audioStreamIndex?: number,
   startTimeSeconds = 0,
+  maxVideoBitrateKbps?: number | null,
+  hardwareAcceleration = 'NONE',
 ): string[] {
-  const tiers = applicableTiers(sourceWidth ?? 1920, sourceHeight ?? 1080);
+  const tiers = applicableTiers(sourceWidth ?? 1920, sourceHeight ?? 1080, maxVideoBitrateKbps);
   const canCopy = sourceCodec === 'h264' && audioCodec === 'aac';
   const resetEncodedTimestamps = canCopy ? '' : ',setpts=PTS-STARTPTS';
   const videoMap = typeof videoStreamIndex === 'number' ? `0:${videoStreamIndex}` : '0:v:0';
   const hasAudio = typeof audioStreamIndex === 'number' && audioCodec !== null;
   const audioMap = hasAudio ? `0:${audioStreamIndex}` : null;
+  const useVaapi = hardwareAcceleration === 'VAAPI';
+  const hardwareFilter = useVaapi ? ',format=nv12,hwupload' : '';
 
   if (canCopy && tiers.length <= 1) {
     // Single-quality remux — simple case, no filter_complex needed.
@@ -108,17 +114,18 @@ export function buildAdaptiveHlsArgs(
   const filterParts: string[] = [];
   if (tiers.length === 1) {
     // Single tier — just copy, no split needed
-    filterParts.push(`[${videoMap}]scale=w=${tiers[0]!.width}:h=${tiers[0]!.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1${resetEncodedTimestamps}[v0out]`);
+    filterParts.push(`[${videoMap}]scale=w=${tiers[0]!.width}:h=${tiers[0]!.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1${resetEncodedTimestamps}${hardwareFilter}[v0out]`);
   } else {
     filterParts.push(`[${videoMap}]split=${tiers.length}${tiers.map((_, i) => `[v${i}]`).join('')}`);
     for (let i = 0; i < tiers.length; i++) {
       const t = tiers[i]!;
-      filterParts.push(`[v${i}]scale=w=${t.width}:h=${t.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1${resetEncodedTimestamps}[v${i}out]`);
+      filterParts.push(`[v${i}]scale=w=${t.width}:h=${t.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1${resetEncodedTimestamps}${hardwareFilter}[v${i}out]`);
     }
   }
 
   const args: string[] = [
     '-fflags', '+genpts',
+    ...(useVaapi ? ['-vaapi_device', '/dev/dri/renderD128'] : []),
     ...(startTimeSeconds > 0 ? ['-ss', startTimeSeconds.toFixed(3)] : []),
     '-i', sourceFile,
     '-filter_complex', filterParts.join(';'),
@@ -127,12 +134,18 @@ export function buildAdaptiveHlsArgs(
   // Video maps + codecs
   for (let i = 0; i < tiers.length; i++) {
     const t = tiers[i]!;
+    const encoderArgs = hardwareAcceleration === 'NVENC'
+      ? ['-c:v:' + i, 'h264_nvenc', '-preset:v:' + i, 'p4', '-cq:v:' + i, '23']
+      : hardwareAcceleration === 'QSV'
+        ? ['-c:v:' + i, 'h264_qsv', '-preset:v:' + i, 'faster', '-global_quality:v:' + i, '23']
+        : hardwareAcceleration === 'VIDEOTOOLBOX'
+          ? ['-c:v:' + i, 'h264_videotoolbox', '-q:v:' + i, '65']
+          : hardwareAcceleration === 'VAAPI'
+            ? ['-c:v:' + i, 'h264_vaapi', '-qp:v:' + i, '23']
+            : ['-c:v:' + i, 'libx264', '-preset:v:' + i, 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
     args.push(
       '-map', `[v${i}out]`,
-      '-c:v:' + i, 'libx264',
-      '-preset:v:' + i, 'veryfast',
-      '-crf', '23',
-      '-pix_fmt', 'yuv420p',
+      ...encoderArgs,
       '-b:v:' + i, String(t.videoBitrate) + 'k',
       '-maxrate:v:' + i, String(t.maxrate) + 'k',
       '-bufsize:v:' + i, String(t.bufsize) + 'k',

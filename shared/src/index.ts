@@ -531,6 +531,14 @@ export interface PlaybackInfoDTO {
   videoCodec: string | null;
   audioCodec: string | null;
   durationSeconds: number | null;
+  preferences: {
+    autoplayEnabled: boolean;
+    resumeBehavior: 'ASK' | 'ALWAYS' | 'RESTART';
+    skipIntroEnabled: boolean;
+    preferredAudioLanguage: string | null;
+    preferredSubtitleLanguage: string | null;
+    subtitlesMode: 'OFF' | 'FOREIGN_ONLY' | 'ALWAYS';
+  };
   /** Reusable segment markers for the requested episode. */
   segments?: MediaSegmentDTO[];
   streams: MediaStreamDTO[];
@@ -814,13 +822,15 @@ export interface TorrentClientHealthDTO {
 
 export interface NotificationSettingsDTO {
   discordEnabled: boolean;
-  discordWebhookUrl: string | null;
+  /** Notification secrets are write-only. */
+  discordWebhookUrl: null;
+  discordWebhookConfigured: boolean;
   smtpEnabled: boolean;
   smtpHost: string | null;
   smtpPort: number | null;
   smtpUsername: string | null;
   smtpFromAddress: string | null;
-  // smtpPassword is write-only; never returned.
+  smtpPasswordConfigured: boolean;
 }
 
 export interface UpdateNotificationSettingsRequest {
@@ -832,6 +842,217 @@ export interface UpdateNotificationSettingsRequest {
   smtpUsername?: string | null;
   smtpPassword?: string | null;
   smtpFromAddress?: string | null;
+}
+
+export interface SettingsTestResultDTO {
+  ok: boolean;
+  message: string;
+}
+
+export type PreferredDownloadProtocol =
+  | 'TORRENT_ONLY'
+  | 'USENET_ONLY'
+  | 'PREFER_TORRENT'
+  | 'PREFER_USENET'
+  | 'EITHER';
+
+export interface GeneralSettingsDTO {
+  serverName: string;
+  frontendUrl: string;
+  apiUrl: string | null;
+  timezone: string;
+  language: string;
+  defaultInviteExpiryHours: number;
+}
+
+export interface DownloadSettingsDTO {
+  automatedDownloads: boolean;
+  preferredProtocol: PreferredDownloadProtocol;
+  defaultDownloadClientId: string | null;
+  defaultQualityProfileId: string | null;
+  automaticSearch: boolean;
+  automaticUpgrades: boolean;
+  retryFailedDownloads: boolean;
+  minimumFreeSpaceGb: number;
+  completedImportBehavior: 'COPY' | 'MOVE';
+  torrentSeedRatio: number | null;
+  torrentSeedTimeMinutes: number | null;
+  torrentRemoveAfterSeeding: boolean;
+  usenetRemoveCompleted: boolean;
+  usenetRemoveFailed: boolean;
+}
+
+export interface PlaybackSettingsDTO {
+  directPlayEnabled: boolean;
+  directStreamEnabled: boolean;
+  transcodingEnabled: boolean;
+  localBitrateLimitMbps: number | null;
+  remoteBitrateLimitMbps: number | null;
+  hardwareAcceleration: 'NONE' | 'AUTO' | 'VAAPI' | 'QSV' | 'NVENC' | 'VIDEOTOOLBOX';
+  preferredAudioLanguage: string | null;
+  preferredSubtitleLanguage: string | null;
+  subtitlesMode: 'OFF' | 'FOREIGN_ONLY' | 'ALWAYS';
+  autoplayEnabled: boolean;
+  resumeBehavior: 'ASK' | 'ALWAYS' | 'RESTART';
+  skipIntroEnabled: boolean;
+}
+
+export interface IntegrationSettingsDTO {
+  tmdbApiKeyConfigured: boolean;
+  tmdbSource: 'DATABASE' | 'ENVIRONMENT';
+}
+
+export interface SettingsBundleDTO {
+  general: GeneralSettingsDTO;
+  downloads: DownloadSettingsDTO;
+  playback: PlaybackSettingsDTO;
+  notifications: NotificationSettingsDTO;
+  integrations: IntegrationSettingsDTO;
+}
+
+export interface UpdateSettingsBundleRequest {
+  general?: Partial<GeneralSettingsDTO>;
+  downloads?: Partial<DownloadSettingsDTO>;
+  playback?: Partial<PlaybackSettingsDTO>;
+  integrations?: { tmdbApiKey?: string | null };
+}
+
+export type DownloadClientType = 'TRANSMISSION' | 'SABNZBD' | 'NZBGET';
+
+export interface DownloadClientDTO {
+  id: string;
+  name: string;
+  type: DownloadClientType;
+  enabled: boolean;
+  host: string;
+  port: number;
+  useHttps: boolean;
+  username: string | null;
+  category: string | null;
+  priority: number;
+  isDefault: boolean;
+  credentialConfigured: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveDownloadClientRequest {
+  name: string;
+  type: DownloadClientType;
+  enabled: boolean;
+  host: string;
+  port: number;
+  useHttps: boolean;
+  username?: string | null;
+  credential?: string | null;
+  category?: string | null;
+  priority: number;
+  isDefault: boolean;
+}
+
+export interface DownloadClientTestResultDTO {
+  ok: boolean;
+  clientName: string;
+  version: string | null;
+  message: string;
+}
+
+export type QualityRuleKind = 'REQUIRED' | 'PREFERRED' | 'REJECTED';
+
+export interface QualityRuleDTO {
+  id: string;
+  attribute: string;
+  kind: QualityRuleKind;
+  score: number;
+}
+
+export interface QualityProfileDTO {
+  id: string;
+  name: string;
+  enabled: boolean;
+  allowedResolutions: string[];
+  sourceTypes: string[];
+  videoCodecs: string[];
+  hdrFormats: string[];
+  audioFormats: string[];
+  audioChannels: string[];
+  languages: string[];
+  releaseGroups: string[];
+  minimumSizeMb: number | null;
+  maximumSizeMb: number | null;
+  rules: QualityRuleDTO[];
+  upgradeCutoffScore: number;
+  minimumScoreImprovement: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SaveQualityProfileRequest = Omit<QualityProfileDTO, 'id' | 'createdAt' | 'updatedAt'>;
+
+export interface ParsedReleaseDTO {
+  title: string;
+  resolution: string | null;
+  source: string | null;
+  codec: string | null;
+  hdr: string[];
+  audio: string[];
+  audioChannels: string | null;
+  languages: string[];
+  releaseGroup: string | null;
+  sizeMb: number | null;
+  attributes: string[];
+}
+
+export interface MatchedQualityRuleDTO extends QualityRuleDTO {
+  matched: boolean;
+  contribution: number;
+}
+
+export interface ReleaseScoreDTO {
+  parsed: ParsedReleaseDTO;
+  accepted: boolean;
+  totalScore: number;
+  matchedRules: MatchedQualityRuleDTO[];
+  rejectionReasons: string[];
+}
+
+export interface TestReleaseRequest {
+  title: string;
+  sizeMb?: number | null;
+}
+
+export interface ReleaseCandidateRequest extends TestReleaseRequest {
+  id: string;
+}
+
+export interface SelectReleaseRequest {
+  candidates: ReleaseCandidateRequest[];
+  currentScore?: number | null;
+}
+
+export interface ReleaseSelectionDTO {
+  selected: (ReleaseCandidateRequest & { result: ReleaseScoreDTO }) | null;
+  evaluated: (ReleaseCandidateRequest & { result: ReleaseScoreDTO })[];
+  upgradeAllowed: boolean;
+  reason: string;
+}
+
+export interface QueueUsenetReleaseRequest {
+  candidates: (ReleaseCandidateRequest & { nzbUrl: string })[];
+  currentScore?: number | null;
+  downloadClientId?: string | null;
+}
+
+export interface QueuedUsenetReleaseDTO {
+  clientId: string;
+  clientName: string;
+  jobId: string;
+  release: {
+    id: string;
+    title: string;
+    sizeMb: number | null;
+    score: number;
+  };
 }
 
 // ─── Errors ───────────────────────────────────────────────────────────────────

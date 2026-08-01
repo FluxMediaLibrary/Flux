@@ -103,12 +103,25 @@ export function FluxPlayer(props: FluxPlayerProps) {
 
     api.getPlaybackInfo(mediaItemId, episodeId, controller.signal).then(
       (info) => {
-        const validAudioStreamIndex = audioStreamIndex !== null && info.streams.some(
-          (stream) => stream.type === 'audio' && stream.index === audioStreamIndex,
-        )
-          ? audioStreamIndex
+        if (!info.directPlay && !info.hlsAvailable) {
+          setError('Playback is disabled by the server settings.');
+          setLoading(false);
+          return;
+        }
+        const preferredAudioLanguage = info.preferences.preferredAudioLanguage?.toLowerCase() ?? null;
+        const preferredAudioStream = audioStreamIndex === null && preferredAudioLanguage
+          ? info.streams.find((stream) => stream.type === 'audio' && (
+              stream.language?.toLowerCase() === preferredAudioLanguage
+              || stream.title?.toLowerCase().includes(preferredAudioLanguage)
+            ))
           : null;
-        if (validAudioStreamIndex !== audioStreamIndex) setAudioStreamIndex(null);
+        const requestedAudioStreamIndex = audioStreamIndex ?? preferredAudioStream?.index ?? null;
+        const validAudioStreamIndex = requestedAudioStreamIndex !== null && info.streams.some(
+          (stream) => stream.type === 'audio' && stream.index === requestedAudioStreamIndex,
+        )
+          ? requestedAudioStreamIndex
+          : null;
+        if (validAudioStreamIndex !== audioStreamIndex) setAudioStreamIndex(validAudioStreamIndex);
         const direct = canKeepDirectPlayback(info, qualityLabel, validAudioStreamIndex);
         const forceAdaptive = requiresAdaptiveTranscode(
           info,
@@ -384,6 +397,11 @@ function FluxMediaPlayer({
   const methodLabel = source.method === 'direct' ? 'Direct Play' : 'HLS';
   const videoLabel = getStreamLabel(source.info?.streams ?? [], 'video');
   const audioLabel = getStreamLabel(source.info?.streams ?? [], 'audio');
+  const autoplayEnabled = source.info?.preferences.autoplayEnabled ?? true;
+  const configuredStartPosition = source.info?.preferences.resumeBehavior === 'RESTART' ? 0 : startPositionSeconds;
+  const configuredSegments = source.info?.preferences.skipIntroEnabled === false
+    ? segments?.filter((segment) => segment.type !== 'INTRO')
+    : segments;
 
   return (
     <MediaPlayer
@@ -393,7 +411,7 @@ function FluxMediaPlayer({
       className={fill ? 'fx-player fx-player--fill' : 'fx-player'}
       aspectRatio={fill ? undefined : '16/9'}
       load="visible"
-      autoPlay
+      autoPlay={autoplayEnabled}
       playsInline
       crossOrigin
       controls={false}
@@ -429,14 +447,15 @@ function FluxMediaPlayer({
         episodeId={episodeId}
         title={title}
         subtitle={subtitle}
-        startPositionSeconds={startPositionSeconds}
+        startPositionSeconds={configuredStartPosition}
         onBack={onBack}
         onProgress={onProgress}
         onNearEnd={onNearEnd}
         nextEpisode={nextEpisode}
         nextEpisodeMarkers={nextEpisodeMarkers}
-        segments={segments}
+        segments={configuredSegments}
         onNextEpisode={onNextEpisode}
+        autoplayEnabled={autoplayEnabled}
         playerRef={playerRef}
         debugOpen={debugOpen}
         methodLabel={methodLabel}
@@ -519,6 +538,7 @@ function FluxPlayerChrome({
   onTranscodeSeek,
   onPlaybackIntent,
   onPlaybackStateChange,
+  autoplayEnabled,
 }: Pick<
   FluxPlayerProps,
   | 'mediaItemId'
@@ -552,6 +572,7 @@ function FluxPlayerChrome({
   onTranscodeSeek: (time: number) => void;
   onPlaybackIntent: (wantsPlayback: boolean) => void;
   onPlaybackStateChange: (state: { paused: boolean; started: boolean }) => void;
+  autoplayEnabled: boolean;
 }) {
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
@@ -923,10 +944,10 @@ function FluxPlayerChrome({
   }, [seekTo, stableDuration]);
 
   useEffect(() => {
-    if (!canPlay || !paused || autoplayAttemptedRef.current) return;
+    if (!autoplayEnabled || !canPlay || !paused || autoplayAttemptedRef.current) return;
     autoplayAttemptedRef.current = true;
     playerRef.current?.play().catch(() => {});
-  }, [canPlay, paused, playerRef]);
+  }, [autoplayEnabled, canPlay, paused, playerRef]);
 
   /* Mouse idle tracking — hide controls after inactivity during playback */
   useEffect(() => {

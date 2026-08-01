@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ClientBootstrapDTO } from '@flux/shared';
 import { config } from '../../config.js';
+import { getServerSettings } from '../settings/settings.service.js';
 
 function derivedServerId(): string {
   if (config.FLUX_SERVER_ID) return config.FLUX_SERVER_ID;
@@ -10,18 +11,21 @@ function derivedServerId(): string {
 }
 
 export const clientRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/bootstrap', async (): Promise<ClientBootstrapDTO> => ({
-    product: 'flux',
-    serverId: derivedServerId(),
-    serverName: config.FLUX_SERVER_NAME,
-    serverVersion: config.FLUX_SERVER_VERSION,
-    apiVersion: 1,
-    minimumApiVersion: 1,
-    branding: {
-      name: config.FLUX_SERVER_NAME,
-      logoUrl: new URL('/icon-512.png', config.FRONTEND_ORIGIN).toString(),
-      accentColor: '#8b5cf6',
-      backgroundColor: '#0d0f12',
-    },
-  }));
+  app.get('/bootstrap', async (): Promise<ClientBootstrapDTO> => {
+    const settings = await getServerSettings();
+    return {
+      product: 'flux',
+      serverId: derivedServerId(),
+      serverName: settings.serverName,
+      serverVersion: config.FLUX_SERVER_VERSION,
+      apiVersion: 1,
+      minimumApiVersion: 1,
+      branding: {
+        name: settings.serverName,
+        logoUrl: new URL('/icon-512.png', settings.frontendUrl).toString(),
+        accentColor: '#8b5cf6',
+        backgroundColor: '#0d0f12',
+      },
+    };
+  });
 };

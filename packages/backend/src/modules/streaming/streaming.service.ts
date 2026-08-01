@@ -16,6 +16,7 @@ import { QUALITY_TIERS, applicableTiers } from '../../lib/adaptive-hls.js';
 import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
 import type { MediaStream } from '@prisma/client';
 import { mapMediaSegmentToDTO } from '../media-segments/media-segments.service.js';
+import { getServerSettings } from '../settings/settings.service.js';
 
 /** Map a file extension to its MIME type for direct-play streaming. */
 function mimeTypeFromExt(ext: string): string {
@@ -304,13 +305,16 @@ export async function decideCastPlayback(
   mediaItemId: string,
   episodeId?: string,
 ): Promise<CastPlaybackDecision> {
-  const decision = await decidePlayback(filePath, mediaItemId, episodeId);
+  const [decision, settings] = await Promise.all([
+    decidePlayback(filePath, mediaItemId, episodeId),
+    getServerSettings(),
+  ]);
   const ext = path.extname(filePath).toLowerCase();
   const containerOk = ext === '.mp4' || ext === '.m4v';
   const videoOk = decision.videoCodec === 'h264';
   const audioOk = decision.audioCodec === null || decision.audioCodec === 'aac';
 
-  if (containerOk && videoOk && audioOk) {
+  if (settings.directPlayEnabled && containerOk && videoOk && audioOk) {
     return {
       method: 'direct',
       contentType: 'video/mp4',
@@ -319,6 +323,10 @@ export async function decideCastPlayback(
       durationSeconds: decision.durationSeconds,
       reason: 'MP4/H.264/AAC is supported by the default Cast receiver',
     };
+  }
+
+  if (!settings.transcodingEnabled && !(settings.directStreamEnabled && videoOk && audioOk)) {
+    throw ApiError.badRequest('This media requires a playback method disabled in server settings', 'PLAYBACK_METHOD_DISABLED');
   }
 
   return {
@@ -366,7 +374,10 @@ export async function getPlaybackInfo(
   mediaItemId: string,
   episodeId?: string,
 ): Promise<PlaybackInfoDTO> {
-  const decision = await decidePlayback(filePath, mediaItemId, episodeId);
+  const [decision, settings] = await Promise.all([
+    decidePlayback(filePath, mediaItemId, episodeId),
+    getServerSettings(),
+  ]);
   const where = episodeId ? { episodeId } : { mediaItemId };
   const streams = await prisma.mediaStream.findMany({
     where,
@@ -380,15 +391,34 @@ export async function getPlaybackInfo(
       })
     : [];
 
+  const directPlay = decision.directPlay && settings.directPlayEnabled;
+  const canDirectStream = decision.videoCodec === 'h264'
+    && (decision.audioCodec === null || decision.audioCodec === 'aac');
+  const hlsAvailable = settings.transcodingEnabled || (settings.directStreamEnabled && canDirectStream);
+  const qualities = buildQualityOptions(directPlay, videoStream).filter((quality) => {
+    if (quality.source === 'direct') return true;
+    if (!hlsAvailable) return false;
+    if (!settings.transcodingEnabled) return quality.label === 'Auto';
+    const maxBitrate = (settings.remoteBitrateLimitMbps ?? settings.localBitrateLimitMbps)?.valueOf();
+    return maxBitrate == null || quality.bitrate == null || quality.bitrate <= maxBitrate * 1_000_000;
+  });
   return {
-    directPlay: decision.directPlay,
-    hlsAvailable: true,
+    directPlay,
+    hlsAvailable,
     videoCodec: decision.videoCodec,
     audioCodec: decision.audioCodec,
     durationSeconds: decision.durationSeconds,
+    preferences: {
+      autoplayEnabled: settings.autoplayEnabled,
+      resumeBehavior: settings.resumeBehavior as PlaybackInfoDTO['preferences']['resumeBehavior'],
+      skipIntroEnabled: settings.skipIntroEnabled,
+      preferredAudioLanguage: settings.preferredAudioLanguage,
+      preferredSubtitleLanguage: settings.preferredSubtitleLanguage,
+      subtitlesMode: settings.subtitlesMode as PlaybackInfoDTO['preferences']['subtitlesMode'],
+    },
     ...(segments.length > 0 ? { segments: segments.map(mapMediaSegmentToDTO) } : {}),
     streams: streams.map(mapMediaStream),
-    qualities: buildQualityOptions(decision.directPlay, videoStream),
+    qualities,
   };
 }
 
@@ -405,6 +435,7 @@ export function buildHlsFfmpegArgs(
   sessionDir: string,
   audioStreamIndex?: number,
   startTimeSeconds = 0,
+  hardwareAcceleration = 'NONE',
 ): string[] {
   const audioCopyable =
     probe.audioCodec != null && COPYABLE_AUDIO.has(probe.audioCodec);
@@ -419,9 +450,18 @@ export function buildHlsFfmpegArgs(
   // we have to touch the audio we re-encode the video too so FFmpeg produces ONE
   // coherent timeline that MSE can append cleanly.
   const reencodeVideo = !videoCopyable || !audioCopyable;
+  const encoderArgs = hardwareAcceleration === 'NVENC'
+    ? ['-c:v', 'h264_nvenc', '-preset', 'p4', '-cq', '23']
+    : hardwareAcceleration === 'QSV'
+      ? ['-c:v', 'h264_qsv', '-preset', 'faster', '-global_quality', '23']
+      : hardwareAcceleration === 'VIDEOTOOLBOX'
+        ? ['-c:v', 'h264_videotoolbox', '-q:v', '65']
+        : hardwareAcceleration === 'VAAPI'
+          ? ['-vf', 'format=nv12,hwupload', '-c:v', 'h264_vaapi', '-qp', '23']
+          : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
   const videoArgs = reencodeVideo
     ? [
-        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
+        ...encoderArgs,
         // Force a keyframe on every segment boundary so each HLS segment decodes
         // standalone (matches -hls_time below).
         '-force_key_frames', 'expr:gte(t,n_forced*4)',
@@ -437,6 +477,7 @@ export function buildHlsFfmpegArgs(
 
   return [
     '-fflags', '+genpts', // synthesize sane PTS when the source lacks them
+    ...(reencodeVideo && hardwareAcceleration === 'VAAPI' ? ['-vaapi_device', '/dev/dri/renderD128'] : []),
     ...(startTimeSeconds > 0 ? ['-ss', startTimeSeconds.toFixed(3)] : []),
     '-i', sourceFile,
     '-map', probe.videoStreamIndex !== null ? `0:${probe.videoStreamIndex}` : '0:v:0',

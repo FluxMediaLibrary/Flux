@@ -52,3 +52,23 @@ test('normalizes H.264 MKV video and FLAC audio onto one zero-based HLS clock', 
     false,
   );
 });
+
+test('applies configured bitrate ceilings and hardware encoders', () => {
+  const args = buildAdaptiveHlsArgs(
+    'movie.mkv',
+    path.join('tmp', 'nvenc-limited'),
+    'hevc',
+    'truehd',
+    3840,
+    2160,
+    0,
+    1,
+    0,
+    3000,
+    'NVENC',
+  );
+
+  assert.ok(args.includes('h264_nvenc'));
+  assert.ok(args.includes('2800k'));
+  assert.equal(args.includes('5000k'), false);
+});

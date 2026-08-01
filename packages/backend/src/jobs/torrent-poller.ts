@@ -9,7 +9,8 @@
  */
 import type { FastifyBaseLogger } from 'fastify';
 import { config } from '../config.js';
-import { reconcileCompletedTorrents } from '../modules/torrents/torrents.service.js';
+import { enforceTorrentSeedingPolicy, reconcileCompletedTorrents, retryFailedTorrents } from '../modules/torrents/torrents.service.js';
+import { cleanupUsenetHistory } from '../modules/settings/usenet-maintenance.js';
 
 let timer: NodeJS.Timeout | null = null;
 let running = false;
@@ -23,6 +24,9 @@ export function startTorrentPoller(log: FastifyBaseLogger): void {
     running = true;
     try {
       await reconcileCompletedTorrents();
+      await enforceTorrentSeedingPolicy();
+      await cleanupUsenetHistory();
+      await retryFailedTorrents();
     } catch (err) {
       log.warn(`[TorrentPoller] sweep failed: ${String(err)}`);
     } finally {
