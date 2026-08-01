@@ -9,13 +9,13 @@
  * at least `minCoverage` of episodes and every match clears the minimum
  * duration and confidence thresholds.
  *
- * Matching strategy (seed-and-verify, tuned for exact- or near-exact audio):
- *   1. Build one k-mer index across all non-reference episodes (k ~= 0.5s of
- *      frames). Identical audio produces identical raw fingerprint ints, so
- *      exact k-mer hits land at the true alignment.
- *   2. For each candidate reference offset, count k-mer hits per
- *      (episode, alignment) pair, then verify only the top alignment with a
- *      tolerance-aware sliding window (allows occasional frame mismatches).
+ * Matching strategy (seed-and-verify, tolerant of codec differences):
+ *   1. Index the upper 14 bits of individual subfingerprints, following the
+ *      alignment strategy used by AcoustID's matcher. This still produces
+ *      stable offset votes when a codec changes a few bits in every frame.
+ *   2. For each candidate reference offset, cluster neighboring alignment
+ *      votes, then verify the best alignment using normalized Hamming distance
+ *      rather than exact 32-bit equality.
  *   3. Score hypotheses by coverage, average confidence, then duration.
  */
 
@@ -67,20 +67,31 @@ function median(values: number[]): number {
   return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
-function packKmer(frames: Int32Array, start: number, k: number): bigint {
-  let key = 0n;
-  for (let i = 0; i < k; i++) {
-    key = (key << 32n) | BigInt(frames[start + i]! >>> 0);
-  }
-  return key;
+const ALIGNMENT_SEED_BITS = 14;
+const ALIGNMENT_SEED_SHIFT = 32 - ALIGNMENT_SEED_BITS;
+const MAX_SEED_OCCURRENCES = 128;
+
+function alignmentSeed(frame: number): number {
+  return frame >>> ALIGNMENT_SEED_SHIFT;
+}
+
+function popcount32(value: number): number {
+  let bits = value >>> 0;
+  bits -= (bits >>> 1) & 0x55555555;
+  bits = (bits & 0x33333333) + ((bits >>> 2) & 0x33333333);
+  return (((bits + (bits >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24;
+}
+
+/** AcoustID-style score: unrelated frames average near 0; identical is 1. */
+function frameSimilarity(left: number, right: number): number {
+  return Math.max(0, 1 - popcount32(left ^ right) / 16);
 }
 
 /**
- * Longest window in `other` (aligned by `alignment`) whose exact-match ratio to
- * the reference chunk clears a strict run threshold. The window is then trimmed
- * to its first/last matching frames so tolerance cannot inflate the matched
- * duration by absorbing differing content. Returns the window in reference
- * frame coordinates plus the ratio. Null when no qualifying window exists.
+ * Longest locally-similar window in `other` at one candidate alignment. A
+ * two-second rolling score identifies the stable repeated region. A lower
+ * activation threshold keeps codec noise from splitting one intro into several
+ * fragments; the completed run must still clear `minConfidence` as a whole.
  */
 function bestMatchingWindow(
   ref: Int32Array,
@@ -89,53 +100,68 @@ function bestMatchingWindow(
   other: Int32Array,
   alignment: number,
   minConfidence: number,
+  framesPerSecond: number,
 ): { start: number; end: number; confidence: number } | null {
   const lo = Math.max(refStart, -alignment);
   const hi = Math.min(refEnd, other.length - alignment);
   if (hi - lo < 1) return null;
 
-  // The extension threshold is stricter than the acceptance threshold so a
-  // long identical run cannot drag in a long tail of differing content while
-  // still clearing e.g. 0.65 average similarity.
-  const runThreshold = Math.max(minConfidence, 0.8);
-  let windowStart = lo;
-  let matches = 0;
-  let bestLen = 0;
-  let bestStart = lo;
-  let bestMatches = 0;
-
+  const similarities = new Float64Array(hi - lo);
   for (let i = lo; i < hi; i++) {
-    if (other[i + alignment] === ref[i]) matches += 1;
-    while (windowStart <= i && matches / (i - windowStart + 1) < runThreshold) {
-      if (other[windowStart + alignment] === ref[windowStart]) matches -= 1;
-      windowStart += 1;
-    }
-    const len = i - windowStart + 1;
+    similarities[i - lo] = frameSimilarity(ref[i]!, other[i + alignment]!);
+  }
+
+  const smoothingFrames = Math.max(3, Math.round(framesPerSecond * 2));
+  if (similarities.length < smoothingFrames) return null;
+  const maxGapFrames = Math.max(1, Math.round(framesPerSecond * 2));
+  const activationConfidence = Math.max(0.25, minConfidence - 0.12);
+  let rollingSum = 0;
+  for (let i = 0; i < smoothingFrames; i++) rollingSum += similarities[i]!;
+
+  let runStart = -1;
+  let lastStrongStart = -1;
+  let bestLen = 0;
+  let bestStart = -1;
+  let bestEnd = -1;
+
+  const considerRun = () => {
+    if (runStart < 0 || lastStrongStart < runStart) return;
+    const end = Math.min(similarities.length, lastStrongStart + smoothingFrames);
+    const len = end - runStart;
     if (len > bestLen) {
       bestLen = len;
-      bestStart = windowStart;
-      bestMatches = matches;
+      bestStart = runStart;
+      bestEnd = end;
+    }
+  };
+
+  const lastWindowStart = similarities.length - smoothingFrames;
+  for (let start = 0; start <= lastWindowStart; start++) {
+    if (start > 0) {
+      rollingSum += similarities[start + smoothingFrames - 1]! - similarities[start - 1]!;
+    }
+    const strong = rollingSum / smoothingFrames >= activationConfidence;
+    if (strong) {
+      if (runStart < 0) runStart = start;
+      lastStrongStart = start;
+    } else if (runStart >= 0 && start - lastStrongStart > maxGapFrames) {
+      considerRun();
+      runStart = -1;
+      lastStrongStart = -1;
     }
   }
+  considerRun();
 
-  if (bestLen < 1) return null;
-
-  // Trim to the tightest run: the matched segment starts at the first matching
-  // frame and ends at the last matching frame inside the window.
-  let trimmedStart = bestStart;
-  let trimmedEnd = bestStart + bestLen;
-  while (trimmedStart < trimmedEnd && other[trimmedStart + alignment] !== ref[trimmedStart]) {
-    trimmedStart += 1;
-  }
-  while (trimmedEnd > trimmedStart && other[trimmedEnd - 1 + alignment] !== ref[trimmedEnd - 1]) {
-    trimmedEnd -= 1;
-  }
-  if (trimmedEnd - trimmedStart < 1) return null;
+  if (bestLen < 1 || bestStart < 0 || bestEnd <= bestStart) return null;
+  let similaritySum = 0;
+  for (let i = bestStart; i < bestEnd; i++) similaritySum += similarities[i]!;
+  const confidence = similaritySum / bestLen;
+  if (confidence < minConfidence) return null;
 
   return {
-    start: trimmedStart,
-    end: trimmedEnd,
-    confidence: bestMatches / (trimmedEnd - trimmedStart),
+    start: lo + bestStart,
+    end: lo + bestEnd,
+    confidence,
   };
 }
 
@@ -174,27 +200,20 @@ export function detectRepeatedIntro(
   const ref = sorted[Math.floor(sorted.length / 2)]!;
   const others = valid.filter((sample) => sample.episodeId !== ref.episodeId);
 
-  // k-mer index over all non-reference episodes. k ~= 0.5s keeps seeds tolerant
-  // of slightly-different encodings while still being selective.
-  const k = Math.max(2, Math.round(sharedRate * 0.5));
-  const index = new Map<bigint, { episodeIndex: number; pos: number }[]>();
-  const indexEpisodeIds: string[] = [];
-  const byId = new Map<string, EpisodeSample>();
-  for (const sample of valid) byId.set(sample.episodeId, sample);
-
-  for (const sample of others) {
-    const episodeIndex = indexEpisodeIds.length;
-    indexEpisodeIds.push(sample.episodeId);
-    const limit = sample.frames.length - k;
-    for (let i = 0; i <= limit; i++) {
-      const key = packKmer(sample.frames, i, k);
+  // Upper-14-bit seed index mirrors AcoustID's alignment approach. Very common
+  // values (typically silence) are ignored so they cannot dominate voting.
+  const index = new Map<number, { episodeIndex: number; pos: number }[]>();
+  for (const [episodeIndex, sample] of others.entries()) {
+    const limit = Math.min(sample.frames.length, windowFrames);
+    for (let i = 0; i < limit; i++) {
+      const key = alignmentSeed(sample.frames[i]!);
       const bucket = index.get(key);
       if (bucket) bucket.push({ episodeIndex, pos: i });
       else index.set(key, [{ episodeIndex, pos: i }]);
     }
   }
 
-  const refLimit = ref.frames.length - k;
+  const refLimit = Math.min(ref.frames.length, windowFrames) - 1;
   const stepFrames = Math.max(1, Math.round(sharedRate)); // ~1s steps
   const lastRefStart = Math.max(0, Math.min(ref.frames.length - minFrames, windowFrames - minFrames));
 
@@ -205,14 +224,14 @@ export function detectRepeatedIntro(
     const refChunkEnd = Math.min(ref.frames.length, r + windowFrames);
     if (refChunkEnd - r < minFrames) break;
 
-    // Count exact k-mer hits per (episode, alignment). `alignment` maps
+    // Count stable 14-bit seed hits per (episode, alignment). `alignment` maps
     // reference frame i to episode frame i + alignment.
     const hitsByEpisode = new Map<number, Map<number, number>>();
-    const queryLimit = Math.min(refChunkEnd - r - k, refLimit - r);
+    const queryLimit = Math.min(refChunkEnd - r - 1, refLimit - r);
     for (let i = 0; i <= queryLimit; i++) {
-      const key = packKmer(ref.frames, r + i, k);
+      const key = alignmentSeed(ref.frames[r + i]!);
       const entries = index.get(key);
-      if (!entries) continue;
+      if (!entries || entries.length > MAX_SEED_OCCURRENCES) continue;
       for (const entry of entries) {
         const alignment = entry.pos - (r + i);
         let byAlignment = hitsByEpisode.get(entry.episodeIndex);
@@ -236,26 +255,56 @@ export function detectRepeatedIntro(
 
     for (const [episodeIndex, byAlignment] of hitsByEpisode) {
       const sample = others[episodeIndex]!;
-      // Pick the highest-count alignment (cluster neighbors within +/-1 frame).
-      let bestAlignment = -1;
-      let bestCount = 0;
+      // Rank several alignments after clustering codec-delay jitter. Repeated
+      // musical motifs can outvote the true start by a small amount, so verify
+      // the strongest candidates instead of trusting a single seed maximum.
+      const rankedAlignments: { alignment: number; count: number }[] = [];
       for (const [alignment, count] of byAlignment) {
-        if (count > bestCount) {
-          bestCount = count;
-          bestAlignment = alignment;
+        let clusteredCount = count;
+        for (let delta = -2; delta <= 2; delta++) {
+          if (delta !== 0) clusteredCount += byAlignment.get(alignment + delta) ?? 0;
+        }
+        rankedAlignments.push({ alignment, count: clusteredCount });
+      }
+      rankedAlignments.sort((a, b) => b.count - a.count);
+
+      let bestAlignment = 0;
+      let window: ReturnType<typeof bestMatchingWindow> = null;
+      let bestSeedCount = -1;
+      const verifiedAlignments: number[] = [];
+      for (const candidate of rankedAlignments) {
+        if (candidate.count < 2 || verifiedAlignments.length >= 12) break;
+        verifiedAlignments.push(candidate.alignment);
+        const candidateWindow = bestMatchingWindow(
+          ref.frames,
+          r,
+          refChunkEnd,
+          sample.frames,
+          candidate.alignment,
+          minConfidence,
+          sharedRate,
+        );
+        if (!candidateWindow || candidateWindow.end - candidateWindow.start < minFrames) continue;
+        if (
+          !window ||
+          candidate.count > bestSeedCount ||
+          (
+            candidate.count === bestSeedCount &&
+            (
+              candidateWindow.confidence > window.confidence ||
+              (
+                candidateWindow.confidence === window.confidence &&
+                candidateWindow.end - candidateWindow.start > window.end - window.start
+              )
+            )
+          )
+        ) {
+          window = candidateWindow;
+          bestAlignment = candidate.alignment;
+          bestSeedCount = candidate.count;
         }
       }
-      if (bestCount < 2) continue;
-
-      const window = bestMatchingWindow(
-        ref.frames,
-        r,
-        refChunkEnd,
-        sample.frames,
-        bestAlignment,
-        minConfidence,
-      );
-      if (!window || window.end - window.start < minFrames) continue;
+      if (!window) continue;
 
       matchedCount += 1;
       const startMs = Math.round(((window.start + bestAlignment) / sharedRate) * 1000);

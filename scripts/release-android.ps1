@@ -33,7 +33,8 @@ $releaseNotes = @(
   'Added Cast play, pause, timeline seeking, volume, and Skip Intro controls',
   'Added an Admin Intros queue with live progress, logs, results, and scan history',
   'Fixed repeat intro scans being swallowed by completed queue jobs',
-  'Fixed Chromaprint scans failing at the exact end of the fingerprint window'
+  'Fixed Chromaprint scans failing at the exact end of the fingerprint window',
+  'Fixed intro matching across codec and encode variations'
 )
 $releaseDate = [DateTime]::UtcNow.ToString('o')
 $manifest = [ordered]@{

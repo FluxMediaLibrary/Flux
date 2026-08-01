@@ -14,12 +14,14 @@
 
 - Fixed completed intro jobs preventing later rescans of the same season.
 - Fixed Chromaprint scans failing every episode when the requested fingerprint window ended exactly at EOF.
+- Fixed intro matching across codec/encode variations by using tolerant fingerprint alignment and whole-segment confidence checks.
 - Fixed player time, title, duration, buffering, and playback state not following the Cast receiver.
 - Fixed HLS Cast seeks so forward, backward, timeline, and Skip Intro requests restart at the requested absolute position.
 - Preserved manual intro markers unless an administrator explicitly enables forced overwrite.
 
 ### Verification
 
-- Passed 25 backend tests and all shared, backend, and frontend production builds.
+- Passed 26 backend tests and all shared, backend, and frontend production builds.
+- Verified detection against real Chromaprint output from MP3, AAC, Opus, and FLAC encodes with different cold-open offsets.
 - Verified the Intros queue, progress console, responsive layout, and repeat scans in the browser.
 - Compiled and packaged the Android application against SDK 35 and Google Cast Framework 22.0.0.
