@@ -391,6 +391,22 @@ public final class MainActivity extends AppCompatActivity {
         }
     }
 
+    void loadCastMediaFromWeb(NativePlaybackContext context) {
+        playbackContext = context;
+        pendingCastContext = context;
+        castLaunchRequested = true;
+        Log.i(TAG, "Loading selected Cast media mediaId=" + context.mediaItemId
+            + " episodeId=" + context.episodeId + " position=" + context.currentTimeSeconds);
+
+        CastSession session = currentCastSession();
+        if (session != null) {
+            notifyCastState("loading-media", null);
+            loadPendingCastMedia();
+            return;
+        }
+        requestCastFromWeb();
+    }
+
     private boolean sameMedia(NativePlaybackContext left, NativePlaybackContext right) {
         if (!left.mediaItemId.equals(right.mediaItemId)) return false;
         if (left.episodeId == null) return right.episodeId == null;
@@ -475,10 +491,6 @@ public final class MainActivity extends AppCompatActivity {
             return;
         }
         observeRemoteMediaClient(session);
-        activeCastContext = request;
-        activeCastInfo = info;
-        castTimelineOffsetSeconds = "hls".equals(info.method) ? request.currentTimeSeconds : 0;
-
         MediaMetadata metadata = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
         metadata.putString(MediaMetadata.KEY_TITLE, info.title);
         if (info.subtitle != null && !"null".equals(info.subtitle)) {
@@ -488,10 +500,20 @@ public final class MainActivity extends AppCompatActivity {
             metadata.addImage(new WebImage(Uri.parse(info.posterUrl)));
         }
 
+        JSONObject customData = new JSONObject();
+        try {
+            customData.put("fluxMediaItemId", request.mediaItemId);
+            customData.put("fluxEpisodeId", request.episodeId == null ? JSONObject.NULL : request.episodeId);
+            customData.put("fluxTimelineOffsetSeconds", "hls".equals(info.method) ? request.currentTimeSeconds : 0);
+        } catch (Exception error) {
+            Log.w(TAG, "Could not attach Flux Cast media identity", error);
+        }
+
         MediaInfo.Builder mediaBuilder = new MediaInfo.Builder(info.url)
             .setContentUrl(info.url)
             .setContentType(info.contentType)
             .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
+            .setCustomData(customData)
             .setMetadata(metadata);
         if (info.durationSeconds > 0) {
             mediaBuilder.setStreamDuration((long) (info.durationSeconds * 1000));
@@ -510,8 +532,13 @@ public final class MainActivity extends AppCompatActivity {
                 Log.e(TAG, "Receiver rejected load status=" + status.getStatusCode());
                 notifyCastError("Receiver rejected media: " + status.getStatusCode());
             } else {
-                pendingCastContext = null;
-                castLaunchRequested = false;
+                activeCastContext = request;
+                activeCastInfo = info;
+                castTimelineOffsetSeconds = "hls".equals(info.method) ? request.currentTimeSeconds : 0;
+                if (pendingCastContext == request) {
+                    pendingCastContext = null;
+                    castLaunchRequested = false;
+                }
                 notifyCastState("media-loaded", info.method);
                 publishCastPlaybackState();
                 webView.evaluateJavascript("document.dispatchEvent(new CustomEvent('flux:native-cast-local-pause'))", null);
@@ -643,6 +670,7 @@ public final class MainActivity extends AppCompatActivity {
         RemoteMediaClient client = session != null ? session.getRemoteMediaClient() : null;
         MediaInfo receiverInfo = client != null ? client.getMediaInfo() : null;
         MediaStatus status = client != null ? client.getMediaStatus() : null;
+        JSONObject customData = receiverInfo != null ? receiverInfo.getCustomData() : null;
         boolean mediaLoaded = receiverInfo != null;
         double receiverPosition = client != null ? Math.max(0, client.getApproximateStreamPosition() / 1000.0) : 0;
         double duration = activeCastInfo != null && activeCastInfo.durationSeconds > 0
@@ -654,10 +682,24 @@ public final class MainActivity extends AppCompatActivity {
         String title = activeCastInfo != null ? activeCastInfo.title : metadata != null ? metadata.getString(MediaMetadata.KEY_TITLE) : null;
         String subtitle = activeCastInfo != null ? activeCastInfo.subtitle : metadata != null ? metadata.getString(MediaMetadata.KEY_SUBTITLE) : null;
 
+        String mediaItemId = activeCastContext != null
+            ? activeCastContext.mediaItemId
+            : customData != null ? customData.optString("fluxMediaItemId", null) : null;
+        String episodeId = activeCastContext != null
+            ? activeCastContext.episodeId
+            : customData != null && !customData.isNull("fluxEpisodeId")
+                ? customData.optString("fluxEpisodeId", null)
+                : null;
+        double timelineOffset = activeCastContext != null
+            ? castTimelineOffsetSeconds
+            : customData != null ? Math.max(0, customData.optDouble("fluxTimelineOffsetSeconds", 0)) : 0;
+
         payload.put("connected", session != null);
         payload.put("mediaLoaded", mediaLoaded);
+        payload.put("mediaItemId", mediaItemId == null ? JSONObject.NULL : mediaItemId);
+        payload.put("episodeId", episodeId == null ? JSONObject.NULL : episodeId);
         payload.put("playerState", status != null ? castPlayerStateName(status.getPlayerState()) : "UNKNOWN");
-        payload.put("currentTimeSeconds", castTimelineOffsetSeconds + receiverPosition);
+        payload.put("currentTimeSeconds", timelineOffset + receiverPosition);
         payload.put("durationSeconds", duration);
         payload.put("title", title == null ? JSONObject.NULL : title);
         payload.put("subtitle", subtitle == null ? JSONObject.NULL : subtitle);

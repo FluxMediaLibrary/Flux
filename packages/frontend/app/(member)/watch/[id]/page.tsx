@@ -62,6 +62,7 @@ export default function WatchPage() {
   const nextEpisode = findNextPlayableEpisode(item?.episodes, activeEpisodeId);
   const nextEpisodePrompt = nextEpisode
     ? {
+        id: nextEpisode.id,
         title: nextEpisode.title || `Episode ${nextEpisode.episode}`,
         subtitle: episodeSubtitle(nextEpisode),
       }

@@ -9,7 +9,7 @@ import {
   type MediaPlayerInstance,
 } from '@vidstack/react';
 import { api } from '@/lib/api';
-import { useNativeCast } from '@/lib/native-cast';
+import { isCurrentCastMedia, useNativeCast } from '@/lib/native-cast';
 
 import type { MediaSegmentDTO, MediaStreamDTO, PlaybackInfoDTO, PlaybackMarkerDTO } from '@flux/shared';
 import { ControlBar } from './player/ControlBar';
@@ -42,6 +42,7 @@ interface FluxPlayerProps {
   onBack?: () => void;
   onNearEnd?: () => void;
   nextEpisode?: {
+    id: string;
     title: string;
     subtitle: string;
   } | null;
@@ -588,7 +589,7 @@ function FluxPlayerChrome({
   const nativeCast = useNativeCast();
   const nativeCastStateRef = useRef(nativeCast.state);
   nativeCastStateRef.current = nativeCast.state;
-  const castRemoteActive = nativeCast.state.connected && nativeCast.state.mediaLoaded;
+  const castRemoteActive = isCurrentCastMedia(nativeCast.state, mediaItemId, episodeId);
   const resumeTargetRef = useRef(playbackMethod === 'direct' ? (startPositionSeconds ?? 0) : 0);
   const nearEndFiredRef = useRef(false);
   const autoplayAttemptedRef = useRef(false);
@@ -1094,6 +1095,9 @@ function FluxPlayerChrome({
           onClick={(event) => {
             event.stopPropagation();
             reportProgress();
+            if (castRemoteActive) {
+              nativeCast.loadMedia(mediaItemId, nextEpisode.id, 0);
+            }
             onNextEpisode();
           }}
         >
