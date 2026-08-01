@@ -63,7 +63,6 @@ services:
       - ${FLUX_DOWNLOADS_PATH:-/storage/flux-downloads}:/data/downloads
       - media:/data/media
       - transmission-config:/config
-      - ./transmission-settings.json:/config/settings.json:ro
       - ${FLUX_EXTRA_PATH:-/storage/flux-extra}:/data/extra
 
   backend:

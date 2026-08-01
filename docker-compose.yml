@@ -56,7 +56,6 @@ services:
       - /storage/flux-downloads:/data/downloads
       - media:/data/media
       - transmission-config:/config
-      - ./transmission-settings.json:/config/settings.json:ro
       - /storage/flux-extra:/data/extra
 
   backend:
