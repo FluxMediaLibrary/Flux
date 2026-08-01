@@ -1,15 +1,16 @@
 ﻿{
-    "versionCode":  9,
-    "versionName":  "1.1.4",
+    "versionCode":  10,
+    "versionName":  "1.1.5",
     "minimumSupportedVersionCode":  4,
     "mandatory":  false,
-    "releaseDate":  "2026-07-27T06:50:13.9545930Z",
+    "releaseDate":  "2026-08-01T07:26:17.5645295Z",
     "releaseNotes":  [
-                         "Respected Android rotation lock while preserving normal auto-rotate behavior",
-                         "Kept update checks in the profile menu",
-                         "Kept Cast in the media player controls"
+                         "Turned the Flux player into a live TV remote while casting",
+                         "Added Cast play, pause, timeline seeking, volume, and Skip Intro controls",
+                         "Added an Admin Intros queue with live progress, logs, results, and scan history",
+                         "Fixed repeat intro scans being swallowed by completed queue jobs"
                      ],
-    "apkUrl":  "/api/app/android/download/Flux-Android-v1.1.4.apk",
-    "sha256":  "93696a9c55f4eb1f5f68918b7a31696de6ee142fd99bf71900feb8249b24229b",
-    "fileSize":  4956259
+    "apkUrl":  "/api/app/android/download/Flux-Android-v1.1.5.apk",
+    "sha256":  "0a273913c212172bfe9a58aa1972266fa9cdb95dc8f1647e06e43bee6c3054dd",
+    "fileSize":  4925057
 }

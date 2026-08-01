@@ -17,11 +17,12 @@ type NavItem = {
   permission: AdminPermission;
 };
 
-type IconName = 'overview' | 'library' | 'requests' | 'downloads' | 'users' | 'playback' | 'storage' | 'activity' | 'system' | 'settings' | 'search' | 'bell' | 'menu' | 'close' | 'back' | 'chevron';
+type IconName = 'overview' | 'library' | 'intros' | 'requests' | 'downloads' | 'users' | 'playback' | 'storage' | 'activity' | 'system' | 'settings' | 'search' | 'bell' | 'menu' | 'close' | 'back' | 'chevron';
 
 const NAV: NavItem[] = [
   { href: '/admin/overview', label: 'Overview', icon: 'overview', permission: 'VIEW_SYSTEM' },
   { href: '/admin/library', label: 'Library', icon: 'library', permission: 'MANAGE_LIBRARY' },
+  { href: '/admin/intros', label: 'Intros', icon: 'intros', permission: 'MANAGE_LIBRARY' },
   { href: '/admin/requests', label: 'Requests', icon: 'requests', permission: 'MANAGE_REQUESTS' },
   { href: '/admin/downloads', label: 'Downloads', icon: 'downloads', permission: 'MANAGE_DOWNLOADS' },
   { href: '/admin/users', label: 'Users', icon: 'users', permission: 'MANAGE_USERS' },
@@ -195,6 +196,7 @@ function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
     overview: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="4" rx="1"/><rect x="14" y="11" width="7" height="10" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></>,
     library: <><path d="M4 5.5 12 3l8 2.5v13L12 21l-8-2.5z"/><path d="M12 3v18M4 5.5l8 2.5 8-2.5"/></>,
+    intros: <><path d="M5 4h14v16H5z"/><path d="m10 8 5 4-5 4z"/><path d="M3 8h2M19 8h2M3 16h2M19 16h2"/></>,
     requests: <><path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h3"/></>,
     downloads: <><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 20h16"/></>,
     users: <><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M17 5.5a3 3 0 0 1 0 5M18 14a6 6 0 0 1 3 6"/></>,

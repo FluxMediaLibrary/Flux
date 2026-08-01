@@ -15,6 +15,10 @@ import type {
   AdminLibraryRepairResultDTO,
   AdminMediaAnalyzeResultDTO,
   AdminIntroRescanResultDTO,
+  AdminIntroDashboardDTO,
+  AdminIntroScanJobDTO,
+  QueueAdminIntroScansRequest,
+  QueueAdminIntroScansResultDTO,
   AdminStorageCleanupResultDTO,
   ApiError,
   AuthResponse,
@@ -604,6 +608,20 @@ export const api = {
       `/api/admin/library/${encodeURIComponent(mediaItemId)}/seasons/${encodeURIComponent(String(season))}/rescan-intros${qs}`,
       { method: 'POST' },
     );
+  },
+  getAdminIntros() {
+    return request<AdminIntroDashboardDTO>('/api/admin/intros');
+  },
+  getAdminIntroJob(jobId: string) {
+    return request<AdminIntroScanJobDTO>(
+      `/api/admin/intros/jobs/${encodeURIComponent(jobId)}`,
+    );
+  },
+  queueAdminIntroScans(body: QueueAdminIntroScansRequest) {
+    return request<QueueAdminIntroScansResultDTO>('/api/admin/intros/queue', {
+      method: 'POST',
+      body,
+    });
   },
 };
 

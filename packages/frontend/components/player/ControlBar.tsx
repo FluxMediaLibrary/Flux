@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useMediaRemote, useMediaState } from '@vidstack/react';
 import {
   CastIcon,
@@ -17,21 +17,7 @@ import {
 } from './icons';
 import { SettingsPanel } from './SettingsPanel';
 import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
-
-declare global {
-  interface Window {
-    FLUX_NATIVE_APP?: boolean;
-    FluxNative?: {
-      isNativeApp?: () => boolean;
-      getAppInfo?: () => string;
-      checkForUpdates?: () => void;
-      requestCast?: () => void;
-      setAutomaticUpdates?: (enabled: boolean) => void;
-      clearUpdateDownloads?: () => void;
-      setPlaybackContext?: (payload: string) => void;
-    };
-  }
-}
+import type { NativeCastState } from '@/lib/native-cast';
 
 interface ControlBarProps {
   durationSeconds?: number | null;
@@ -45,6 +31,10 @@ interface ControlBarProps {
   selectedAudioStreamIndex: number | null;
   onAudioStreamChange: (streamIndex: number | null) => void;
   playbackMethod: 'direct' | 'hls';
+  castState?: NativeCastState;
+  onCastRequest?: () => void;
+  onCastSetVolume?: (volume: number) => void;
+  onCastToggleMute?: () => void;
 }
 
 function formatTime(value: number): string {
@@ -68,25 +58,35 @@ export function ControlBar({
   selectedAudioStreamIndex,
   onAudioStreamChange,
   playbackMethod,
+  castState,
+  onCastRequest,
+  onCastSetVolume,
+  onCastToggleMute,
 }: ControlBarProps) {
   const remote = useMediaRemote();
-  const paused = useMediaState('paused');
-  const muted = useMediaState('muted');
-  const volume = useMediaState('volume');
+  const localPaused = useMediaState('paused');
+  const localMuted = useMediaState('muted');
+  const localVolume = useMediaState('volume');
   const currentTime = useMediaState('currentTime');
   const duration = useMediaState('duration');
   const fullscreen = useMediaState('fullscreen');
   const canPictureInPicture = useMediaState('canPictureInPicture');
   const pictureInPicture = useMediaState('pictureInPicture');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [nativeCastAvailable, setNativeCastAvailable] = useState(false);
-  const [castConnected, setCastConnected] = useState(false);
+  const remoteActive = Boolean(castState?.connected && castState.mediaLoaded);
+  const paused = remoteActive ? castState?.playerState !== 'PLAYING' : localPaused;
+  const muted = remoteActive ? Boolean(castState?.muted) : localMuted;
+  const volume = remoteActive ? castState?.volume ?? 1 : localVolume;
   const displayDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
     ? durationSeconds
+    : remoteActive && castState && castState.durationSeconds > 0
+      ? castState.durationSeconds
     : typeof duration === 'number' && Number.isFinite(duration) && duration > 0
       ? duration
       : 0;
-  const displayCurrentTime = positionOffset + (Number.isFinite(currentTime) ? currentTime : 0);
+  const displayCurrentTime = remoteActive && castState
+    ? castState.currentTimeSeconds
+    : positionOffset + (Number.isFinite(currentTime) ? currentTime : 0);
 
   const seekBy = useCallback(
     (delta: number, trigger: Event) => {
@@ -101,10 +101,14 @@ export function ControlBar({
 
   const changeVolume = useCallback(
     (value: number) => {
+      if (remoteActive) {
+        onCastSetVolume?.(value);
+        return;
+      }
       remote.changeVolume(value);
       if (value > 0 && muted) remote.toggleMuted();
     },
-    [muted, remote],
+    [muted, onCastSetVolume, remote, remoteActive],
   );
 
   const togglePip = useCallback(() => {
@@ -113,26 +117,6 @@ export function ControlBar({
   }, [pictureInPicture, remote]);
 
   const displayVolume = muted ? 0 : volume;
-
-  useEffect(() => {
-    setNativeCastAvailable(Boolean(
-      window.FluxNative?.requestCast &&
-      (window.FLUX_NATIVE_APP || window.FluxNative?.isNativeApp?.()),
-    ));
-
-    const handleCastState = (event: Event) => {
-      const state = (event as CustomEvent<{ state?: string }>).detail?.state;
-      if (!state) return;
-      if (state === 'connected' || state === 'media-loaded' || state === 'playback') {
-        setCastConnected(true);
-      } else if (state === 'disconnected' || state === 'error') {
-        setCastConnected(false);
-      }
-    };
-
-    document.addEventListener('flux:native-cast-state', handleCastState);
-    return () => document.removeEventListener('flux:native-cast-state', handleCastState);
-  }, []);
 
   return (
     <div className="fx-controls">
@@ -157,7 +141,7 @@ export function ControlBar({
         </button>
 
         <div className="fx-vol">
-          <button className="fx-btn" type="button" onClick={() => remote.toggleMuted()} aria-label={muted ? 'Unmute' : 'Mute'}>
+          <button className="fx-btn" type="button" onClick={() => remoteActive ? onCastToggleMute?.() : remote.toggleMuted()} aria-label={muted ? 'Unmute' : 'Mute'}>
             {muted || displayVolume === 0 ? <MuteIcon /> : <VolumeIcon />}
           </button>
           <input
@@ -180,24 +164,24 @@ export function ControlBar({
 
         <div className="fx-spacer" />
 
-        {nativeCastAvailable && (
+        {castState?.available && (
           <button
-            className={castConnected ? 'fx-btn active' : 'fx-btn'}
+            className={castState.connected ? 'fx-btn active' : 'fx-btn'}
             type="button"
-            onClick={() => window.FluxNative?.requestCast?.()}
-            aria-label={castConnected ? 'Cast connected' : 'Cast'}
+            onClick={onCastRequest}
+            aria-label={castState.connected ? `Casting to ${castState.deviceName ?? 'TV'}` : 'Cast'}
           >
-            <CastIcon connected={castConnected} />
+            <CastIcon connected={castState.connected} />
           </button>
         )}
 
-        {canPictureInPicture && (
+        {!remoteActive && canPictureInPicture && (
           <button className={pictureInPicture ? 'fx-btn active' : 'fx-btn'} type="button" onClick={togglePip} aria-label="Picture in picture">
             <PictureInPictureIcon />
           </button>
         )}
 
-        <div className="fx-settings-wrap">
+        {!remoteActive && <div className="fx-settings-wrap">
           <button
             className={settingsOpen ? 'fx-btn active' : 'fx-btn'}
             type="button"
@@ -219,7 +203,7 @@ export function ControlBar({
             onAudioStreamChange={onAudioStreamChange}
             playbackMethod={playbackMethod}
           />
-        </div>
+        </div>}
 
         <button className="fx-btn" type="button" onClick={() => remote.toggleFullscreen()} aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
           {fullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}

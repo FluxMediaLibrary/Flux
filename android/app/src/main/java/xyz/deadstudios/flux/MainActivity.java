@@ -86,13 +86,25 @@ public final class MainActivity extends AppCompatActivity {
     private SessionManager sessionManager;
     private NativePlaybackContext playbackContext;
     private NativePlaybackContext pendingCastContext;
+    private NativePlaybackContext activeCastContext;
+    private CastPlaybackInfo activeCastInfo;
+    private RemoteMediaClient observedRemoteMediaClient;
+    private double castTimelineOffsetSeconds;
+    private volatile String lastCastStateJson = "{}";
     private boolean castLaunchRequested;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newSingleThreadExecutor();
+    private final RemoteMediaClient.Callback remoteMediaCallback = new RemoteMediaClient.Callback() {
+        @Override public void onStatusUpdated() { publishCastPlaybackState(); }
+        @Override public void onMetadataUpdated() { publishCastPlaybackState(); }
+        @Override public void onQueueStatusUpdated() { publishCastPlaybackState(); }
+    };
+    private final RemoteMediaClient.ProgressListener remoteProgressListener = (progressMs, durationMs) -> publishCastPlaybackState();
 
     private final SessionManagerListener<CastSession> castSessionListener = new SessionManagerListener<CastSession>() {
         @Override public void onSessionStarted(@NonNull CastSession session, @NonNull String sessionId) {
             Log.i(TAG, "Cast session started: " + sessionId);
+            observeRemoteMediaClient(session);
             notifyCastState("connected", null);
             if (castLaunchRequested) loadPendingCastMedia();
         }
@@ -102,10 +114,15 @@ public final class MainActivity extends AppCompatActivity {
         }
         @Override public void onSessionEnded(@NonNull CastSession session, int error) {
             Log.i(TAG, "Cast session ended reason=" + error);
+            detachRemoteMediaClient();
+            activeCastContext = null;
+            activeCastInfo = null;
+            castTimelineOffsetSeconds = 0;
             notifyCastState("disconnected", String.valueOf(error));
         }
         @Override public void onSessionResumed(@NonNull CastSession session, boolean wasSuspended) {
             Log.i(TAG, "Cast session resumed suspended=" + wasSuspended);
+            observeRemoteMediaClient(session);
             notifyCastState("connected", null);
             notifyCastState("connected", "session-restored");
         }
@@ -235,6 +252,10 @@ public final class MainActivity extends AppCompatActivity {
             sessionManager = castContext.getSessionManager();
             CastButtonFactory.setUpMediaRouteButton(getApplicationContext(), mediaRouteButton);
             Log.i(TAG, "CastContext initialized");
+            CastSession currentSession = sessionManager.getCurrentCastSession();
+            if (currentSession != null && currentSession.isConnected()) {
+                observeRemoteMediaClient(currentSession);
+            }
         } catch (Exception error) {
             Log.e(TAG, "CastContext initialization failed", error);
             mediaRouteButton.setVisibility(View.GONE);
@@ -354,6 +375,13 @@ public final class MainActivity extends AppCompatActivity {
 
         CastSession session = sessionManager != null ? sessionManager.getCurrentCastSession() : null;
         if (session != null && session.isConnected()) {
+            if (activeCastContext != null && sameMedia(activeCastContext, playbackContext)) {
+                castLaunchRequested = false;
+                pendingCastContext = null;
+                mediaRouteButton.performClick();
+                publishCastPlaybackState();
+                return;
+            }
             loadPendingCastMedia();
             return;
         }
@@ -361,6 +389,12 @@ public final class MainActivity extends AppCompatActivity {
         if (mediaRouteButton == null || !mediaRouteButton.performClick()) {
             notifyCastError("Cast is unavailable on this device");
         }
+    }
+
+    private boolean sameMedia(NativePlaybackContext left, NativePlaybackContext right) {
+        if (!left.mediaItemId.equals(right.mediaItemId)) return false;
+        if (left.episodeId == null) return right.episodeId == null;
+        return left.episodeId.equals(right.episodeId);
     }
 
     private void loadPendingCastMedia() {
@@ -440,6 +474,10 @@ public final class MainActivity extends AppCompatActivity {
             notifyCastError("Remote media client is unavailable");
             return;
         }
+        observeRemoteMediaClient(session);
+        activeCastContext = request;
+        activeCastInfo = info;
+        castTimelineOffsetSeconds = "hls".equals(info.method) ? request.currentTimeSeconds : 0;
 
         MediaMetadata metadata = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
         metadata.putString(MediaMetadata.KEY_TITLE, info.title);
@@ -475,18 +513,172 @@ public final class MainActivity extends AppCompatActivity {
                 pendingCastContext = null;
                 castLaunchRequested = false;
                 notifyCastState("media-loaded", info.method);
+                publishCastPlaybackState();
                 webView.evaluateJavascript("document.dispatchEvent(new CustomEvent('flux:native-cast-local-pause'))", null);
             }
         });
-        client.registerCallback(new RemoteMediaClient.Callback() {
-            @Override public void onStatusUpdated() {
-                MediaStatus status = client.getMediaStatus();
-                if (status != null) {
-                    Log.i(TAG, "Receiver status playerState=" + status.getPlayerState() + " idleReason=" + status.getIdleReason());
-                    notifyCastState("playback", "state=" + status.getPlayerState() + " idle=" + status.getIdleReason());
-                }
-            }
-        });
+    }
+
+    private void observeRemoteMediaClient(CastSession session) {
+        RemoteMediaClient client = session.getRemoteMediaClient();
+        if (client == observedRemoteMediaClient) {
+            publishCastPlaybackState();
+            return;
+        }
+        detachRemoteMediaClient();
+        observedRemoteMediaClient = client;
+        if (client != null) {
+            client.registerCallback(remoteMediaCallback);
+            client.addProgressListener(remoteProgressListener, 1000);
+        }
+        publishCastPlaybackState();
+    }
+
+    private void detachRemoteMediaClient() {
+        if (observedRemoteMediaClient == null) return;
+        observedRemoteMediaClient.unregisterCallback(remoteMediaCallback);
+        observedRemoteMediaClient.removeProgressListener(remoteProgressListener);
+        observedRemoteMediaClient = null;
+    }
+
+    void playCastMedia() {
+        RemoteMediaClient client = currentRemoteMediaClient();
+        if (client == null || client.getMediaInfo() == null) {
+            notifyCastError("No Cast media is loaded");
+            return;
+        }
+        client.play();
+        publishCastPlaybackState();
+    }
+
+    void pauseCastMedia() {
+        RemoteMediaClient client = currentRemoteMediaClient();
+        if (client == null || client.getMediaInfo() == null) {
+            notifyCastError("No Cast media is loaded");
+            return;
+        }
+        client.pause();
+        publishCastPlaybackState();
+    }
+
+    void seekCastMedia(double positionSeconds) {
+        if (!Double.isFinite(positionSeconds) || positionSeconds < 0) {
+            notifyCastError("Invalid Cast seek position");
+            return;
+        }
+        RemoteMediaClient client = currentRemoteMediaClient();
+        if (client == null || client.getMediaInfo() == null) {
+            notifyCastError("No Cast media is loaded");
+            return;
+        }
+
+        // A Flux HLS URL is generated from one absolute source position. Reload
+        // it for arbitrary seeks so forward/back and Skip Intro are not limited
+        // to the receiver's currently generated playlist window.
+        if (activeCastInfo != null && "hls".equals(activeCastInfo.method) && activeCastContext != null) {
+            pendingCastContext = activeCastContext.withPosition(positionSeconds);
+            castLaunchRequested = true;
+            notifyCastState("seeking", String.valueOf(positionSeconds));
+            loadPendingCastMedia();
+            return;
+        }
+
+        client.seek((long) (positionSeconds * 1000));
+        publishCastPlaybackState();
+    }
+
+    void setCastVolume(double volume) {
+        CastSession session = currentCastSession();
+        if (session == null) return;
+        try {
+            session.setVolume(Math.max(0, Math.min(1, volume)));
+            main.postDelayed(this::publishCastPlaybackState, 250);
+        } catch (Exception error) {
+            Log.w(TAG, "Could not set Cast volume", error);
+            notifyCastError("The TV volume could not be changed");
+        }
+    }
+
+    void toggleCastMute() {
+        CastSession session = currentCastSession();
+        if (session == null) return;
+        try {
+            session.setMute(!session.isMute());
+            main.postDelayed(this::publishCastPlaybackState, 250);
+        } catch (Exception error) {
+            Log.w(TAG, "Could not change Cast mute state", error);
+            notifyCastError("The TV mute state could not be changed");
+        }
+    }
+
+    void disconnectCast() {
+        if (sessionManager != null) sessionManager.endCurrentSession(true);
+    }
+
+    String getCastStateJson() {
+        return lastCastStateJson;
+    }
+
+    private CastSession currentCastSession() {
+        CastSession session = sessionManager != null ? sessionManager.getCurrentCastSession() : null;
+        return session != null && session.isConnected() ? session : null;
+    }
+
+    private RemoteMediaClient currentRemoteMediaClient() {
+        CastSession session = currentCastSession();
+        return session != null ? session.getRemoteMediaClient() : null;
+    }
+
+    private String castPlayerStateName(int state) {
+        if (state == MediaStatus.PLAYER_STATE_PLAYING) return "PLAYING";
+        if (state == MediaStatus.PLAYER_STATE_PAUSED) return "PAUSED";
+        if (state == MediaStatus.PLAYER_STATE_BUFFERING) return "BUFFERING";
+        if (state == MediaStatus.PLAYER_STATE_IDLE) return "IDLE";
+        return "UNKNOWN";
+    }
+
+    private JSONObject buildCastStatePayload() throws Exception {
+        JSONObject payload = new JSONObject();
+        CastSession session = currentCastSession();
+        RemoteMediaClient client = session != null ? session.getRemoteMediaClient() : null;
+        MediaInfo receiverInfo = client != null ? client.getMediaInfo() : null;
+        MediaStatus status = client != null ? client.getMediaStatus() : null;
+        boolean mediaLoaded = receiverInfo != null;
+        double receiverPosition = client != null ? Math.max(0, client.getApproximateStreamPosition() / 1000.0) : 0;
+        double duration = activeCastInfo != null && activeCastInfo.durationSeconds > 0
+            ? activeCastInfo.durationSeconds
+            : receiverInfo != null && receiverInfo.getStreamDuration() > 0
+                ? receiverInfo.getStreamDuration() / 1000.0
+                : 0;
+        MediaMetadata metadata = receiverInfo != null ? receiverInfo.getMetadata() : null;
+        String title = activeCastInfo != null ? activeCastInfo.title : metadata != null ? metadata.getString(MediaMetadata.KEY_TITLE) : null;
+        String subtitle = activeCastInfo != null ? activeCastInfo.subtitle : metadata != null ? metadata.getString(MediaMetadata.KEY_SUBTITLE) : null;
+
+        payload.put("connected", session != null);
+        payload.put("mediaLoaded", mediaLoaded);
+        payload.put("playerState", status != null ? castPlayerStateName(status.getPlayerState()) : "UNKNOWN");
+        payload.put("currentTimeSeconds", castTimelineOffsetSeconds + receiverPosition);
+        payload.put("durationSeconds", duration);
+        payload.put("title", title == null ? JSONObject.NULL : title);
+        payload.put("subtitle", subtitle == null ? JSONObject.NULL : subtitle);
+        payload.put("deviceName", session != null && session.getCastDevice() != null ? session.getCastDevice().getFriendlyName() : JSONObject.NULL);
+        payload.put("volume", session != null ? session.getVolume() : 1);
+        payload.put("muted", session != null && session.isMute());
+        if (status != null) payload.put("idleReason", status.getIdleReason());
+        return payload;
+    }
+
+    private void publishCastPlaybackState() {
+        try {
+            JSONObject payload = buildCastStatePayload();
+            payload.put("state", "playback");
+            lastCastStateJson = payload.toString();
+            Log.d(TAG, "Cast state=" + payload.optString("playerState") + " position=" + payload.optDouble("currentTimeSeconds"));
+            String js = "document.dispatchEvent(new CustomEvent('flux:native-cast-state',{detail:" + payload + "}))";
+            webView.evaluateJavascript(js, null);
+        } catch (Exception error) {
+            Log.w(TAG, "Could not publish Cast playback state", error);
+        }
     }
 
     void notifyCastError(String message) {
@@ -495,9 +687,10 @@ public final class MainActivity extends AppCompatActivity {
 
     private void notifyCastState(String state, @Nullable String detail) {
         try {
-            JSONObject payload = new JSONObject();
+            JSONObject payload = buildCastStatePayload();
             payload.put("state", state);
             if (detail != null) payload.put("detail", detail);
+            lastCastStateJson = payload.toString();
             String js = "document.dispatchEvent(new CustomEvent('flux:native-cast-state',{detail:" + payload + "}))";
             webView.evaluateJavascript(js, null);
         } catch (Exception error) {

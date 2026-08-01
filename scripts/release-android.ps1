@@ -28,7 +28,12 @@ New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
 Copy-Item -LiteralPath $apk -Destination $destination -Force
 $hash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
 $size = (Get-Item -LiteralPath $destination).Length
-$releaseNotes = @('Respected Android rotation lock while preserving normal auto-rotate behavior', 'Kept update checks in the profile menu', 'Kept Cast in the media player controls')
+$releaseNotes = @(
+  'Turned the Flux player into a live TV remote while casting',
+  'Added Cast play, pause, timeline seeking, volume, and Skip Intro controls',
+  'Added an Admin Intros queue with live progress, logs, results, and scan history',
+  'Fixed repeat intro scans being swallowed by completed queue jobs'
+)
 $releaseDate = [DateTime]::UtcNow.ToString('o')
 $manifest = [ordered]@{
   versionCode = $code; versionName = $Version; minimumSupportedVersionCode = $MinimumSupportedVersionCode
@@ -37,7 +42,6 @@ $manifest = [ordered]@{
   apkUrl = "/api/app/android/download/$name"; sha256 = $hash; fileSize = $size
 }
 $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $releaseRoot 'latest.json') -Encoding utf8
-Copy-Item -LiteralPath $destination -Destination (Join-Path $root $name) -Force
 $publicManifest = [ordered]@{
   versionCode = $code; versionName = $Version; minimumSupportedVersionCode = $MinimumSupportedVersionCode
   mandatory = [bool]$Mandatory; releaseDate = $releaseDate

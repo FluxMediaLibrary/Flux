@@ -31,6 +31,41 @@ final class FluxNativeBridge {
     }
 
     @JavascriptInterface
+    public String getCastState() {
+        return activity.getCastStateJson();
+    }
+
+    @JavascriptInterface
+    public void castPlay() {
+        main.post(activity::playCastMedia);
+    }
+
+    @JavascriptInterface
+    public void castPause() {
+        main.post(activity::pauseCastMedia);
+    }
+
+    @JavascriptInterface
+    public void castSeek(double positionSeconds) {
+        main.post(() -> activity.seekCastMedia(positionSeconds));
+    }
+
+    @JavascriptInterface
+    public void castSetVolume(double volume) {
+        main.post(() -> activity.setCastVolume(volume));
+    }
+
+    @JavascriptInterface
+    public void castToggleMute() {
+        main.post(activity::toggleCastMute);
+    }
+
+    @JavascriptInterface
+    public void disconnectCast() {
+        main.post(activity::disconnectCast);
+    }
+
+    @JavascriptInterface
     public boolean isNativeApp() { return true; }
 
     @JavascriptInterface

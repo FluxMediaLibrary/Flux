@@ -25,4 +25,9 @@ final class NativePlaybackContext {
         if (!Double.isFinite(position) || position < 0) position = 0;
         return new NativePlaybackContext(mediaItemId, episodeId.isEmpty() ? null : episodeId, position);
     }
+
+    NativePlaybackContext withPosition(double positionSeconds) {
+        double position = Double.isFinite(positionSeconds) && positionSeconds >= 0 ? positionSeconds : 0;
+        return new NativePlaybackContext(mediaItemId, episodeId, position);
+    }
 }

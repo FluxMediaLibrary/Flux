@@ -549,6 +549,104 @@ export interface AdminIntroRescanResultDTO {
   season: number;
   force: boolean;
   queued: boolean;
+  jobId: string;
+  deduplicated: boolean;
+}
+
+export type AdminIntroScanJobState =
+  | 'WAITING'
+  | 'ACTIVE'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'DELAYED';
+
+export type AdminIntroScanOutcome =
+  | 'MATCHED'
+  | 'NO_MATCH'
+  | 'SKIPPED'
+  | 'DISABLED';
+
+export interface AdminIntroScanProgressDTO {
+  stage: 'QUEUED' | 'LOADING' | 'FINGERPRINTING' | 'DETECTING' | 'STORING' | 'COMPLETE';
+  current: number;
+  total: number;
+  percent: number;
+  message: string;
+}
+
+export interface AdminIntroScanResultDTO {
+  outcome: AdminIntroScanOutcome;
+  enabled: boolean;
+  mediaItemId: string;
+  season: number;
+  force: boolean;
+  episodes: number;
+  fingerprinted: number;
+  detected: number;
+  matched: number;
+  skippedManual: number;
+  failed: number;
+}
+
+export interface AdminIntroScanJobDTO {
+  id: string;
+  mediaItemId: string;
+  title: string;
+  season: number;
+  force: boolean;
+  state: AdminIntroScanJobState;
+  progress: AdminIntroScanProgressDTO;
+  attemptsMade: number;
+  createdAt: string;
+  processedAt: string | null;
+  finishedAt: string | null;
+  failedReason: string | null;
+  result: AdminIntroScanResultDTO | null;
+  logs?: string[];
+}
+
+export interface AdminIntroSeasonDTO {
+  mediaItemId: string;
+  title: string;
+  posterPath: string | null;
+  season: number;
+  episodes: number;
+  availableEpisodes: number;
+  introMarkers: number;
+  automaticMarkers: number;
+  manualMarkers: number;
+  coverage: number;
+  latestJob: AdminIntroScanJobDTO | null;
+}
+
+export interface AdminIntroDashboardDTO {
+  enabled: boolean;
+  configuration: {
+    windowMinutes: number;
+    minimumSeconds: number;
+    minimumConfidence: number;
+    minimumCoverage: number;
+  };
+  summary: {
+    shows: number;
+    seasons: number;
+    availableEpisodes: number;
+    markedEpisodes: number;
+    queued: number;
+    active: number;
+    failed: number;
+  };
+  seasons: AdminIntroSeasonDTO[];
+  jobs: AdminIntroScanJobDTO[];
+}
+
+export interface QueueAdminIntroScansRequest {
+  targets: { mediaItemId: string; season: number }[];
+  force?: boolean;
+}
+
+export interface QueueAdminIntroScansResultDTO {
+  jobs: AdminIntroRescanResultDTO[];
 }
 
 export interface CreateMediaSegmentRequest {

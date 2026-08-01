@@ -12,21 +12,6 @@ type AndroidAppInfo = {
   updateServer?: string;
 };
 
-declare global {
-  interface Window {
-    FLUX_NATIVE_APP?: boolean;
-    FluxNative?: {
-      isNativeApp?: () => boolean;
-      getAppInfo?: () => string;
-      requestCast?: () => void;
-      checkForUpdates?: () => void;
-      setAutomaticUpdates?: (enabled: boolean) => void;
-      clearUpdateDownloads?: () => void;
-      setPlaybackContext?: (payload: string) => void;
-    };
-  }
-}
-
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<NotificationSettingsDTO | null>(null);
   const [loading, setLoading] = useState(true);

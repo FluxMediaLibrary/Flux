@@ -6,21 +6,6 @@ import { useAuth } from '@/lib/auth-context';
 import { SearchOverlay } from '@/components/SearchOverlay';
 import { Avatar } from '@/components/Avatar';
 
-declare global {
-  interface Window {
-    FLUX_NATIVE_APP?: boolean;
-    FluxNative?: {
-      isNativeApp?: () => boolean;
-      checkForUpdates?: () => void;
-      getAppInfo?: () => string;
-      requestCast?: () => void;
-      setAutomaticUpdates?: (enabled: boolean) => void;
-      clearUpdateDownloads?: () => void;
-      setPlaybackContext?: (payload: string) => void;
-    };
-  }
-}
-
 const TABS = [
   { label: 'Library', href: '/library', query: ''},
   { label: 'Movies', href: '/library', query: 'movie' },

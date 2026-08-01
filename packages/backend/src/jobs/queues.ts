@@ -2,7 +2,9 @@
  * BullMQ queues. Producers add jobs here; workers (worker.ts) consume them.
  * Actual job payload/processing logic is implemented in later phases.
  */
-import { Queue } from 'bullmq';
+import { randomUUID } from 'node:crypto';
+import { Job, Queue } from 'bullmq';
+import type { AdminIntroScanProgressDTO } from '@flux/shared';
 import { bullConnection } from '../lib/redis.js';
 
 export const QUEUE_NAMES = {
@@ -60,18 +62,41 @@ export const introDetectionQueue = new Queue<IntroDetectionJob>(
 );
 
 /**
- * Enqueue an intro-detection pass for a season. The deterministic jobId keeps
- * repeated imports/rescans from stacking duplicate queued jobs; adding the
- * same jobId again replaces the pending job payload (e.g. force=true).
+ * Enqueue an intro-detection pass for a season. Waiting/active work is reused,
+ * while every completed rescan gets a fresh ID so an old BullMQ record can
+ * never swallow a new admin request.
  */
 export async function enqueueIntroDetection(
   mediaItemId: string,
   season: number,
   options: { force?: boolean } = {},
-): Promise<void> {
-  await introDetectionQueue.add(
-    'intro-detection',
-    { mediaItemId, season, force: options.force ?? false },
-    { jobId: `intro-detect:${mediaItemId}:${season}` },
+): Promise<{ job: Job<IntroDetectionJob>; deduplicated: boolean }> {
+  const force = options.force ?? false;
+  const pending = await introDetectionQueue.getJobs(
+    ['active', 'waiting', 'delayed', 'prioritized'],
+    0,
+    250,
+    true,
   );
+  const existing = pending.find((job) => (
+    job.data.mediaItemId === mediaItemId &&
+    job.data.season === season &&
+    job.data.force === force
+  ));
+  if (existing) return { job: existing, deduplicated: true };
+
+  const job = await introDetectionQueue.add(
+    'intro-detection',
+    { mediaItemId, season, force },
+    { jobId: `intro-detect-${mediaItemId}-${season}-${randomUUID()}` },
+  );
+  const progress: AdminIntroScanProgressDTO = {
+    stage: 'QUEUED',
+    current: 0,
+    total: 0,
+    percent: 0,
+    message: 'Waiting for the intro detection worker',
+  };
+  await job.updateProgress(progress);
+  return { job, deduplicated: false };
 }

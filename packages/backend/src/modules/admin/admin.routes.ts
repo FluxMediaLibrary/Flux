@@ -39,6 +39,11 @@ import {
   listMediaSegments,
   updateSegment,
 } from '../media-segments/media-segments.service.js';
+import {
+  getAdminIntroDashboard,
+  getAdminIntroJob,
+  validateIntroScanTargets,
+} from '../media-segments/intro-jobs.service.js';
 import { prisma } from '../../lib/db.js';
 
 const updateUserSchema = z.object({
@@ -75,6 +80,13 @@ const updateSegmentSchema = z.object({
   (segment) => segment.startMs === undefined || segment.endMs === undefined || segment.endMs > segment.startMs,
   'Segment end must be after its start',
 );
+const queueIntroScansSchema = z.object({
+  targets: z.array(z.object({
+    mediaItemId: z.string().trim().min(1).max(128),
+    season: z.number().int().positive(),
+  })).min(1).max(500),
+  force: z.boolean().optional(),
+});
 
 export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.get('/overview', { preHandler: [app.requirePermission('VIEW_SYSTEM')] }, async () => {
@@ -194,6 +206,40 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
   app.get('/library', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async () => {
     return getAdminLibraryHealth();
+  });
+
+  app.get('/intros', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async () => {
+    return getAdminIntroDashboard();
+  });
+
+  app.get('/intros/jobs/:jobId', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const { jobId } = request.params as { jobId: string };
+    if (!jobId || jobId.length > 256) throw ApiError.badRequest('Invalid intro scan job ID', 'INVALID_INTRO_JOB');
+    return getAdminIntroJob(jobId);
+  });
+
+  app.post('/intros/queue', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const body = queueIntroScansSchema.parse(request.body);
+    await validateIntroScanTargets(body.targets);
+    const jobs = [];
+    for (const target of body.targets) {
+      const queued = await enqueueIntroDetection(target.mediaItemId, target.season, { force: body.force });
+      jobs.push({
+        mediaItemId: target.mediaItemId,
+        season: target.season,
+        force: body.force ?? false,
+        queued: true,
+        jobId: queued.job.id!,
+        deduplicated: queued.deduplicated,
+      });
+    }
+    await writeAuditEvent({
+      actorId: request.account!.id,
+      action: body.force ? 'INTROS_BULK_FORCED_RESCAN_QUEUED' : 'INTROS_BULK_RESCAN_QUEUED',
+      targetType: 'INTRO_SCAN_QUEUE',
+      details: { targets: body.targets, jobs: jobs.map((job) => job.jobId) },
+    });
+    return { jobs };
   });
 
   app.put('/library/:id/markers', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
@@ -326,16 +372,24 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     if (item.type !== 'SHOW') {
       throw ApiError.badRequest('Intro detection only applies to shows', 'NOT_A_SHOW');
     }
-    await enqueueIntroDetection(id, season, { force });
+    await validateIntroScanTargets([{ mediaItemId: id, season }]);
+    const queued = await enqueueIntroDetection(id, season, { force });
     await writeAuditEvent({
       actorId: request.account!.id,
       action: force ? 'INTROS_FORCED_RESCAN_QUEUED' : 'INTROS_RESCAN_QUEUED',
       targetType: 'MEDIA_ITEM',
       targetId: id,
       targetLabel: item.title,
-      details: { season, force },
+      details: { season, force, jobId: queued.job.id, deduplicated: queued.deduplicated },
     });
-    return { mediaItemId: id, season, force, queued: true };
+    return {
+      mediaItemId: id,
+      season,
+      force,
+      queued: true,
+      jobId: queued.job.id!,
+      deduplicated: queued.deduplicated,
+    };
   });
 
   app.post('/library/:id/analyze', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {

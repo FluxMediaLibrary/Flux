@@ -9,21 +9,8 @@ import {
   type MediaPlayerInstance,
 } from '@vidstack/react';
 import { api } from '@/lib/api';
+import { useNativeCast } from '@/lib/native-cast';
 
-declare global {
-  interface Window {
-    FLUX_NATIVE_APP?: boolean;
-    FluxNative?: {
-      isNativeApp?: () => boolean;
-      getAppInfo?: () => string;
-      requestCast?: () => void;
-      checkForUpdates?: () => void;
-      setAutomaticUpdates?: (enabled: boolean) => void;
-      clearUpdateDownloads?: () => void;
-      setPlaybackContext?: (payload: string) => void;
-    };
-  }
-}
 import type { MediaSegmentDTO, MediaStreamDTO, PlaybackInfoDTO, PlaybackMarkerDTO } from '@flux/shared';
 import { ControlBar } from './player/ControlBar';
 import { DebugOverlay } from './player/DebugOverlay';
@@ -577,6 +564,10 @@ function FluxPlayerChrome({
   const seekableStart = useMediaState('seekableStart');
   const seekableEnd = useMediaState('seekableEnd');
   const remote = useMediaRemote();
+  const nativeCast = useNativeCast();
+  const nativeCastStateRef = useRef(nativeCast.state);
+  nativeCastStateRef.current = nativeCast.state;
+  const castRemoteActive = nativeCast.state.connected && nativeCast.state.mediaLoaded;
   const resumeTargetRef = useRef(playbackMethod === 'direct' ? (startPositionSeconds ?? 0) : 0);
   const nearEndFiredRef = useRef(false);
   const autoplayAttemptedRef = useRef(false);
@@ -595,11 +586,17 @@ function FluxPlayerChrome({
       : 0;
   const mediaTimeOrigin = getMediaTimeOrigin(playbackMethod, seekableStart);
   const positionOffset = timelineOffset - mediaTimeOrigin;
-  const absoluteCurrentTime = toAbsolutePlaybackTime(
+  const localAbsoluteCurrentTime = toAbsolutePlaybackTime(
     currentTime,
     timelineOffset,
     mediaTimeOrigin,
   );
+  const absoluteCurrentTime = castRemoteActive
+    ? nativeCast.state.currentTimeSeconds
+    : localAbsoluteCurrentTime;
+  const controlsPaused = castRemoteActive
+    ? nativeCast.state.playerState !== 'PLAYING'
+    : paused;
   const showNextEpisode = Boolean(
     nextEpisode &&
     onNextEpisode &&
@@ -699,6 +696,10 @@ function FluxPlayerChrome({
 
       const hardMax = stableDuration > 0 ? stableDuration : Number.POSITIVE_INFINITY;
       const target = Math.max(0, Math.min(time, hardMax));
+      if (castRemoteActive) {
+        nativeCast.seek(target);
+        return;
+      }
       const player = playerRef.current;
       const localTarget = playbackMethod === 'hls'
         ? toLocalPlaybackTime(target, timelineOffset, mediaTimeOrigin)
@@ -726,6 +727,8 @@ function FluxPlayerChrome({
       playbackMethod,
       playerRef,
       remote,
+      castRemoteActive,
+      nativeCast.seek,
       mediaTimeOrigin,
       seekableEnd,
       seekableStart,
@@ -756,6 +759,11 @@ function FluxPlayerChrome({
 
   const togglePlayback = useCallback(
     (trigger?: Event) => {
+      if (castRemoteActive) {
+        if (nativeCast.state.playerState === 'PLAYING') nativeCast.pause();
+        else nativeCast.play();
+        return;
+      }
       onPlaybackIntent(paused);
       if (paused) {
         enterFullscreenForPlay(trigger);
@@ -764,7 +772,7 @@ function FluxPlayerChrome({
         remote.pause(trigger);
       }
     },
-    [enterFullscreenForPlay, onPlaybackIntent, paused, remote],
+    [castRemoteActive, enterFullscreenForPlay, nativeCast.pause, nativeCast.play, nativeCast.state.playerState, onPlaybackIntent, paused, remote],
   );
 
   useEffect(() => {
@@ -813,6 +821,22 @@ function FluxPlayerChrome({
   }, [playbackMethod, playerRef, selectedQuality, timelineOffset]);
 
   const reportProgress = useCallback(() => {
+    if (castRemoteActive) {
+      const castState = nativeCastStateRef.current;
+      const position = castState.currentTimeSeconds;
+      const totalDuration = stableDuration > 0 ? stableDuration : castState.durationSeconds;
+      if (!Number.isFinite(position) || position <= 0) return;
+      if (totalDuration > 0 && position > totalDuration + 5) return;
+      const controller = new AbortController();
+      api.saveProgress({
+        mediaItemId: episodeId ? undefined : mediaItemId,
+        episodeId,
+        positionSeconds: position,
+        durationSeconds: totalDuration > 0 ? totalDuration : undefined,
+      }, controller.signal).catch(() => {});
+      onProgress?.(position, totalDuration);
+      return;
+    }
     const player = playerRef.current;
     if (!player) return;
     if (!started || (waiting && !playing)) return;
@@ -851,6 +875,7 @@ function FluxPlayerChrome({
       });
     onProgress?.(position, totalDuration);
   }, [
+    castRemoteActive,
     episodeId,
     mediaItemId,
     mediaTimeOrigin,
@@ -878,8 +903,8 @@ function FluxPlayerChrome({
   }, [reportProgress]);
 
   useEffect(() => {
-    if (paused) reportProgress();
-  }, [paused, reportProgress]);
+    if (controlsPaused) reportProgress();
+  }, [controlsPaused, reportProgress]);
 
   useEffect(() => {
     if (!onNearEnd || nearEndFiredRef.current) return;
@@ -955,13 +980,13 @@ function FluxPlayerChrome({
   }, []);
 
   useEffect(() => {
-    if (paused) {
+    if (controlsPaused) {
       setIdle(false);
       return;
     }
     const timer = window.setTimeout(() => setIdle(true), 2600);
     return () => window.clearTimeout(timer);
-  }, [paused]);
+  }, [controlsPaused]);
 
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) => {
@@ -1000,20 +1025,21 @@ function FluxPlayerChrome({
       } else if (event.key.toLowerCase() === 'm') {
         event.preventDefault();
         setIdle(false);
-        remote.toggleMuted(event);
+        if (castRemoteActive) nativeCast.toggleMute();
+        else remote.toggleMuted(event);
       }
     };
 
     window.addEventListener('keydown', handleKey, { capture: true });
     return () => window.removeEventListener('keydown', handleKey, { capture: true });
-  }, [absoluteCurrentTime, remote, seekTo, togglePlayback]);
+  }, [absoluteCurrentTime, castRemoteActive, nativeCast.toggleMute, remote, seekTo, togglePlayback]);
 
   return (
     <div ref={chromeRef} className={idle ? 'fx-chrome is-idle' : 'fx-chrome'}>
       <button
         className="fx-click-layer"
         type="button"
-        aria-label={paused ? 'Play' : 'Pause'}
+        aria-label={controlsPaused ? 'Play' : 'Pause'}
         onClick={(event) => {
           event.stopPropagation();
           event.nativeEvent.stopImmediatePropagation();
@@ -1021,14 +1047,23 @@ function FluxPlayerChrome({
         }}
       />
       <TitleOverlay title={title} subtitle={subtitle} onBack={onBack} />
-      <div className={(!started || (waiting && !playing)) ? 'fx-spinner-wrap is-visible' : 'fx-spinner-wrap'}>
+      {castRemoteActive && (
+        <div className="fx-cast-remote-banner" role="status">
+          <span>CASTING TO</span>
+          <strong>{nativeCast.state.deviceName ?? 'TV'}</strong>
+          <small>{nativeCast.state.title ?? title}{nativeCast.state.subtitle ? ` · ${nativeCast.state.subtitle}` : ''}</small>
+        </div>
+      )}
+      <div className={(castRemoteActive ? nativeCast.state.playerState === 'BUFFERING' : (!started || (waiting && !playing))) ? 'fx-spinner-wrap is-visible' : 'fx-spinner-wrap'}>
         <Spinner />
       </div>
       <Timeline
         mediaItemId={mediaItemId}
         episodeId={episodeId}
         durationSeconds={stableDuration || null}
-        positionOffset={positionOffset}
+        positionOffset={castRemoteActive ? 0 : positionOffset}
+        currentTimeSeconds={castRemoteActive ? nativeCast.state.currentTimeSeconds : undefined}
+        remotePlayback={castRemoteActive}
         onSeek={seekTo}
       />
       {nextEpisode && onNextEpisode && showNextEpisode && (
@@ -1071,6 +1106,10 @@ function FluxPlayerChrome({
         selectedAudioStreamIndex={selectedAudioStreamIndex}
         onAudioStreamChange={onAudioStreamChange}
         playbackMethod={playbackMethod}
+        castState={nativeCast.state}
+        onCastRequest={nativeCast.request}
+        onCastSetVolume={nativeCast.setVolume}
+        onCastToggleMute={nativeCast.toggleMute}
       />
       <DebugOverlay
         open={debugOpen}

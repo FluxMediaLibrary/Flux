@@ -57,9 +57,6 @@ flux-release.keystore
 *.aab
 twa/
 
-# Exception — public Android APK for self-hosted installs
-!packages/frontend/public/flux.apk
-
-# Android release artifacts are deployed from server release storage, not Git.
-releases/android/*.apk
+# Android APKs in packages/frontend/public and releases/android are intentional
+# self-hosted release artifacts and remain tracked.
 .env.vps

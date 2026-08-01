@@ -328,8 +328,79 @@
 .control-system-error:last-child { border-bottom: 0; }
 .control-system-error strong,.control-system-error small { display: block; }
 .control-system-error strong { font-size: 11px; }.control-system-error small,.control-system-error time { margin-top: 2px; color: var(--control-dim); font-size: 9px; }
+
+/* Intro scanner: a dense operations workbench with the worker console kept in
+   view while an administrator selects and verifies seasons. */
+.intro-stat-grid { grid-template-columns: repeat(6,minmax(115px,1fr)); }
+.intro-notice { margin-bottom: 16px; padding: 10px 13px; border: 1px solid rgba(98,184,141,.28); border-radius: 8px; background: rgba(98,184,141,.08); color: #9bd4b7; font-size: 11px; }
+.intro-config-strip { display: flex; flex-wrap: wrap; gap: 0; margin-top: 12px; overflow: hidden; border: 1px solid var(--control-line); border-radius: 8px; background: rgba(255,255,255,.018); }
+.intro-config-strip span { padding: 8px 12px; border-right: 1px solid var(--control-line-soft); color: var(--control-dim); font-size: 9.5px; }
+.intro-config-strip span:last-child { border-right: 0; }
+.intro-config-strip strong { margin-left: 4px; color: var(--control-muted); font-weight: 700; }
+.intro-layout { display: grid; grid-template-columns: minmax(600px,1.25fr) minmax(360px,.75fr); align-items: start; gap: 18px; margin-top: 22px; }
+.intro-catalog,.intro-console-panel { min-width: 0; }
+.intro-console-panel { position: sticky; top: 92px; max-height: calc(100dvh - 116px); display: flex; flex-direction: column; }
+.intro-panel-header { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 12px 14px; border-bottom: 1px solid var(--control-line); }
+.intro-panel-header h2 { margin: 0; font-size: 13px; }
+.intro-panel-header p { margin: 4px 0 0; color: var(--control-dim); font-size: 9.5px; }
+.intro-panel-header > span { color: var(--control-dim); font-size: 10px; }
+.intro-toolbar { display: flex; align-items: center; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--control-line-soft); }
+.intro-toolbar .control-input { flex: 1; min-width: 140px; }
+.intro-force-toggle { display: flex; align-items: center; gap: 9px; padding: 10px 13px; border-bottom: 1px solid var(--control-line-soft); background: rgba(232,167,59,.025); cursor: pointer; }
+.intro-force-toggle input,.intro-season-row > input { accent-color: var(--control-accent); }
+.intro-force-toggle span { display: flex; flex-direction: column; gap: 2px; }
+.intro-force-toggle strong { color: #c8cac9; font-size: 10px; }
+.intro-force-toggle small { color: var(--control-dim); font-size: 9px; }
+.intro-season-list { max-height: min(720px,calc(100dvh - 355px)); overflow-y: auto; }
+.intro-season-row { min-height: 61px; display: grid; grid-template-columns: 18px minmax(190px,1fr) 82px 88px 88px; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--control-line-soft); cursor: pointer; transition: background .14s ease; }
+.intro-season-row:last-child { border-bottom: 0; }
+.intro-season-row:hover { background: rgba(255,255,255,.03); }
+.intro-season-row.is-selected { background: rgba(59,130,246,.075); box-shadow: inset 2px 0 var(--control-accent); }
+.intro-season-identity { min-width: 0; }
+.intro-season-identity strong,.intro-season-identity small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.intro-season-identity strong { color: var(--control-text); font-size: 11px; }
+.intro-season-identity small { margin-top: 3px; color: var(--control-dim); font-size: 9px; }
+.intro-coverage strong,.intro-coverage small { display: inline; font-size: 9px; }
+.intro-coverage strong { color: #c9ccca; }
+.intro-coverage small { margin-left: 3px; color: var(--control-dim); }
+.intro-coverage i { height: 3px; display: block; margin-top: 5px; overflow: hidden; border-radius: 9px; background: #292d30; }
+.intro-coverage b { height: 100%; display: block; border-radius: inherit; background: var(--control-good); }
+.intro-season-source,.intro-no-job { color: var(--control-dim); font-size: 9px; }
+.intro-job-link { padding: 0; border: 0; background: none; cursor: pointer; text-align: left; }
+.intro-console-empty { min-height: 320px; display: grid; place-content: center; justify-items: center; padding: 30px; color: var(--control-dim); text-align: center; }
+.intro-console-empty span { color: rgba(96,165,250,.5); font: 28px ui-monospace,Consolas,monospace; }
+.intro-console-empty p { max-width: 250px; margin: 12px 0 0; font-size: 10px; line-height: 1.6; }
+.intro-run-summary { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 13px 14px 8px; }
+.intro-run-summary strong,.intro-run-summary span { display: block; }
+.intro-run-summary strong { font-size: 12px; }
+.intro-run-summary span,.intro-run-summary time { margin-top: 3px; color: var(--control-dim); font-size: 9px; }
+.intro-run-progress { padding: 8px 14px 12px; }
+.intro-run-progress > div:first-child { display: flex; justify-content: space-between; margin-bottom: 7px; }
+.intro-run-progress > div:first-child span { color: var(--control-muted); font-size: 9px; font-weight: 700; text-transform: capitalize; }
+.intro-run-progress > div:first-child strong { font: 10px ui-monospace,Consolas,monospace; }
+.intro-run-progress p { margin: 7px 0 0; color: var(--control-dim); font-size: 9px; }
+.intro-result { margin: 0 14px 11px; padding: 9px 10px; border: 1px solid var(--control-line); border-left: 2px solid var(--control-dim); border-radius: 6px; background: rgba(255,255,255,.02); }
+.intro-result.tone-good { border-left-color: var(--control-good); }.intro-result.tone-bad { border-left-color: var(--control-bad); }.intro-result.tone-warn { border-left-color: var(--control-warn); }.intro-result.tone-info { border-left-color: var(--control-accent-2); }
+.intro-result strong,.intro-result span { display: block; }
+.intro-result strong { color: #c9ccca; font-size: 9.5px; }
+.intro-result span { margin-top: 3px; color: var(--control-dim); font-size: 8.5px; }
+.intro-console { min-height: 210px; max-height: 300px; overflow: auto; padding: 10px 0; border-top: 1px solid #23272b; border-bottom: 1px solid #23272b; background: #090b0d; color: #aeb8b1; font: 9.5px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; }
+.intro-console > div { display: grid; grid-template-columns: 38px minmax(0,1fr); gap: 9px; padding: 2px 12px; }
+.intro-console > div:hover { background: rgba(255,255,255,.025); }
+.intro-console em { color: #434a4f; font-style: normal; text-align: right; user-select: none; }
+.intro-console span { overflow-wrap: anywhere; }
+.intro-history { min-height: 0; overflow-y: auto; padding: 8px; }
+.intro-history > span { display: block; padding: 3px 5px 7px; color: var(--control-dim); font-size: 8px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+.intro-history button { width: 100%; display: grid; grid-template-columns: 6px minmax(0,1fr); align-items: center; gap: 8px; padding: 7px 6px; border: 0; border-radius: 5px; background: transparent; color: var(--control-muted); cursor: pointer; text-align: left; }
+.intro-history button:hover,.intro-history button.active { background: rgba(255,255,255,.045); color: var(--control-text); }
+.intro-history button > i { width: 5px; height: 5px; border-radius: 50%; background: var(--control-dim); }.intro-history button > i.tone-good { background: var(--control-good); }.intro-history button > i.tone-bad { background: var(--control-bad); }.intro-history button > i.tone-warn { background: var(--control-warn); }.intro-history button > i.tone-info { background: var(--control-accent-2); }
+.intro-history button span { min-width: 0; overflow: hidden; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
+.intro-history button small { display: block; margin-top: 2px; color: var(--control-dim); font-size: 8px; }
 @media(max-width:1000px){.control-storage-grid,.control-service-grid{grid-template-columns:1fr}.control-storage-breakdown{grid-template-columns:repeat(2,1fr)}.control-storage-breakdown>div{border-bottom:1px solid var(--control-line-soft)}}
 @media(max-width:700px){.control-cleanup-row{align-items:flex-start;flex-direction:column}.control-cleanup-actions{justify-content:flex-start}}
+
+@media(max-width:1250px){.intro-stat-grid{grid-template-columns:repeat(3,1fr)}.intro-layout{grid-template-columns:1fr}.intro-console-panel{position:static;max-height:none}.intro-season-list{max-height:560px}}
+@media(max-width:700px){.intro-stat-grid{grid-template-columns:repeat(2,1fr)}.intro-toolbar{align-items:stretch;flex-wrap:wrap}.intro-toolbar .control-input{flex-basis:100%}.intro-season-row{grid-template-columns:18px minmax(0,1fr) 76px}.intro-season-source{display:none}.intro-job-link,.intro-no-job{grid-column:2 / -1}.intro-config-strip span{width:50%;border-bottom:1px solid var(--control-line-soft)}.intro-console{max-height:250px}}
 
 /* Existing operational surfaces inherit the control-center system while they
    are split into smaller reusable components. */

@@ -5531,6 +5531,30 @@ media-player.fx-player .fx-scrub-time {
   outline-offset: 2px;
 }
 .fx-player .fx-skip-intro:active { transform: scale(.97); }
+
+.fx-player .fx-cast-remote-banner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 7;
+  width: min(420px, calc(100% - 40px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 22px 24px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 14px;
+  background: rgba(9,11,14,.82);
+  box-shadow: 0 20px 60px rgba(0,0,0,.42);
+  color: #fff;
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%,-50%);
+  backdrop-filter: blur(16px);
+}
+.fx-player .fx-cast-remote-banner span { color: rgba(255,255,255,.48); font-size: 9px; font-weight: 800; letter-spacing: .18em; }
+.fx-player .fx-cast-remote-banner strong { margin-top: 8px; font-size: clamp(18px,3vw,26px); line-height: 1.1; }
+.fx-player .fx-cast-remote-banner small { max-width: 100%; margin-top: 7px; overflow: hidden; color: rgba(255,255,255,.68); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .fx-player .fx-chapter-marker {
   position: absolute;
   top: 50%;

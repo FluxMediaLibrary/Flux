@@ -9,6 +9,8 @@ interface TimelineProps {
   episodeId?: string;
   durationSeconds?: number | null;
   positionOffset?: number;
+  currentTimeSeconds?: number;
+  remotePlayback?: boolean;
   onSeek: (time: number, trigger?: Event, commit?: boolean) => void;
 }
 
@@ -22,6 +24,8 @@ export function Timeline({
   episodeId,
   durationSeconds,
   positionOffset = 0,
+  currentTimeSeconds,
+  remotePlayback = false,
   onSeek,
 }: TimelineProps) {
   const currentTime = useMediaState('currentTime');
@@ -90,7 +94,9 @@ export function Timeline({
     [getPosition],
   );
 
-  const absoluteCurrentTime = positionOffset + currentTime;
+  const absoluteCurrentTime = typeof currentTimeSeconds === 'number' && Number.isFinite(currentTimeSeconds)
+    ? currentTimeSeconds
+    : positionOffset + currentTime;
 
   useEffect(() => {
     if (pendingSeekTime === null) return;
@@ -103,10 +109,10 @@ export function Timeline({
   const playedPercent = range.length > 0
     ? Math.max(0, Math.min(100, ((displayTime - range.start) / range.length) * 100))
     : 0;
-  const bufferedStartPercent = range.length > 0
+  const bufferedStartPercent = !remotePlayback && range.length > 0
     ? Math.max(0, Math.min(100, ((positionOffset - range.start) / range.length) * 100))
     : 0;
-  const bufferedEndPercent = range.length > 0 && typeof bufferedEnd === 'number' && Number.isFinite(bufferedEnd)
+  const bufferedEndPercent = !remotePlayback && range.length > 0 && typeof bufferedEnd === 'number' && Number.isFinite(bufferedEnd)
     ? Math.max(bufferedStartPercent, Math.min(100, ((positionOffset + bufferedEnd - range.start) / range.length) * 100))
     : 0;
   const disabled = range.length <= 0;

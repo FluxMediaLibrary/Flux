@@ -72,9 +72,18 @@ export async function fingerprintEpisodeAudio(
   filePath: string,
   episodeId: string,
   windowSeconds = config.INTRO_DETECTION_WINDOW_MINUTES * 60,
+  onDiagnostic?: (message: string) => unknown | Promise<unknown>,
 ): Promise<EpisodeFingerprint | null> {
   const workDir = path.join(os.tmpdir(), `flux-intro-${randomUUID()}`);
   const wavPath = path.join(workDir, 'audio.wav');
+  const reportFailure = async (message: string) => {
+    console.warn(`[IntroDetection] ${message}`);
+    try {
+      await onDiagnostic?.(message);
+    } catch {
+      // Diagnostics must never turn one unreadable episode into a failed job.
+    }
+  };
 
   try {
     await fs.mkdir(workDir, { recursive: true });
@@ -93,9 +102,8 @@ export async function fingerprintEpisodeAudio(
     ], 10 * 60 * 1000);
 
     if (extract.code !== 0) {
-      console.warn(
-        `[IntroDetection] ffmpeg extraction failed for ${episodeId}: ` +
-        (extract.stderr || `exit ${extract.code}`).slice(0, 400),
+      await reportFailure(
+        `ffmpeg extraction failed for ${episodeId}: ${(extract.stderr || `exit ${extract.code}`).slice(0, 400)}`,
       );
       return null;
     }
@@ -114,7 +122,7 @@ export async function fingerprintEpisodeAudio(
       const hint = /ENOENT|not found|is not recognized/i.test(stderr)
         ? 'fpcalc (libchromaprint-tools) is not installed on the server'
         : stderr.slice(0, 400);
-      console.warn(`[IntroDetection] fpcalc failed for ${episodeId}: ${hint || `exit ${calc.code}`}`);
+      await reportFailure(`fpcalc failed for ${episodeId}: ${hint || `exit ${calc.code}`}`);
       return null;
     }
 
@@ -122,13 +130,13 @@ export async function fingerprintEpisodeAudio(
     try {
       parsed = JSON.parse(calc.stdout) as FpcalcJson;
     } catch {
-      console.warn(`[IntroDetection] fpcalc output was not JSON for ${episodeId}`);
+      await reportFailure(`fpcalc output was not JSON for ${episodeId}`);
       return null;
     }
 
     const raw = parsed.fingerprint;
     if (!Array.isArray(raw) || raw.length === 0) {
-      console.warn(`[IntroDetection] empty fingerprint for ${episodeId}`);
+      await reportFailure(`empty fingerprint for ${episodeId}`);
       return null;
     }
 
@@ -150,13 +158,13 @@ export async function fingerprintEpisodeAudio(
     const frames = Int32Array.from(raw);
     const rate = durationSeconds > 0 ? frames.length / durationSeconds : 0;
     if (rate <= 0 || !Number.isFinite(rate)) {
-      console.warn(`[IntroDetection] invalid duration for ${episodeId}`);
+      await reportFailure(`invalid fingerprint duration for ${episodeId}`);
       return null;
     }
 
     return { episodeId, frames, durationSeconds, rate };
   } catch (error) {
-    console.warn(`[IntroDetection] fingerprinting failed for ${episodeId}: ${String(error)}`);
+    await reportFailure(`fingerprinting failed for ${episodeId}: ${String(error)}`);
     return null;
   } finally {
     await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
