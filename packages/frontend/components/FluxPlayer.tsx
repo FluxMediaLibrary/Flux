@@ -874,13 +874,26 @@ function FluxPlayerChrome({
       const totalDuration = stableDuration > 0 ? stableDuration : castState.durationSeconds;
       if (!Number.isFinite(position) || position <= 0) return;
       if (totalDuration > 0 && position > totalDuration + 5) return;
+      if (progressSaveInFlightRef.current) {
+        onProgress?.(position, totalDuration);
+        return;
+      }
       const controller = new AbortController();
+      progressSaveInFlightRef.current = controller;
+      const timeout = window.setTimeout(() => controller.abort(), 4000);
       api.saveProgress({
         mediaItemId: episodeId ? undefined : mediaItemId,
         episodeId,
         positionSeconds: position,
         durationSeconds: totalDuration > 0 ? totalDuration : undefined,
-      }, controller.signal).catch(() => {});
+      }, controller.signal)
+        .catch(() => {})
+        .finally(() => {
+          window.clearTimeout(timeout);
+          if (progressSaveInFlightRef.current === controller) {
+            progressSaveInFlightRef.current = null;
+          }
+        });
       onProgress?.(position, totalDuration);
       return;
     }

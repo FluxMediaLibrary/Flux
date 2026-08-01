@@ -1,15 +1,15 @@
 ﻿{
-    "versionCode":  11,
-    "versionName":  "1.1.6",
+    "versionCode":  12,
+    "versionName":  "1.1.7",
     "minimumSupportedVersionCode":  4,
     "mandatory":  false,
-    "releaseDate":  "2026-08-01T17:57:18.8688695Z",
+    "releaseDate":  "2026-08-01T21:30:52.0383144Z",
     "releaseNotes":  [
-                         "Fixed Next Episode starting at the previous episode\u0027s Cast position",
-                         "Made Cast episode changes load atomically from 0:00",
-                         "Added receiver media identity so stale episode progress cannot leak into the next episode"
+                         "Fixed Cast playback stalling when the TV caught the live transcode edge",
+                         "Reduced Cast transcoding to one receiver-optimized rendition with a larger startup buffer",
+                         "Added automatic recovery that resumes HLS playback when the receiver remains stuck buffering"
                      ],
-    "apkUrl":  "/api/app/android/download/Flux-Android-v1.1.6.apk",
-    "sha256":  "86099fae4f805fcf6b3b7280363ae14c2fb93ee0d4e15bfd2448333c4ac727be",
-    "fileSize":  4925090
+    "apkUrl":  "/api/app/android/download/Flux-Android-v1.1.7.apk",
+    "sha256":  "f71b40a17c439efda140808c090ff517db007e1bc95fbdb1325539ae9eab44e2",
+    "fileSize":  4925953
 }

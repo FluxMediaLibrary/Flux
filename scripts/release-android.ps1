@@ -29,9 +29,9 @@ Copy-Item -LiteralPath $apk -Destination $destination -Force
 $hash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
 $size = (Get-Item -LiteralPath $destination).Length
 $releaseNotes = @(
-  'Fixed Next Episode starting at the previous episode''s Cast position',
-  'Made Cast episode changes load atomically from 0:00',
-  'Added receiver media identity so stale episode progress cannot leak into the next episode'
+  'Fixed Cast playback stalling when the TV caught the live transcode edge',
+  'Reduced Cast transcoding to one receiver-optimized rendition with a larger startup buffer',
+  'Added automatic recovery that resumes HLS playback when the receiver remains stuck buffering'
 )
 $releaseDate = [DateTime]::UtcNow.ToString('o')
 $manifest = [ordered]@{

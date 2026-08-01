@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
-import { buildAdaptiveHlsArgs } from './adaptive-hls.js';
+import { buildAdaptiveHlsArgs, buildCastHlsArgs } from './adaptive-hls.js';
 
 test('forces compatible 1080p AVC/AAC sources through a real adaptive encode', () => {
   const outputDir = path.join('tmp', 'adaptive');
@@ -71,4 +71,40 @@ test('applies configured bitrate ceilings and hardware encoders', () => {
   assert.ok(args.includes('h264_nvenc'));
   assert.ok(args.includes('2800k'));
   assert.equal(args.includes('5000k'), false);
+});
+
+test('builds one bitrate-limited Cast rendition instead of an adaptive ladder', () => {
+  const outputDir = path.join('tmp', 'cast');
+  const args = buildCastHlsArgs(
+    'episode.mkv',
+    outputDir,
+    3840,
+    2160,
+    0,
+    1,
+    1205,
+    3000,
+  );
+
+  assert.deepEqual(args.slice(0, 5), ['-fflags', '+genpts', '-ss', '1205.000', '-i']);
+  assert.equal(args.includes('-var_stream_map'), false);
+  assert.equal(args.includes('2800k'), true);
+  assert.equal(args.includes('5000k'), false);
+  assert.match(args[args.indexOf('-vf') + 1] ?? '', /scale=w=1280:h=720/);
+  assert.equal(args.at(-1), path.join(outputDir, 'index.m3u8'));
+});
+
+test('keeps the Cast encode on one normalized audio-video clock', () => {
+  const args = buildCastHlsArgs(
+    'episode.mkv',
+    path.join('tmp', 'cast-clock'),
+    1920,
+    1080,
+    0,
+    2,
+  );
+
+  assert.match(args[args.indexOf('-vf') + 1] ?? '', /setpts=PTS-STARTPTS/);
+  assert.ok(args.includes('aresample=async=1:first_pts=0'));
+  assert.ok(args.includes('independent_segments+temp_file'));
 });

@@ -200,6 +200,81 @@ export function buildAdaptiveHlsArgs(
 }
 
 /**
+ * Build the single-rendition HLS stream used by Cast receivers.
+ *
+ * A Chromecast only consumes one rendition at a time, while encoding two
+ * software renditions can make the receiver catch the encoder's live edge and
+ * stall indefinitely. Keep Cast to one bitrate-limited, at-most-1080p encode so
+ * segment production stays comfortably ahead of playback.
+ */
+export function buildCastHlsArgs(
+  sourceFile: string,
+  sessionDir: string,
+  sourceWidth: number | null,
+  sourceHeight: number | null,
+  videoStreamIndex?: number,
+  audioStreamIndex?: number,
+  startTimeSeconds = 0,
+  maxVideoBitrateKbps?: number | null,
+  hardwareAcceleration = 'NONE',
+): string[] {
+  const tier = applicableTiers(
+    sourceWidth ?? 1920,
+    sourceHeight ?? 1080,
+    maxVideoBitrateKbps,
+  )[0]!;
+  const videoMap = typeof videoStreamIndex === 'number' ? `0:${videoStreamIndex}` : '0:v:0';
+  const hasAudio = typeof audioStreamIndex === 'number';
+  const useVaapi = hardwareAcceleration === 'VAAPI';
+  const hardwareFilter = useVaapi ? ',format=nv12,hwupload' : '';
+  const videoFilter = [
+    `scale=w=${tier.width}:h=${tier.height}:force_original_aspect_ratio=decrease:force_divisible_by=2`,
+    'setsar=1',
+    'setpts=PTS-STARTPTS',
+  ].join(',') + hardwareFilter;
+  const encoderArgs = hardwareAcceleration === 'NVENC'
+    ? ['-c:v', 'h264_nvenc', '-preset', 'p4', '-cq', '23']
+    : hardwareAcceleration === 'QSV'
+      ? ['-c:v', 'h264_qsv', '-preset', 'faster', '-global_quality', '23']
+      : hardwareAcceleration === 'VIDEOTOOLBOX'
+        ? ['-c:v', 'h264_videotoolbox', '-q:v', '65']
+        : hardwareAcceleration === 'VAAPI'
+          ? ['-c:v', 'h264_vaapi', '-qp', '23']
+          : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
+
+  return [
+    '-fflags', '+genpts',
+    ...(useVaapi ? ['-vaapi_device', '/dev/dri/renderD128'] : []),
+    ...(startTimeSeconds > 0 ? ['-ss', startTimeSeconds.toFixed(3)] : []),
+    '-i', sourceFile,
+    '-map', videoMap,
+    ...(hasAudio ? ['-map', `0:${audioStreamIndex}`] : []),
+    '-sn', '-dn',
+    '-vf', videoFilter,
+    ...encoderArgs,
+    '-b:v', `${tier.videoBitrate}k`,
+    '-maxrate', `${tier.maxrate}k`,
+    '-bufsize', `${tier.bufsize}k`,
+    '-force_key_frames', 'expr:gte(t,n_forced*4)',
+    ...(hasAudio
+      ? ['-c:a', 'aac', '-b:a', `${tier.audioBitrate}k`, '-ac', '2', '-af', 'aresample=async=1:first_pts=0']
+      : []),
+    '-avoid_negative_ts', 'make_zero',
+    '-muxdelay', '0', '-muxpreload', '0',
+    '-max_muxing_queue_size', '1024',
+    '-f', 'hls',
+    '-hls_time', '4',
+    '-hls_list_size', '0',
+    '-hls_playlist_type', 'event',
+    '-hls_flags', 'independent_segments+temp_file',
+    '-hls_segment_type', 'mpegts',
+    '-start_number', '0',
+    '-hls_segment_filename', path.join(sessionDir, 'segment_%05d.ts'),
+    path.join(sessionDir, 'index.m3u8'),
+  ];
+}
+
+/**
  * Spawn an adaptive HLS transcode. Writes the master playlist and per-quality
  * segment files to `sessionDir`. Returns a Promise that resolves when the
  * process starts (does not wait for completion).

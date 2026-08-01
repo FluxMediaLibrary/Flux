@@ -70,6 +70,8 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends AppCompatActivity {
     private static final String TAG = "FluxAndroid";
     private static final int FILE_CHOOSER_REQUEST = 7001;
+    private static final long CAST_STALL_RECOVERY_DELAY_MS = 12_000L;
+    private static final long CAST_STALL_RECOVERY_COOLDOWN_MS = 30_000L;
 
     private WebView webView;
     private FrameLayout root;
@@ -92,6 +94,9 @@ public final class MainActivity extends AppCompatActivity {
     private double castTimelineOffsetSeconds;
     private volatile String lastCastStateJson = "{}";
     private boolean castLaunchRequested;
+    private boolean castPlaybackHasPlayed;
+    private long lastCastStallRecoveryAt;
+    private Runnable castStallRecoveryRunnable;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService networkExecutor = Executors.newSingleThreadExecutor();
     private final RemoteMediaClient.Callback remoteMediaCallback = new RemoteMediaClient.Callback() {
@@ -118,6 +123,7 @@ public final class MainActivity extends AppCompatActivity {
             activeCastContext = null;
             activeCastInfo = null;
             castTimelineOffsetSeconds = 0;
+            resetCastStallWatchdog();
             notifyCastState("disconnected", String.valueOf(error));
         }
         @Override public void onSessionResumed(@NonNull CastSession session, boolean wasSuspended) {
@@ -491,6 +497,7 @@ public final class MainActivity extends AppCompatActivity {
             return;
         }
         observeRemoteMediaClient(session);
+        resetCastStallWatchdog();
         MediaMetadata metadata = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
         metadata.putString(MediaMetadata.KEY_TITLE, info.title);
         if (info.subtitle != null && !"null".equals(info.subtitle)) {
@@ -562,6 +569,7 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void detachRemoteMediaClient() {
+        resetCastStallWatchdog();
         if (observedRemoteMediaClient == null) return;
         observedRemoteMediaClient.unregisterCallback(remoteMediaCallback);
         observedRemoteMediaClient.removeProgressListener(remoteProgressListener);
@@ -710,9 +718,71 @@ public final class MainActivity extends AppCompatActivity {
         return payload;
     }
 
+    private void resetCastStallWatchdog() {
+        castPlaybackHasPlayed = false;
+        cancelCastStallRecovery();
+    }
+
+    private void cancelCastStallRecovery() {
+        if (castStallRecoveryRunnable == null) return;
+        main.removeCallbacks(castStallRecoveryRunnable);
+        castStallRecoveryRunnable = null;
+    }
+
+    private void updateCastStallWatchdog(JSONObject payload) {
+        String playerState = payload.optString("playerState", "UNKNOWN");
+        if ("PLAYING".equals(playerState)) {
+            castPlaybackHasPlayed = true;
+            cancelCastStallRecovery();
+            return;
+        }
+
+        boolean recoverableBuffering = "BUFFERING".equals(playerState)
+            && castPlaybackHasPlayed
+            && activeCastContext != null
+            && activeCastInfo != null
+            && "hls".equals(activeCastInfo.method);
+        if (!recoverableBuffering) {
+            cancelCastStallRecovery();
+            return;
+        }
+        if (castStallRecoveryRunnable != null) return;
+
+        long sinceLastRecovery = System.currentTimeMillis() - lastCastStallRecoveryAt;
+        long cooldownDelay = Math.max(0L, CAST_STALL_RECOVERY_COOLDOWN_MS - sinceLastRecovery);
+        long delay = Math.max(CAST_STALL_RECOVERY_DELAY_MS, cooldownDelay);
+        castStallRecoveryRunnable = this::recoverStalledCastPlayback;
+        main.postDelayed(castStallRecoveryRunnable, delay);
+    }
+
+    private void recoverStalledCastPlayback() {
+        castStallRecoveryRunnable = null;
+        RemoteMediaClient client = currentRemoteMediaClient();
+        MediaStatus status = client != null ? client.getMediaStatus() : null;
+        if (client == null
+            || status == null
+            || status.getPlayerState() != MediaStatus.PLAYER_STATE_BUFFERING
+            || !castPlaybackHasPlayed
+            || activeCastContext == null
+            || activeCastInfo == null
+            || !"hls".equals(activeCastInfo.method)) {
+            return;
+        }
+
+        double receiverPosition = Math.max(0, client.getApproximateStreamPosition() / 1000.0);
+        double absolutePosition = Math.max(0, castTimelineOffsetSeconds + receiverPosition);
+        lastCastStallRecoveryAt = System.currentTimeMillis();
+        pendingCastContext = activeCastContext.withPosition(absolutePosition);
+        castLaunchRequested = true;
+        Log.w(TAG, "Cast HLS stalled; reloading receiver at position=" + absolutePosition);
+        notifyCastState("recovering-stalled-playback", String.valueOf(absolutePosition));
+        loadPendingCastMedia();
+    }
+
     private void publishCastPlaybackState() {
         try {
             JSONObject payload = buildCastStatePayload();
+            updateCastStallWatchdog(payload);
             payload.put("state", "playback");
             lastCastStateJson = payload.toString();
             Log.d(TAG, "Cast state=" + payload.optString("playerState") + " position=" + payload.optDouble("currentTimeSeconds"));
@@ -795,6 +865,7 @@ public final class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        cancelCastStallRecovery();
         networkExecutor.shutdownNow();
         if (isFinishing()) {
             root.removeView(webView);

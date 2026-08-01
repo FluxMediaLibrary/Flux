@@ -127,7 +127,7 @@ export interface UpdateProfileRequest {
 // AUTO-GENERATED into ./avatars.ts (see scripts) so the source images, the
 // backend allow-list, and the picker can never drift apart.
 
-export type AvatarCategory = 'Emotes' | 'Characters' | 'Zodiac' | 'Fallout' | 'Icons';
+export type AvatarCategory = 'Emotes' | 'Characters' | 'Zodiac' | 'Icons';
 
 export interface AvatarPreset {
   id: string;
@@ -143,13 +143,11 @@ export const AVATAR_CATEGORY_ORDER: readonly AvatarCategory[] = [
   'Emotes',
   'Characters',
   'Zodiac',
-  'Fallout',
   'Icons',
 ];
 
 // Curated from the source images in packages/frontend/public/avatars/. Categories
-// were verified by eye (the filenames alone mixed Fallout Vault-Boy art into the
-// blue-smiley "Emotes" set).
+// are verified from the artwork rather than inferred from filenames alone.
 export const AVATAR_PRESETS: readonly AvatarPreset[] = [
   // ── Emotes (the blue-smiley reaction faces) ──
   { id: '60413-argue', file: '60413-argue.png', label: 'Argue', category: 'Emotes' },
@@ -176,24 +174,7 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
   { id: 'tribal', file: 'tribal.png', label: 'Tribal', category: 'Emotes' },
 
   // ── Characters (animated) ──
-  { id: '27221-arielfacepalm', file: '27221-arielfacepalm.gif', label: 'Ariel Facepalm', category: 'Characters' },
-  { id: '78677-arielhi', file: '78677-arielhi.gif', label: 'Ariel Hi', category: 'Characters' },
-  { id: '71980-ariellove', file: '71980-ariellove.gif', label: 'Ariel Love', category: 'Characters' },
-  { id: '90370-arielsad', file: '90370-arielsad.gif', label: 'Ariel Sad', category: 'Characters' },
-  { id: '36305-arielsteam', file: '36305-arielsteam.gif', label: 'Ariel Steam', category: 'Characters' },
-  { id: '54371-arielwhat', file: '54371-arielwhat.gif', label: 'Ariel What', category: 'Characters' },
-  { id: '74336-aristocathappy', file: '74336-aristocathappy.gif', label: 'Aristocat Happy', category: 'Characters' },
-  { id: '79985-aristocathi', file: '79985-aristocathi.gif', label: 'Aristocat Hi', category: 'Characters' },
-  { id: '13350-aristocatlove', file: '13350-aristocatlove.gif', label: 'Aristocat Love', category: 'Characters' },
-  { id: '74926-aristocatmad', file: '74926-aristocatmad.gif', label: 'Aristocat Mad', category: 'Characters' },
-  { id: '97162-aristocatno', file: '97162-aristocatno.gif', label: 'Aristocat No', category: 'Characters' },
-  { id: '53848-aristocattongue', file: '53848-aristocattongue.gif', label: 'Aristocat Tongue', category: 'Characters' },
-  { id: '77535-aristocatwhat', file: '77535-aristocatwhat.gif', label: 'Aristocat What', category: 'Characters' },
-  { id: '50074-bambigrimace', file: '50074-bambigrimace.gif', label: 'Bambi Grimace', category: 'Characters' },
   { id: '39738-funkymothman', file: '39738-funkymothman.gif', label: 'Funky Mothman', category: 'Characters' },
-  { id: '3031-princess', file: '3031-princess.png', label: 'Princess', category: 'Characters' },
-  { id: '62157-sebhuh', file: '62157-sebhuh.gif', label: 'Seb Huh', category: 'Characters' },
-  { id: '75618-sebshock', file: '75618-sebshock.gif', label: 'Seb Shock', category: 'Characters' },
 
   // ── Zodiac ──
   { id: '9692_zodiac_aquarius', file: '9692_zodiac_aquarius.png', label: 'Aquarius', category: 'Zodiac' },
@@ -208,32 +189,6 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
   { id: '5375_zodiac_scorpio', file: '5375_zodiac_scorpio.png', label: 'Scorpio', category: 'Zodiac' },
   { id: '3649_zodiac_taurus', file: '3649_zodiac_taurus.png', label: 'Taurus', category: 'Zodiac' },
   { id: '2303_zodiac_virgo', file: '2303_zodiac_virgo.png', label: 'Virgo', category: 'Zodiac' },
-
-  // ── Fallout (Vault Boy poses + Nuka-Cola) ──
-  { id: '5002-fallout', file: '5002-fallout.png', label: 'Vault Boy', category: 'Fallout' },
-  { id: '1734-vaultboy', file: '1734-vaultboy.png', label: 'Vault Boy', category: 'Fallout' },
-  { id: '3139-vaultboyholdup', file: '3139-vaultboyholdup.png', label: 'Vault Boy Hold Up', category: 'Fallout' },
-  { id: '8364_fallout_ok', file: '8364_fallout_ok.png', label: 'Thumbs Up', category: 'Fallout' },
-  { id: '2902-hola', file: '2902-hola.png', label: 'Wave', category: 'Fallout' },
-  { id: '9368-enojo', file: '9368-enojo.png', label: 'Angry', category: 'Fallout' },
-  { id: '4912-triste', file: '4912-triste.png', label: 'Sad', category: 'Fallout' },
-  { id: '1612-mareo', file: '1612-mareo.png', label: 'Dizzy', category: 'Fallout' },
-  { id: '3718-muerto', file: '3718-muerto.png', label: 'Dead', category: 'Fallout' },
-  { id: '2408_gross_boy', file: '2408_gross_boy.png', label: 'Tongue Out', category: 'Fallout' },
-  { id: '72568-hesitant', file: '72568-hesitant.png', label: 'Silly', category: 'Fallout' },
-  { id: '6844-fiesta', file: '6844-fiesta.png', label: 'Party', category: 'Fallout' },
-  { id: '4299-santoperonotanto', file: '4299-santoperonotanto.png', label: 'Angel', category: 'Fallout' },
-  { id: '4299-sabiondo', file: '4299-sabiondo.png', label: 'Know-It-All', category: 'Fallout' },
-  { id: '7285-fachero', file: '7285-fachero.png', label: 'Cool', category: 'Fallout' },
-  { id: '5623-postolero', file: '5623-postolero.png', label: 'Pistol', category: 'Fallout' },
-  { id: '1826-tecreo', file: '1826-tecreo.png', label: 'Heavy Gun', category: 'Fallout' },
-  { id: '5703-cuchillo', file: '5703-cuchillo.png', label: 'Knife', category: 'Fallout' },
-  { id: '5558-misterio', file: '5558-misterio.png', label: 'Detective', category: 'Fallout' },
-  { id: '3718-nukacola', file: '3718-nukacola.png', label: 'Nuka-Cola', category: 'Fallout' },
-  { id: '8871-chapa', file: '8871-chapa.png', label: 'Nuka Cap', category: 'Fallout' },
-  { id: '1826-pipboy', file: '1826-pipboy.png', label: 'Pip-Boy', category: 'Fallout' },
-  { id: '7968_fallout_pip_boy', file: '7968_fallout_pip_boy.png', label: 'Pip-Boy', category: 'Fallout' },
-  { id: '79732-quantum-queers-logo', file: '79732-quantum-queers-logo.png', label: 'Quantum Queers', category: 'Fallout' },
 
   // ── Icons (small objects + critters) ──
   { id: '422848-bunny', file: '422848-bunny.png', label: 'Bunny', category: 'Icons' },

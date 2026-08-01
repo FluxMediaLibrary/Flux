@@ -1,5 +1,21 @@
 # Flux Android changelog
 
+## 1.1.7 — 2026-08-01
+
+### Fixed
+
+- Fixed Cast playback stalling at HLS segment boundaries after the TV caught up to an on-demand transcode.
+- Replaced the two-rendition Cast encode with one bitrate-limited receiver rendition so segment production stays ahead of playback.
+- Increased the Cast startup runway before the receiver begins consuming a growing HLS playlist.
+- Added automatic recovery for a receiver that remains stuck buffering, resuming from the current absolute show timestamp without restarting the app.
+- Prevented five-second Cast progress saves from stacking when the server is slow or unreachable.
+
+### Verification
+
+- Passed all 33 backend tests plus backend and frontend typechecking and production builds.
+- Generated and completed a real single-rendition HLS smoke stream from an HEVC/FLAC fixture.
+- Compiled the Android sender with the Cast buffering watchdog against SDK 35 and Google Cast Framework 22.0.0.
+
 ## 1.1.6 — 2026-08-01
 
 ### Fixed
