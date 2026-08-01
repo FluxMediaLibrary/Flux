@@ -1,18 +1,15 @@
 ﻿{
-    "versionCode":  10,
-    "versionName":  "1.1.5",
+    "versionCode":  11,
+    "versionName":  "1.1.6",
     "minimumSupportedVersionCode":  4,
     "mandatory":  false,
-    "releaseDate":  "2026-08-01T07:36:23.8018874Z",
+    "releaseDate":  "2026-08-01T17:57:18.8688695Z",
     "releaseNotes":  [
-                         "Turned the Flux player into a live TV remote while casting",
-                         "Added Cast play, pause, timeline seeking, volume, and Skip Intro controls",
-                         "Added an Admin Intros queue with live progress, logs, results, and scan history",
-                         "Fixed repeat intro scans being swallowed by completed queue jobs",
-                         "Fixed Chromaprint scans failing at the exact end of the fingerprint window",
-                         "Fixed intro matching across codec and encode variations"
+                         "Fixed Next Episode starting at the previous episode\u0027s Cast position",
+                         "Made Cast episode changes load atomically from 0:00",
+                         "Added receiver media identity so stale episode progress cannot leak into the next episode"
                      ],
-    "apkUrl":  "/api/app/android/download/Flux-Android-v1.1.5.apk",
-    "sha256":  "0a273913c212172bfe9a58aa1972266fa9cdb95dc8f1647e06e43bee6c3054dd",
-    "fileSize":  4925057
+    "apkUrl":  "/api/app/android/download/Flux-Android-v1.1.6.apk",
+    "sha256":  "86099fae4f805fcf6b3b7280363ae14c2fb93ee0d4e15bfd2448333c4ac727be",
+    "fileSize":  4925090
 }

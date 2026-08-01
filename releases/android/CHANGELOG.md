@@ -1,5 +1,19 @@
 # Flux Android changelog
 
+## 1.1.6 — 2026-08-01
+
+### Fixed
+
+- Fixed **Next Episode** starting at the timestamp carried over from the previous episode while casting.
+- Made Cast episode changes issue one atomic receiver load at `0:00` for both direct-play and HLS media.
+- Added media and episode identity to Cast state so stale receiver time cannot be applied or saved against the incoming episode.
+
+### Verification
+
+- Passed the focused Cast episode-identity regression tests.
+- Passed frontend typechecking, lint, and the production build.
+- Compiled and packaged the signed Android application against SDK 35 and Google Cast Framework 22.0.0.
+
 ## 1.1.5 — 2026-08-01
 
 ### Added

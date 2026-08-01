@@ -29,12 +29,9 @@ Copy-Item -LiteralPath $apk -Destination $destination -Force
 $hash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
 $size = (Get-Item -LiteralPath $destination).Length
 $releaseNotes = @(
-  'Turned the Flux player into a live TV remote while casting',
-  'Added Cast play, pause, timeline seeking, volume, and Skip Intro controls',
-  'Added an Admin Intros queue with live progress, logs, results, and scan history',
-  'Fixed repeat intro scans being swallowed by completed queue jobs',
-  'Fixed Chromaprint scans failing at the exact end of the fingerprint window',
-  'Fixed intro matching across codec and encode variations'
+  'Fixed Next Episode starting at the previous episode''s Cast position',
+  'Made Cast episode changes load atomically from 0:00',
+  'Added receiver media identity so stale episode progress cannot leak into the next episode'
 )
 $releaseDate = [DateTime]::UtcNow.ToString('o')
 $manifest = [ordered]@{
