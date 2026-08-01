@@ -62,3 +62,4 @@ twa/
 
 # Android release artifacts are deployed from server release storage, not Git.
 releases/android/*.apk
+.env.vps
