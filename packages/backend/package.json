@@ -28,7 +28,7 @@
     "fastify-plugin": "^5.0.1",
     "ioredis": "^5.4.2",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^7.0.13",
+    "nodemailer": "^9.0.1",
     "parse-torrent": "^11.0.21",
     "parse-torrent-title": "^3.0.1",
     "zod": "^3.24.1"
