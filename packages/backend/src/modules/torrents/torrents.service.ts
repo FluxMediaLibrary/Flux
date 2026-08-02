@@ -27,7 +27,6 @@ import {
   getLiveStats,
   stopSeeding,
   removeTorrent,
-  verifyTorrent,
   type AddTorrentResult,
   type TorrentLiveStats,
 } from '../../lib/webtorrent.js';
@@ -172,6 +171,23 @@ async function checkSavedTorrentPayload(infoHash: string): Promise<Awaited<Retur
   }
 }
 
+async function addTorrentFromPreflight(
+  row: Pick<Torrent, 'infoHash' | 'category' | 'fileMapping'>,
+  buffer: Buffer,
+  dataCheck: Awaited<ReturnType<typeof detectExistingData>>,
+): Promise<AddTorrentResult> {
+  if (!dataCheck.complete) {
+    // A stale Transmission entry can stay "complete" after files are deleted.
+    // Remove only the client job, keep any partial payload, then re-add cleanly.
+    await removeTorrent(row.infoHash, false).catch(() => false);
+  }
+  const added = await addTorrent(buffer, { verifyExisting: true });
+  if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {
+    throw new Error(`Transmission returned infoHash ${added.infoHash}, expected ${row.infoHash}`);
+  }
+  return added;
+}
+
 /**
  * Enqueue a finished download's post-process job exactly once. Gates on
  * Transmission's authoritative `done` flag (leftUntilDone === 0), NOT a
@@ -188,23 +204,38 @@ async function enqueuePostprocessIfDone(row: Torrent, live: TorrentLiveStats): P
 
   const payload = await checkSavedTorrentPayload(row.infoHash);
   if (!payload?.complete) {
-    const progress = payload && payload.totalBytes > 0 ? payload.bytesOnDisk / payload.totalBytes : live.progress;
+    let nextLive = live;
+    let nextPayload = payload;
+    try {
+      const buffer = await readFile(torrentFilePath(row.infoHash));
+      nextPayload = await preflightTorrentStart(row, buffer);
+      await addTorrentFromPreflight(row, buffer, nextPayload);
+      nextLive = await getLiveStats(row.infoHash) ?? live;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await prisma.torrent.update({
+        where: { id: row.id },
+        data: {
+          status: 'ERROR',
+          errorMessage: `Failed to restart incomplete torrent payload: ${message}`,
+        },
+      });
+      return 'NONE';
+    }
+    const progress = nextPayload && nextPayload.totalBytes > 0 ? nextPayload.bytesOnDisk / nextPayload.totalBytes : nextLive.progress;
     await prisma.torrent.update({
       where: { id: row.id },
       data: {
         status: 'DOWNLOADING',
         progress,
-        downloadSpeed: live.downloadSpeed,
-        uploadSpeed: live.uploadSpeed,
-        peers: live.numPeers,
-        totalBytes: payload?.totalBytes ?? live.length,
-        uploadedBytes: live.uploaded,
-        ratio: live.ratio,
+        downloadSpeed: nextLive.downloadSpeed,
+        uploadSpeed: nextLive.uploadSpeed,
+        peers: nextLive.numPeers,
+        totalBytes: nextPayload?.totalBytes ?? nextLive.length,
+        uploadedBytes: nextLive.uploaded,
+        ratio: nextLive.ratio,
         errorMessage: null,
       },
-    });
-    await verifyTorrent(row.infoHash).catch((err) => {
-      console.error(`[Torrent] Failed to recheck incomplete payload for ${row.name} (${row.infoHash}):`, err);
     });
     return 'WAITING_FOR_PAYLOAD';
   }
@@ -808,10 +839,7 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
   let dataCheck: Awaited<ReturnType<typeof detectExistingData>>;
   try {
     dataCheck = await preflightTorrentStart(row, buffer);
-    added = await addTorrent(buffer, { verifyExisting: true });
-    if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {
-      throw new Error(`Transmission returned infoHash ${added.infoHash}, expected ${row.infoHash}`);
-    }
+    added = await addTorrentFromPreflight(row, buffer, dataCheck);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await scheduleTorrentRetry(id, err);
@@ -941,10 +969,7 @@ export async function startDownloading(
   }
 
   const dataCheck = await preflightTorrentStart(row, buffer);
-  const added = await addTorrent(buffer, { verifyExisting: true });
-  if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {
-    throw new Error(`Transmission returned infoHash ${added.infoHash}, expected ${row.infoHash}`);
-  }
+  const added = await addTorrentFromPreflight(row, buffer, dataCheck);
   const live = await getLiveStats(row.infoHash);
   // Only a duplicate add with a payload Flux can still see on disk goes straight
   // back to SEEDING. Transmission can report a stale duplicate as complete after
