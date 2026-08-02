@@ -74,7 +74,7 @@ jobs:
             echo "Release tag must be pc-v followed by a semantic version, such as pc-v1.2.3." >&2
             exit 1
           fi
-          npm version "$version" --workspace @flux/desktop --no-git-tag-version
+          npm version "$version" --workspace @flux/desktop --no-git-tag-version --allow-same-version
 
       - name: Test desktop package
         run: npm test --workspace @flux/desktop
