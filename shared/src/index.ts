@@ -713,6 +713,9 @@ export interface TorrentParseResult {
   existingData?: {
     filesOnDisk: number;
     totalFiles: number;
+    bytesOnDisk: number;
+    totalBytes: number;
+    missingBytes: number;
     complete: boolean;
   };
 }

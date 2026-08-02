@@ -11,6 +11,7 @@ import type {
   TorrentParseResult,
 } from '@flux/shared';
 import { api, FluxApiError } from '@/lib/api';
+import { formatBytes } from '@/lib/format';
 
 const TMDB_THUMB = 'https://image.tmdb.org/t/p/w92';
 
@@ -198,12 +199,12 @@ export function UploadConfirm({
     const existing = parsed?.existingData;
     if (!existing) return null;
     if (existing.filesOnDisk <= 0) {
-      return 'No matching payload files were found on disk. Flux will not treat this upload as seedable.';
+      return `No matching payload files were found on disk. Flux needs ${formatBytes(existing.totalBytes)} before this can seed.`;
     }
     if (existing.complete) {
-      return `All ${existing.totalFiles} file${existing.totalFiles === 1 ? '' : 's'} already exist on disk — this will verify the data and start seeding without re-downloading.`;
+      return `All ${existing.totalFiles} file${existing.totalFiles === 1 ? '' : 's'} (${formatBytes(existing.totalBytes)}) already exist on disk — this will verify the data and start seeding without re-downloading.`;
     }
-    return `${existing.filesOnDisk} of ${existing.totalFiles} file${existing.totalFiles === 1 ? '' : 's'} already exist on disk — existing data will be reused and only missing pieces will download.`;
+    return `${existing.filesOnDisk} of ${existing.totalFiles} file${existing.totalFiles === 1 ? '' : 's'} already exist on disk (${formatBytes(existing.bytesOnDisk)} present, ${formatBytes(existing.missingBytes)} missing) — existing data will be reused and only missing pieces will download.`;
   }, [parsed]);
 
   const confirmLabel = useMemo(() => {

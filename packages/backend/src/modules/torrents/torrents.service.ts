@@ -32,7 +32,7 @@ import {
 } from '../../lib/webtorrent.js';
 import type { ConfirmTorrentInput } from './torrents.schema.js';
 import { torrentPostprocessQueue } from '../../jobs/queues.js';
-import { torrentFilePath } from '../../lib/media-paths.js';
+import { selectMediaRoot, torrentFilePath } from '../../lib/media-paths.js';
 import { getSeasonEpisodes as getTmdbSeasonEpisodes } from '../tmdb/tmdb.service.js';
 import { config } from '../../config.js';
 
@@ -57,16 +57,28 @@ async function scheduleTorrentRetry(id: string, error: unknown): Promise<void> {
   });
 }
 
-async function ensureMinimumFreeSpace(): Promise<void> {
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB', 'PB'];
+  let value = bytes / 1024;
+  let unit = units[0]!;
+  for (let i = 1; i < units.length && value >= 1024; i += 1) {
+    value /= 1024;
+    unit = units[i]!;
+  }
+  return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${unit}`;
+}
+
+async function ensureMinimumFreeSpace(requiredBytes = 0): Promise<void> {
   const settings = await getServerSettings();
-  if (settings.minimumFreeSpaceGb <= 0) return;
   try {
     const disk = await statfs(config.DOWNLOAD_ROOT);
     const freeBytes = Number(disk.bavail) * Number(disk.bsize);
-    const requiredBytes = settings.minimumFreeSpaceGb * 1024 ** 3;
-    if (freeBytes < requiredBytes) {
+    const reserveBytes = settings.minimumFreeSpaceGb * 1024 ** 3;
+    const totalRequiredBytes = Math.max(0, requiredBytes) + reserveBytes;
+    if (freeBytes < totalRequiredBytes) {
       throw ApiError.badRequest(
-        `Download storage has less than the configured ${settings.minimumFreeSpaceGb} GB free`,
+        `Download storage needs ${formatBytes(requiredBytes)} plus the configured ${settings.minimumFreeSpaceGb} GB reserve, but only ${formatBytes(freeBytes)} is free.`,
         'DOWNLOAD_FREE_SPACE_LOW',
       );
     }
@@ -75,6 +87,80 @@ async function ensureMinimumFreeSpace(): Promise<void> {
     // Existing deployments may create the mounted download root lazily. The
     // download client remains authoritative when the filesystem cannot be read.
   }
+}
+
+type ParsedTorrentPayloadFile = {
+  path: string;
+  name: string;
+  length: number;
+};
+
+async function parseTorrentPayloadFiles(buffer: Buffer): Promise<ParsedTorrentPayloadFile[]> {
+  const parsed = await parseTorrent(buffer);
+  if (parsed.files && parsed.files.length > 0) {
+    return parsed.files.map((file) => ({
+      path: file.path,
+      name: file.name,
+      length: file.length,
+    }));
+  }
+  const name = parsed.name ?? 'Unknown';
+  const length = typeof (parsed as { length?: unknown }).length === 'number'
+    ? (parsed as { length: number }).length
+    : 0;
+  return [{ path: name, name, length }];
+}
+
+function parseFileMapping(value: unknown): { path: string; season: number; episode: number }[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const raw = entry as { path?: unknown; season?: unknown; episode?: unknown };
+    return typeof raw.path === 'string' &&
+      typeof raw.season === 'number' &&
+      typeof raw.episode === 'number'
+      ? [{ path: raw.path, season: raw.season, episode: raw.episode }]
+      : [];
+  });
+}
+
+async function estimateLibraryImportBytes(
+  buffer: Buffer,
+  category: MediaType,
+  fileMapping: unknown,
+): Promise<number> {
+  const files = await parseTorrentPayloadFiles(buffer);
+  if (category === 'MOVIE') {
+    const candidates = files.filter((file) => isVideoFile(file.name));
+    const usable = candidates.length > 0 ? candidates : files;
+    return usable.reduce((largest, file) => Math.max(largest, file.length), 0);
+  }
+
+  const mappedPaths = new Set(parseFileMapping(fileMapping).map((mapping) => mapping.path));
+  return files.reduce((total, file) => total + (mappedPaths.has(file.path) ? file.length : 0), 0);
+}
+
+async function ensureLibraryImportSpace(requiredBytes: number): Promise<void> {
+  if (requiredBytes <= 0) return;
+  try {
+    await selectMediaRoot(requiredBytes);
+  } catch (error) {
+    throw ApiError.badRequest(
+      `No configured library drive has enough free space for this torrent import (${formatBytes(requiredBytes)} required).`,
+      'LIBRARY_FREE_SPACE_LOW',
+    );
+  }
+}
+
+async function preflightTorrentStart(
+  row: Pick<Torrent, 'category' | 'fileMapping'>,
+  buffer: Buffer,
+): Promise<Awaited<ReturnType<typeof detectExistingData>>> {
+  const dataCheck = await detectExistingData(buffer);
+  if (!dataCheck.complete) await ensureMinimumFreeSpace(dataCheck.missingBytes);
+  const importBytes = await estimateLibraryImportBytes(buffer, row.category as MediaType, row.fileMapping);
+  await ensureLibraryImportSpace(importBytes);
+  return dataCheck;
 }
 
 /**
@@ -682,8 +768,7 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
   let added: AddTorrentResult;
   let dataCheck: Awaited<ReturnType<typeof detectExistingData>>;
   try {
-    dataCheck = await detectExistingData(buffer);
-    if (!dataCheck.complete) await ensureMinimumFreeSpace();
+    dataCheck = await preflightTorrentStart(row, buffer);
     added = await addTorrent(buffer, { verifyExisting: true });
     if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {
       throw new Error(`Transmission returned infoHash ${added.infoHash}, expected ${row.infoHash}`);
@@ -813,8 +898,7 @@ export async function startDownloading(
     throw ApiError.notFound(`Torrent ${torrentId} not found`);
   }
 
-  const dataCheck = await detectExistingData(buffer);
-  if (!dataCheck.complete) await ensureMinimumFreeSpace();
+  const dataCheck = await preflightTorrentStart(row, buffer);
   const added = await addTorrent(buffer, { verifyExisting: true });
   if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {
     throw new Error(`Transmission returned infoHash ${added.infoHash}, expected ${row.infoHash}`);

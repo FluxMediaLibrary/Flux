@@ -109,7 +109,7 @@ function mapStats(t: TrTorrent): TorrentLiveStats {
   // signal (exact byte count for the wanted files). `percentDone` is a float
   // that can settle a hair below 1.0 on a finished torrent, so never gate
   // completion on `percentDone >= 1` alone.
-  const done = t.leftUntilDone <= 0 || t.percentDone >= 1;
+  const done = t.leftUntilDone <= 0;
   return {
     progress: t.percentDone,
     downloadSpeed: t.rateDownload,
@@ -301,6 +301,12 @@ export interface ExistingDataCheck {
   filesOnDisk: number;
   /** Total files this torrent expects. */
   totalFiles: number;
+  /** Bytes already present in files whose size matches the torrent metadata. */
+  bytesOnDisk: number;
+  /** Total bytes this torrent expects. */
+  totalBytes: number;
+  /** Bytes still missing from the download root. */
+  missingBytes: number;
   /** True when every expected file is already present with the right size. */
   complete: boolean;
 }
@@ -329,7 +335,10 @@ export async function detectExistingData(
   const rawFiles = parsed.files ?? [];
 
   let filesOnDisk = 0;
+  let bytesOnDisk = 0;
+  let totalBytes = 0;
   for (const file of rawFiles) {
+    totalBytes += file.length;
     let expected: string;
     try {
       expected = safeJoin(downloadRoot, file.path);
@@ -340,6 +349,7 @@ export async function detectExistingData(
       const entry = await stat(expected);
       if (entry.isFile() && entry.size === file.length) {
         filesOnDisk++;
+        bytesOnDisk += file.length;
       }
     } catch {
       // file not present yet
@@ -349,6 +359,9 @@ export async function detectExistingData(
   return {
     filesOnDisk,
     totalFiles: rawFiles.length,
+    bytesOnDisk,
+    totalBytes,
+    missingBytes: Math.max(0, totalBytes - bytesOnDisk),
     complete: rawFiles.length > 0 && filesOnDisk === rawFiles.length,
   };
 }
@@ -398,8 +411,8 @@ export async function getTorrentFiles(
   })) as { torrents: { downloadDir: string; percentDone: number; leftUntilDone: number; files: { name: string; length: number }[] }[] };
 
   const t = result.torrents?.[0];
-  // Complete when no bytes remain (authoritative) or percentDone rounded to 1.
-  if (!t || (t.leftUntilDone > 0 && t.percentDone < 1)) return null;
+  // Complete only when Transmission reports no bytes left for wanted files.
+  if (!t || t.leftUntilDone > 0) return null;
 
   return {
     downloadDir: t.downloadDir,

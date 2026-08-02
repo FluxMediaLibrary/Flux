@@ -16,7 +16,7 @@ import {
   getSeasonEpisodes as getTmdbSeasonEpisodes,
 } from '../tmdb/tmdb.service.js';
 import { notifyRequestFulfilled } from '../notifications/notify.js';
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { MediaType } from '@flux/shared';
 import type { Prisma, RequestStatus } from '@prisma/client';
@@ -36,6 +36,23 @@ interface TorrentFile {
   name: string;
   path: string;
   length: number;
+}
+
+async function resolveCompleteTorrentSource(
+  downloadDir: string,
+  file: TorrentFile,
+): Promise<string> {
+  const source = path.join(downloadDir, file.path);
+  try {
+    const sourceStat = await stat(source);
+    if (!sourceStat.isFile() || sourceStat.size !== file.length) {
+      throw new Error(`expected ${file.length} bytes, found ${sourceStat.size}`);
+    }
+    return source;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Torrent source file is missing or incomplete: ${file.path} (${reason})`);
+  }
 }
 
 async function analyzeMediaAssets(
@@ -124,7 +141,7 @@ export async function processTorrentPostprocess(
       importedMoviePath = placement.file;
 
       await mkdir(placement.dir, { recursive: true });
-      const source = path.join(torrentData.downloadDir, largestVideo.path);
+      const source = await resolveCompleteTorrentSource(torrentData.downloadDir, largestVideo);
       await copyFile(source, placement.file);
 
       // Upsert MediaItem
@@ -244,7 +261,7 @@ export async function processTorrentPostprocess(
         );
 
         await mkdir(placement.seasonDir, { recursive: true });
-        const source = path.join(torrentData.downloadDir, matchedFile.path);
+        const source = await resolveCompleteTorrentSource(torrentData.downloadDir, matchedFile);
         await copyFile(source, placement.file);
 
         // Upsert Episode

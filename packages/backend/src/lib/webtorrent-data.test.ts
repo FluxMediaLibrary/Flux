@@ -79,6 +79,9 @@ test('detectExistingData finds a complete single-file torrent', async () => {
     assert.deepEqual(await detectExistingData(torrent, root), {
       filesOnDisk: 1,
       totalFiles: 1,
+      bytesOnDisk: 1000,
+      totalBytes: 1000,
+      missingBytes: 0,
       complete: true,
     });
   } finally {
@@ -95,6 +98,9 @@ test('detectExistingData ignores a file with the wrong size', async () => {
     assert.deepEqual(await detectExistingData(torrent, root), {
       filesOnDisk: 0,
       totalFiles: 1,
+      bytesOnDisk: 0,
+      totalBytes: 1000,
+      missingBytes: 1000,
       complete: false,
     });
   } finally {
@@ -119,6 +125,9 @@ test('detectExistingData handles a multi-file torrent layout', async () => {
     assert.deepEqual(await detectExistingData(torrent, root), {
       filesOnDisk: 2,
       totalFiles: 2,
+      bytesOnDisk: 1200,
+      totalBytes: 1200,
+      missingBytes: 0,
       complete: true,
     });
   } finally {
@@ -142,6 +151,9 @@ test('detectExistingData reports partial data as incomplete', async () => {
     assert.deepEqual(await detectExistingData(torrent, root), {
       filesOnDisk: 1,
       totalFiles: 2,
+      bytesOnDisk: 500,
+      totalBytes: 1200,
+      missingBytes: 700,
       complete: false,
     });
   } finally {
@@ -157,6 +169,9 @@ test('detectExistingData reports no data when the download root is empty', async
     assert.deepEqual(await detectExistingData(torrent, root), {
       filesOnDisk: 0,
       totalFiles: 1,
+      bytesOnDisk: 0,
+      totalBytes: 1000,
+      missingBytes: 1000,
       complete: false,
     });
   } finally {
@@ -175,6 +190,9 @@ test('detectExistingData never probes outside the download root', async () => {
     assert.deepEqual(await detectExistingData(torrent, root), {
       filesOnDisk: 0,
       totalFiles: 1,
+      bytesOnDisk: 0,
+      totalBytes: 10,
+      missingBytes: 10,
       complete: false,
     });
   } finally {
