@@ -414,6 +414,18 @@ export async function getTorrentFiles(
   // Complete only when Transmission reports no bytes left for wanted files.
   if (!t || t.leftUntilDone > 0) return null;
 
+  for (const file of t.files) {
+    try {
+      const sourcePath = safeJoin(t.downloadDir, file.name);
+      const sourceStat = await stat(sourcePath);
+      if (!sourceStat.isFile() || sourceStat.size !== file.length) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
   return {
     downloadDir: t.downloadDir,
     files: t.files.map((f) => ({

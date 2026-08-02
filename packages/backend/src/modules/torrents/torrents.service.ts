@@ -27,6 +27,7 @@ import {
   getLiveStats,
   stopSeeding,
   removeTorrent,
+  verifyTorrent,
   type AddTorrentResult,
   type TorrentLiveStats,
 } from '../../lib/webtorrent.js';
@@ -163,6 +164,14 @@ async function preflightTorrentStart(
   return dataCheck;
 }
 
+async function checkSavedTorrentPayload(infoHash: string): Promise<Awaited<ReturnType<typeof detectExistingData>> | null> {
+  try {
+    return await detectExistingData(await readFile(torrentFilePath(infoHash)));
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Enqueue a finished download's post-process job exactly once. Gates on
  * Transmission's authoritative `done` flag (leftUntilDone === 0), NOT a
@@ -170,10 +179,36 @@ async function preflightTorrentStart(
  * hair under 1.0, which would strand it in DOWNLOADING. Shared by the on-demand
  * dashboard listing and the background poller.
  */
-async function enqueuePostprocessIfDone(row: Torrent, live: TorrentLiveStats): Promise<boolean> {
+type PostprocessDecision = 'NONE' | 'ENQUEUED' | 'WAITING_FOR_PAYLOAD';
+
+async function enqueuePostprocessIfDone(row: Torrent, live: TorrentLiveStats): Promise<PostprocessDecision> {
   if (row.status !== 'DOWNLOADING' || !live.done || postprocessEnqueued.has(row.id)) {
-    return false;
+    return 'NONE';
   }
+
+  const payload = await checkSavedTorrentPayload(row.infoHash);
+  if (!payload?.complete) {
+    const progress = payload && payload.totalBytes > 0 ? payload.bytesOnDisk / payload.totalBytes : live.progress;
+    await prisma.torrent.update({
+      where: { id: row.id },
+      data: {
+        status: 'DOWNLOADING',
+        progress,
+        downloadSpeed: live.downloadSpeed,
+        uploadSpeed: live.uploadSpeed,
+        peers: live.numPeers,
+        totalBytes: payload?.totalBytes ?? live.length,
+        uploadedBytes: live.uploaded,
+        ratio: live.ratio,
+        errorMessage: null,
+      },
+    });
+    await verifyTorrent(row.infoHash).catch((err) => {
+      console.error(`[Torrent] Failed to recheck incomplete payload for ${row.name} (${row.infoHash}):`, err);
+    });
+    return 'WAITING_FOR_PAYLOAD';
+  }
+
   postprocessEnqueued.add(row.id);
   console.log(`[Torrent] Done! Triggering postprocess for ${row.name} (${row.infoHash})`);
   try {
@@ -194,13 +229,13 @@ async function enqueuePostprocessIfDone(row: Torrent, live: TorrentLiveStats): P
         ratio: live.ratio,
       },
     });
-    return true;
+    return 'ENQUEUED';
   } catch (err) {
     // Enqueue failed (e.g. a Redis blip). Drop the dedupe marker so the next
     // sweep can retry instead of stranding the torrent forever.
     postprocessEnqueued.delete(row.id);
     console.error('[Torrent] Failed to enqueue postprocess:', err);
-    return false;
+    return 'NONE';
   }
 }
 
@@ -599,16 +634,20 @@ export async function listTorrents(): Promise<TorrentDTO[]> {
       }
       if (!live) return dto;
       await persistLiveStats(row, live);
-      const movedToProcessing = await enqueuePostprocessIfDone(row, live);
+      const postprocessDecision = await enqueuePostprocessIfDone(row, live);
+      const payload = postprocessDecision === 'WAITING_FOR_PAYLOAD'
+        ? await checkSavedTorrentPayload(row.infoHash)
+        : null;
+      const progress = payload && payload.totalBytes > 0 ? payload.bytesOnDisk / payload.totalBytes : live.progress;
 
       const overlaid: TorrentDTO = {
         ...dto,
-        status: movedToProcessing ? 'PROCESSING' : dto.status,
-        progress: live.progress,
+        status: postprocessDecision === 'ENQUEUED' ? 'PROCESSING' : dto.status,
+        progress,
         downloadSpeed: live.downloadSpeed,
         uploadSpeed: live.uploadSpeed,
         peers: live.numPeers,
-        totalBytes: live.length,
+        totalBytes: payload?.totalBytes ?? live.length,
         uploadedBytes: live.uploaded,
         ratio: live.ratio,
       };
@@ -793,6 +832,9 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
   // the underlying files were deleted, so the local completeness check is the
   // guardrail.
   const seeded = dataCheck.complete && added.reused && live?.done === true;
+  const progress = dataCheck.complete || dataCheck.totalBytes <= 0
+    ? live?.progress ?? 0
+    : dataCheck.bytesOnDisk / dataCheck.totalBytes;
   const updated = await prisma.torrent.update({
     where: { id },
     data: {
@@ -800,11 +842,11 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
       errorMessage: null,
       retryCount: 0,
       nextRetryAt: null,
-      progress: live?.progress ?? 0,
+      progress,
       downloadSpeed: live?.downloadSpeed ?? 0,
       uploadSpeed: live?.uploadSpeed ?? 0,
       peers: live?.numPeers ?? 0,
-      totalBytes: live?.length ?? 0,
+      totalBytes: dataCheck.totalBytes || live?.length || 0,
       uploadedBytes: live?.uploaded ?? 0,
       ratio: live?.ratio ?? 0,
       seedingSince: seeded ? (row.seedingSince ?? new Date()) : null,
@@ -909,6 +951,9 @@ export async function startDownloading(
   // the underlying files were deleted, so the local completeness check is the
   // guardrail.
   const seeded = dataCheck.complete && added.reused && live?.done === true;
+  const progress = dataCheck.complete || dataCheck.totalBytes <= 0
+    ? live?.progress ?? 0
+    : dataCheck.bytesOnDisk / dataCheck.totalBytes;
 
   await prisma.torrent.update({
     where: { id: torrentId },
@@ -917,11 +962,11 @@ export async function startDownloading(
       errorMessage: null,
       retryCount: 0,
       nextRetryAt: null,
-      progress: live?.progress ?? 0,
+      progress,
       downloadSpeed: live?.downloadSpeed ?? 0,
       uploadSpeed: live?.uploadSpeed ?? 0,
       peers: live?.numPeers ?? 0,
-      totalBytes: live?.length ?? 0,
+      totalBytes: dataCheck.totalBytes || live?.length || 0,
       uploadedBytes: live?.uploaded ?? 0,
       ratio: live?.ratio ?? 0,
       seedingSince: seeded ? (row.seedingSince ?? new Date()) : null,
