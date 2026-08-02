@@ -127,7 +127,7 @@ export interface UpdateProfileRequest {
 // AUTO-GENERATED into ./avatars.ts (see scripts) so the source images, the
 // backend allow-list, and the picker can never drift apart.
 
-export type AvatarCategory = 'Emotes' | 'Characters' | 'Zodiac' | 'Fallout' | 'Icons';
+export type AvatarCategory = 'Emotes' | 'Zodiac' | 'Icons';
 
 export interface AvatarPreset {
   id: string;
@@ -141,15 +141,12 @@ export interface AvatarPreset {
 
 export const AVATAR_CATEGORY_ORDER: readonly AvatarCategory[] = [
   'Emotes',
-  'Characters',
   'Zodiac',
-  'Fallout',
   'Icons',
 ];
 
 // Curated from the source images in packages/frontend/public/avatars/. Categories
-// were verified by eye (the filenames alone mixed Fallout Vault-Boy art into the
-// blue-smiley "Emotes" set).
+// are verified from the artwork rather than inferred from filenames alone.
 export const AVATAR_PRESETS: readonly AvatarPreset[] = [
   // ── Emotes (the blue-smiley reaction faces) ──
   { id: '60413-argue', file: '60413-argue.png', label: 'Argue', category: 'Emotes' },
@@ -160,7 +157,6 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
   { id: '87893-laugh', file: '87893-laugh.png', label: 'Laugh', category: 'Emotes' },
   { id: '80808-nervous', file: '80808-nervous.png', label: 'Nervous', category: 'Emotes' },
   { id: '36063-okay', file: '36063-okay.png', label: 'Okay', category: 'Emotes' },
-  { id: '7868-owo', file: '7868-owo.png', label: 'OwO', category: 'Emotes' },
   { id: '84145-plead', file: '84145-plead.png', label: 'Plead', category: 'Emotes' },
   { id: '58272-regret', file: '58272-regret.png', label: 'Regret', category: 'Emotes' },
   { id: '9644-sad', file: '9644-sad.png', label: 'Sad', category: 'Emotes' },
@@ -173,27 +169,6 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
   { id: '69470-think', file: '69470-think.png', label: 'Think', category: 'Emotes' },
   { id: '92984-thumbsup', file: '92984-thumbsup.png', label: 'Thumbs Up', category: 'Emotes' },
   { id: '79627-innocent', file: '79627-innocent.png', label: 'Innocent', category: 'Emotes' },
-  { id: 'tribal', file: 'tribal.png', label: 'Tribal', category: 'Emotes' },
-
-  // ── Characters (animated) ──
-  { id: '27221-arielfacepalm', file: '27221-arielfacepalm.gif', label: 'Ariel Facepalm', category: 'Characters' },
-  { id: '78677-arielhi', file: '78677-arielhi.gif', label: 'Ariel Hi', category: 'Characters' },
-  { id: '71980-ariellove', file: '71980-ariellove.gif', label: 'Ariel Love', category: 'Characters' },
-  { id: '90370-arielsad', file: '90370-arielsad.gif', label: 'Ariel Sad', category: 'Characters' },
-  { id: '36305-arielsteam', file: '36305-arielsteam.gif', label: 'Ariel Steam', category: 'Characters' },
-  { id: '54371-arielwhat', file: '54371-arielwhat.gif', label: 'Ariel What', category: 'Characters' },
-  { id: '74336-aristocathappy', file: '74336-aristocathappy.gif', label: 'Aristocat Happy', category: 'Characters' },
-  { id: '79985-aristocathi', file: '79985-aristocathi.gif', label: 'Aristocat Hi', category: 'Characters' },
-  { id: '13350-aristocatlove', file: '13350-aristocatlove.gif', label: 'Aristocat Love', category: 'Characters' },
-  { id: '74926-aristocatmad', file: '74926-aristocatmad.gif', label: 'Aristocat Mad', category: 'Characters' },
-  { id: '97162-aristocatno', file: '97162-aristocatno.gif', label: 'Aristocat No', category: 'Characters' },
-  { id: '53848-aristocattongue', file: '53848-aristocattongue.gif', label: 'Aristocat Tongue', category: 'Characters' },
-  { id: '77535-aristocatwhat', file: '77535-aristocatwhat.gif', label: 'Aristocat What', category: 'Characters' },
-  { id: '50074-bambigrimace', file: '50074-bambigrimace.gif', label: 'Bambi Grimace', category: 'Characters' },
-  { id: '39738-funkymothman', file: '39738-funkymothman.gif', label: 'Funky Mothman', category: 'Characters' },
-  { id: '3031-princess', file: '3031-princess.png', label: 'Princess', category: 'Characters' },
-  { id: '62157-sebhuh', file: '62157-sebhuh.gif', label: 'Seb Huh', category: 'Characters' },
-  { id: '75618-sebshock', file: '75618-sebshock.gif', label: 'Seb Shock', category: 'Characters' },
 
   // ── Zodiac ──
   { id: '9692_zodiac_aquarius', file: '9692_zodiac_aquarius.png', label: 'Aquarius', category: 'Zodiac' },
@@ -209,32 +184,6 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
   { id: '3649_zodiac_taurus', file: '3649_zodiac_taurus.png', label: 'Taurus', category: 'Zodiac' },
   { id: '2303_zodiac_virgo', file: '2303_zodiac_virgo.png', label: 'Virgo', category: 'Zodiac' },
 
-  // ── Fallout (Vault Boy poses + Nuka-Cola) ──
-  { id: '5002-fallout', file: '5002-fallout.png', label: 'Vault Boy', category: 'Fallout' },
-  { id: '1734-vaultboy', file: '1734-vaultboy.png', label: 'Vault Boy', category: 'Fallout' },
-  { id: '3139-vaultboyholdup', file: '3139-vaultboyholdup.png', label: 'Vault Boy Hold Up', category: 'Fallout' },
-  { id: '8364_fallout_ok', file: '8364_fallout_ok.png', label: 'Thumbs Up', category: 'Fallout' },
-  { id: '2902-hola', file: '2902-hola.png', label: 'Wave', category: 'Fallout' },
-  { id: '9368-enojo', file: '9368-enojo.png', label: 'Angry', category: 'Fallout' },
-  { id: '4912-triste', file: '4912-triste.png', label: 'Sad', category: 'Fallout' },
-  { id: '1612-mareo', file: '1612-mareo.png', label: 'Dizzy', category: 'Fallout' },
-  { id: '3718-muerto', file: '3718-muerto.png', label: 'Dead', category: 'Fallout' },
-  { id: '2408_gross_boy', file: '2408_gross_boy.png', label: 'Tongue Out', category: 'Fallout' },
-  { id: '72568-hesitant', file: '72568-hesitant.png', label: 'Silly', category: 'Fallout' },
-  { id: '6844-fiesta', file: '6844-fiesta.png', label: 'Party', category: 'Fallout' },
-  { id: '4299-santoperonotanto', file: '4299-santoperonotanto.png', label: 'Angel', category: 'Fallout' },
-  { id: '4299-sabiondo', file: '4299-sabiondo.png', label: 'Know-It-All', category: 'Fallout' },
-  { id: '7285-fachero', file: '7285-fachero.png', label: 'Cool', category: 'Fallout' },
-  { id: '5623-postolero', file: '5623-postolero.png', label: 'Pistol', category: 'Fallout' },
-  { id: '1826-tecreo', file: '1826-tecreo.png', label: 'Heavy Gun', category: 'Fallout' },
-  { id: '5703-cuchillo', file: '5703-cuchillo.png', label: 'Knife', category: 'Fallout' },
-  { id: '5558-misterio', file: '5558-misterio.png', label: 'Detective', category: 'Fallout' },
-  { id: '3718-nukacola', file: '3718-nukacola.png', label: 'Nuka-Cola', category: 'Fallout' },
-  { id: '8871-chapa', file: '8871-chapa.png', label: 'Nuka Cap', category: 'Fallout' },
-  { id: '1826-pipboy', file: '1826-pipboy.png', label: 'Pip-Boy', category: 'Fallout' },
-  { id: '7968_fallout_pip_boy', file: '7968_fallout_pip_boy.png', label: 'Pip-Boy', category: 'Fallout' },
-  { id: '79732-quantum-queers-logo', file: '79732-quantum-queers-logo.png', label: 'Quantum Queers', category: 'Fallout' },
-
   // ── Icons (small objects + critters) ──
   { id: '422848-bunny', file: '422848-bunny.png', label: 'Bunny', category: 'Icons' },
   { id: '532883-cash', file: '532883-cash.png', label: 'Cash', category: 'Icons' },
@@ -244,7 +193,6 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
   { id: '96311-dog', file: '96311-dog.png', label: 'Dog', category: 'Icons' },
   { id: '391926-frog', file: '391926-frog.png', label: 'Frog', category: 'Icons' },
   { id: '605187-goat', file: '605187-goat.png', label: 'Goat', category: 'Icons' },
-  { id: '1545-1000031285', file: '1545-1000031285.png', label: 'Owl', category: 'Icons' },
   { id: '647772-pouch', file: '647772-pouch.png', label: 'Pouch', category: 'Icons' },
   { id: '55902-trophy', file: '55902-trophy.png', label: 'Trophy', category: 'Icons' },
 ];
@@ -531,6 +479,14 @@ export interface PlaybackInfoDTO {
   videoCodec: string | null;
   audioCodec: string | null;
   durationSeconds: number | null;
+  preferences: {
+    autoplayEnabled: boolean;
+    resumeBehavior: 'ASK' | 'ALWAYS' | 'RESTART';
+    skipIntroEnabled: boolean;
+    preferredAudioLanguage: string | null;
+    preferredSubtitleLanguage: string | null;
+    subtitlesMode: 'OFF' | 'FOREIGN_ONLY' | 'ALWAYS';
+  };
   /** Reusable segment markers for the requested episode. */
   segments?: MediaSegmentDTO[];
   streams: MediaStreamDTO[];
@@ -814,13 +770,15 @@ export interface TorrentClientHealthDTO {
 
 export interface NotificationSettingsDTO {
   discordEnabled: boolean;
-  discordWebhookUrl: string | null;
+  /** Notification secrets are write-only. */
+  discordWebhookUrl: null;
+  discordWebhookConfigured: boolean;
   smtpEnabled: boolean;
   smtpHost: string | null;
   smtpPort: number | null;
   smtpUsername: string | null;
   smtpFromAddress: string | null;
-  // smtpPassword is write-only; never returned.
+  smtpPasswordConfigured: boolean;
 }
 
 export interface UpdateNotificationSettingsRequest {
@@ -832,6 +790,217 @@ export interface UpdateNotificationSettingsRequest {
   smtpUsername?: string | null;
   smtpPassword?: string | null;
   smtpFromAddress?: string | null;
+}
+
+export interface SettingsTestResultDTO {
+  ok: boolean;
+  message: string;
+}
+
+export type PreferredDownloadProtocol =
+  | 'TORRENT_ONLY'
+  | 'USENET_ONLY'
+  | 'PREFER_TORRENT'
+  | 'PREFER_USENET'
+  | 'EITHER';
+
+export interface GeneralSettingsDTO {
+  serverName: string;
+  frontendUrl: string;
+  apiUrl: string | null;
+  timezone: string;
+  language: string;
+  defaultInviteExpiryHours: number;
+}
+
+export interface DownloadSettingsDTO {
+  automatedDownloads: boolean;
+  preferredProtocol: PreferredDownloadProtocol;
+  defaultDownloadClientId: string | null;
+  defaultQualityProfileId: string | null;
+  automaticSearch: boolean;
+  automaticUpgrades: boolean;
+  retryFailedDownloads: boolean;
+  minimumFreeSpaceGb: number;
+  completedImportBehavior: 'COPY' | 'MOVE';
+  torrentSeedRatio: number | null;
+  torrentSeedTimeMinutes: number | null;
+  torrentRemoveAfterSeeding: boolean;
+  usenetRemoveCompleted: boolean;
+  usenetRemoveFailed: boolean;
+}
+
+export interface PlaybackSettingsDTO {
+  directPlayEnabled: boolean;
+  directStreamEnabled: boolean;
+  transcodingEnabled: boolean;
+  localBitrateLimitMbps: number | null;
+  remoteBitrateLimitMbps: number | null;
+  hardwareAcceleration: 'NONE' | 'AUTO' | 'VAAPI' | 'QSV' | 'NVENC' | 'VIDEOTOOLBOX';
+  preferredAudioLanguage: string | null;
+  preferredSubtitleLanguage: string | null;
+  subtitlesMode: 'OFF' | 'FOREIGN_ONLY' | 'ALWAYS';
+  autoplayEnabled: boolean;
+  resumeBehavior: 'ASK' | 'ALWAYS' | 'RESTART';
+  skipIntroEnabled: boolean;
+}
+
+export interface IntegrationSettingsDTO {
+  tmdbApiKeyConfigured: boolean;
+  tmdbSource: 'DATABASE' | 'ENVIRONMENT';
+}
+
+export interface SettingsBundleDTO {
+  general: GeneralSettingsDTO;
+  downloads: DownloadSettingsDTO;
+  playback: PlaybackSettingsDTO;
+  notifications: NotificationSettingsDTO;
+  integrations: IntegrationSettingsDTO;
+}
+
+export interface UpdateSettingsBundleRequest {
+  general?: Partial<GeneralSettingsDTO>;
+  downloads?: Partial<DownloadSettingsDTO>;
+  playback?: Partial<PlaybackSettingsDTO>;
+  integrations?: { tmdbApiKey?: string | null };
+}
+
+export type DownloadClientType = 'TRANSMISSION' | 'SABNZBD' | 'NZBGET';
+
+export interface DownloadClientDTO {
+  id: string;
+  name: string;
+  type: DownloadClientType;
+  enabled: boolean;
+  host: string;
+  port: number;
+  useHttps: boolean;
+  username: string | null;
+  category: string | null;
+  priority: number;
+  isDefault: boolean;
+  credentialConfigured: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveDownloadClientRequest {
+  name: string;
+  type: DownloadClientType;
+  enabled: boolean;
+  host: string;
+  port: number;
+  useHttps: boolean;
+  username?: string | null;
+  credential?: string | null;
+  category?: string | null;
+  priority: number;
+  isDefault: boolean;
+}
+
+export interface DownloadClientTestResultDTO {
+  ok: boolean;
+  clientName: string;
+  version: string | null;
+  message: string;
+}
+
+export type QualityRuleKind = 'REQUIRED' | 'PREFERRED' | 'REJECTED';
+
+export interface QualityRuleDTO {
+  id: string;
+  attribute: string;
+  kind: QualityRuleKind;
+  score: number;
+}
+
+export interface QualityProfileDTO {
+  id: string;
+  name: string;
+  enabled: boolean;
+  allowedResolutions: string[];
+  sourceTypes: string[];
+  videoCodecs: string[];
+  hdrFormats: string[];
+  audioFormats: string[];
+  audioChannels: string[];
+  languages: string[];
+  releaseGroups: string[];
+  minimumSizeMb: number | null;
+  maximumSizeMb: number | null;
+  rules: QualityRuleDTO[];
+  upgradeCutoffScore: number;
+  minimumScoreImprovement: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SaveQualityProfileRequest = Omit<QualityProfileDTO, 'id' | 'createdAt' | 'updatedAt'>;
+
+export interface ParsedReleaseDTO {
+  title: string;
+  resolution: string | null;
+  source: string | null;
+  codec: string | null;
+  hdr: string[];
+  audio: string[];
+  audioChannels: string | null;
+  languages: string[];
+  releaseGroup: string | null;
+  sizeMb: number | null;
+  attributes: string[];
+}
+
+export interface MatchedQualityRuleDTO extends QualityRuleDTO {
+  matched: boolean;
+  contribution: number;
+}
+
+export interface ReleaseScoreDTO {
+  parsed: ParsedReleaseDTO;
+  accepted: boolean;
+  totalScore: number;
+  matchedRules: MatchedQualityRuleDTO[];
+  rejectionReasons: string[];
+}
+
+export interface TestReleaseRequest {
+  title: string;
+  sizeMb?: number | null;
+}
+
+export interface ReleaseCandidateRequest extends TestReleaseRequest {
+  id: string;
+}
+
+export interface SelectReleaseRequest {
+  candidates: ReleaseCandidateRequest[];
+  currentScore?: number | null;
+}
+
+export interface ReleaseSelectionDTO {
+  selected: (ReleaseCandidateRequest & { result: ReleaseScoreDTO }) | null;
+  evaluated: (ReleaseCandidateRequest & { result: ReleaseScoreDTO })[];
+  upgradeAllowed: boolean;
+  reason: string;
+}
+
+export interface QueueUsenetReleaseRequest {
+  candidates: (ReleaseCandidateRequest & { nzbUrl: string })[];
+  currentScore?: number | null;
+  downloadClientId?: string | null;
+}
+
+export interface QueuedUsenetReleaseDTO {
+  clientId: string;
+  clientName: string;
+  jobId: string;
+  release: {
+    id: string;
+    title: string;
+    sizeMb: number | null;
+    score: number;
+  };
 }
 
 // ─── Errors ───────────────────────────────────────────────────────────────────

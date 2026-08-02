@@ -8,6 +8,8 @@ export interface NativeCastState {
   available: boolean;
   connected: boolean;
   mediaLoaded: boolean;
+  mediaItemId: string | null;
+  episodeId: string | null;
   playerState: NativeCastPlayerState;
   currentTimeSeconds: number;
   durationSeconds: number;
@@ -30,6 +32,7 @@ declare global {
       setAutomaticUpdates?: (enabled: boolean) => void;
       clearUpdateDownloads?: () => void;
       setPlaybackContext?: (payload: string) => void;
+      loadCastMedia?: (payload: string) => void;
       getCastState?: () => string;
       castPlay?: () => void;
       castPause?: () => void;
@@ -45,6 +48,8 @@ const EMPTY_STATE: NativeCastState = {
   available: false,
   connected: false,
   mediaLoaded: false,
+  mediaItemId: null,
+  episodeId: null,
   playerState: 'UNKNOWN',
   currentTimeSeconds: 0,
   durationSeconds: 0,
@@ -58,6 +63,38 @@ const EMPTY_STATE: NativeCastState = {
 
 function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function nullableString(value: unknown, fallback: string | null): string | null {
+  if (typeof value === 'string') return value;
+  return value === null ? null : fallback;
+}
+
+export function isCurrentCastMedia(
+  state: Pick<NativeCastState, 'connected' | 'mediaLoaded' | 'mediaItemId' | 'episodeId'>,
+  mediaItemId: string,
+  episodeId?: string,
+): boolean {
+  if (!state.connected || !state.mediaLoaded) return false;
+  // Receiver sessions created by an older Android build do not include media
+  // identity. Keep those sessions controllable until the next media load.
+  if (state.mediaItemId === null) return true;
+  return state.mediaItemId === mediaItemId
+    && state.episodeId === (episodeId ?? null);
+}
+
+export function isCastSessionActive(
+  state: Pick<NativeCastState, 'connected'>,
+): boolean {
+  return state.connected;
+}
+
+export function shouldAutoplayLocalMedia(
+  autoplayEnabled: boolean,
+  castStateReady: boolean,
+  castConnected: boolean,
+): boolean {
+  return autoplayEnabled && castStateReady && !castConnected;
 }
 
 function normalizeState(value: unknown, current: NativeCastState): NativeCastState {
@@ -78,6 +115,8 @@ function normalizeState(value: unknown, current: NativeCastState): NativeCastSta
     available: current.available,
     connected,
     mediaLoaded: typeof input.mediaLoaded === 'boolean' ? input.mediaLoaded : connected && (eventState === 'media-loaded' || eventState === 'playback' || current.mediaLoaded),
+    mediaItemId: nullableString(input.mediaItemId, current.mediaItemId),
+    episodeId: nullableString(input.episodeId, current.episodeId),
     playerState,
     currentTimeSeconds: Math.max(0, finiteNumber(input.currentTimeSeconds, current.currentTimeSeconds)),
     durationSeconds: Math.max(0, finiteNumber(input.durationSeconds, current.durationSeconds)),
@@ -92,6 +131,7 @@ function normalizeState(value: unknown, current: NativeCastState): NativeCastSta
 
 export function useNativeCast() {
   const [state, setState] = useState<NativeCastState>(EMPTY_STATE);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const bridge = window.FluxNative;
@@ -105,6 +145,7 @@ export function useNativeCast() {
         // A later native status event will hydrate the state.
       }
     }
+    setReady(true);
 
     const onState = (event: Event) => {
       const detail = (event as CustomEvent<unknown>).detail;
@@ -115,6 +156,21 @@ export function useNativeCast() {
   }, []);
 
   const request = useCallback(() => window.FluxNative?.requestCast?.(), []);
+  const loadMedia = useCallback((mediaItemId: string, episodeId?: string, positionSeconds = 0) => {
+    const bridge = window.FluxNative;
+    const payload = JSON.stringify({
+      mediaItemId,
+      episodeId: episodeId ?? null,
+      currentTimeSeconds: Math.max(0, Number.isFinite(positionSeconds) ? positionSeconds : 0),
+    });
+    if (bridge?.loadCastMedia) {
+      bridge.loadCastMedia(payload);
+      return;
+    }
+    // Compatibility with Android builds from before the atomic load bridge.
+    bridge?.setPlaybackContext?.(payload);
+    bridge?.requestCast?.();
+  }, []);
   const play = useCallback(() => window.FluxNative?.castPlay?.(), []);
   const pause = useCallback(() => window.FluxNative?.castPause?.(), []);
   const seek = useCallback((positionSeconds: number) => window.FluxNative?.castSeek?.(Math.max(0, positionSeconds)), []);
@@ -122,5 +178,5 @@ export function useNativeCast() {
   const toggleMute = useCallback(() => window.FluxNative?.castToggleMute?.(), []);
   const disconnect = useCallback(() => window.FluxNative?.disconnectCast?.(), []);
 
-  return { state, request, play, pause, seek, setVolume, toggleMute, disconnect };
+  return { state, ready, request, loadMedia, play, pause, seek, setVolume, toggleMute, disconnect };
 }

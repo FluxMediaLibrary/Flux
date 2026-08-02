@@ -1,20 +1,17 @@
 ﻿{
-    "versionCode":  10,
-    "versionName":  "1.1.5",
+    "versionCode":  12,
+    "versionName":  "1.1.7",
     "minimumSupportedVersionCode":  4,
     "mandatory":  false,
-    "releaseDate":  "2026-08-01T07:36:23.8018874Z",
+    "releaseDate":  "2026-08-01T21:30:52.0383144Z",
     "url":  "/flux.apk",
     "apkUrl":  "/flux.apk",
-    "sha256":  "0a273913c212172bfe9a58aa1972266fa9cdb95dc8f1647e06e43bee6c3054dd",
-    "fileSize":  4925057,
+    "sha256":  "f71b40a17c439efda140808c090ff517db007e1bc95fbdb1325539ae9eab44e2",
+    "fileSize":  4925953,
     "releaseNotes":  [
-                         "Turned the Flux player into a live TV remote while casting",
-                         "Added Cast play, pause, timeline seeking, volume, and Skip Intro controls",
-                         "Added an Admin Intros queue with live progress, logs, results, and scan history",
-                         "Fixed repeat intro scans being swallowed by completed queue jobs",
-                         "Fixed Chromaprint scans failing at the exact end of the fingerprint window",
-                         "Fixed intro matching across codec and encode variations"
+                         "Fixed Cast playback stalling when the TV caught the live transcode edge",
+                         "Reduced Cast transcoding to one receiver-optimized rendition with a larger startup buffer",
+                         "Added automatic recovery that resumes HLS playback when the receiver remains stuck buffering"
                      ],
     "notes":  "Latest Flux app build."
 }

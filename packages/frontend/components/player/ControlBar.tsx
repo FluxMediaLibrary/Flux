@@ -32,6 +32,7 @@ interface ControlBarProps {
   onAudioStreamChange: (streamIndex: number | null) => void;
   playbackMethod: 'direct' | 'hls';
   castState?: NativeCastState;
+  castTransitioning?: boolean;
   onCastRequest?: () => void;
   onCastSetVolume?: (volume: number) => void;
   onCastToggleMute?: () => void;
@@ -59,6 +60,7 @@ export function ControlBar({
   onAudioStreamChange,
   playbackMethod,
   castState,
+  castTransitioning = false,
   onCastRequest,
   onCastSetVolume,
   onCastToggleMute,
@@ -73,8 +75,8 @@ export function ControlBar({
   const canPictureInPicture = useMediaState('canPictureInPicture');
   const pictureInPicture = useMediaState('pictureInPicture');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const remoteActive = Boolean(castState?.connected && castState.mediaLoaded);
-  const paused = remoteActive ? castState?.playerState !== 'PLAYING' : localPaused;
+  const remoteActive = Boolean(castState?.connected);
+  const paused = remoteActive ? castTransitioning || castState?.playerState !== 'PLAYING' : localPaused;
   const muted = remoteActive ? Boolean(castState?.muted) : localMuted;
   const volume = remoteActive ? castState?.volume ?? 1 : localVolume;
   const displayDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
@@ -84,7 +86,9 @@ export function ControlBar({
     : typeof duration === 'number' && Number.isFinite(duration) && duration > 0
       ? duration
       : 0;
-  const displayCurrentTime = remoteActive && castState
+  const displayCurrentTime = remoteActive && castTransitioning
+    ? 0
+    : remoteActive && castState
     ? castState.currentTimeSeconds
     : positionOffset + (Number.isFinite(currentTime) ? currentTime : 0);
 
@@ -124,6 +128,7 @@ export function ControlBar({
         <button
           className="fx-btn fx-btn--primary"
           type="button"
+          disabled={castTransitioning}
           onClick={(event) => {
             event.stopPropagation();
             onTogglePlayback(event.nativeEvent);
@@ -133,15 +138,15 @@ export function ControlBar({
           {paused ? <PlayIcon /> : <PauseIcon />}
         </button>
 
-        <button className="fx-btn" type="button" onClick={(event) => seekBy(-10, event.nativeEvent)} aria-label="Back 10 seconds">
+        <button className="fx-btn" type="button" disabled={castTransitioning} onClick={(event) => seekBy(-10, event.nativeEvent)} aria-label="Back 10 seconds">
           <SkipBackIcon />
         </button>
-        <button className="fx-btn" type="button" onClick={(event) => seekBy(10, event.nativeEvent)} aria-label="Forward 10 seconds">
+        <button className="fx-btn" type="button" disabled={castTransitioning} onClick={(event) => seekBy(10, event.nativeEvent)} aria-label="Forward 10 seconds">
           <SkipForwardIcon />
         </button>
 
         <div className="fx-vol">
-          <button className="fx-btn" type="button" onClick={() => remoteActive ? onCastToggleMute?.() : remote.toggleMuted()} aria-label={muted ? 'Unmute' : 'Mute'}>
+          <button className="fx-btn" type="button" disabled={castTransitioning} onClick={() => remoteActive ? onCastToggleMute?.() : remote.toggleMuted()} aria-label={muted ? 'Unmute' : 'Mute'}>
             {muted || displayVolume === 0 ? <MuteIcon /> : <VolumeIcon />}
           </button>
           <input
@@ -151,6 +156,7 @@ export function ControlBar({
             max={1}
             step={0.01}
             value={displayVolume}
+            disabled={castTransitioning}
             onChange={(event) => changeVolume(Number(event.currentTarget.value))}
             aria-label="Volume"
           />

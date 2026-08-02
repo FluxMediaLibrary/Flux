@@ -23,7 +23,8 @@ import type { Prisma, RequestStatus } from '@prisma/client';
 import type { Job } from 'bullmq';
 
 // Transmission engine
-import { getTorrentFiles } from '../../lib/webtorrent.js';
+import { getTorrentFiles, removeTorrent } from '../../lib/webtorrent.js';
+import { getServerSettings } from '../settings/settings.service.js';
 
 interface FileMappingEntry {
   path: string;
@@ -264,12 +265,20 @@ export async function processTorrentPostprocess(
       }
     }
 
-    // 10. Update Torrent → SEEDING
+    const downloadSettings = await getServerSettings();
+    const moveImport = downloadSettings.completedImportBehavior === 'MOVE';
+    if (moveImport) {
+      // Library copies are complete at this point. Removing local data affects
+      // only the download client payload, never the managed library files.
+      await removeTorrent(infoHash, true);
+    }
+
+    // 10. COPY imports continue seeding; MOVE imports leave the client clean.
     await prisma.torrent.update({
       where: { id: torrentId },
       data: {
-        status: 'SEEDING',
-        seedingSince: new Date(),
+        status: moveImport ? 'STOPPED' : 'SEEDING',
+        seedingSince: moveImport ? null : new Date(),
         mediaItemId,
       },
     });

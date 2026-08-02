@@ -24,6 +24,7 @@ import { adminRoutes } from './modules/admin/admin.routes.js';
 import { castRoutes } from './modules/cast/cast.routes.js';
 import { appRoutes } from './modules/app/app.routes.js';
 import { clientRoutes } from './modules/client/client.routes.js';
+import { settingsRoutes } from './modules/settings/settings.routes.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -67,6 +68,7 @@ export async function buildServer(): Promise<FastifyInstance> {
       await api.register(castRoutes, { prefix: '/cast' });
       await api.register(appRoutes, { prefix: '/app' });
       await api.register(notificationRoutes, { prefix: '/notifications' });
+      await api.register(settingsRoutes, { prefix: '/settings' });
       await api.register(adminRoutes, { prefix: '/admin' });
     },
     { prefix: '/api' },

@@ -35,6 +35,20 @@ import type {
   MediaSegmentDTO,
   MediaType,
   NotificationSettingsDTO,
+  SettingsBundleDTO,
+  UpdateSettingsBundleRequest,
+  SettingsTestResultDTO,
+  DownloadClientDTO,
+  DownloadClientTestResultDTO,
+  SaveDownloadClientRequest,
+  QualityProfileDTO,
+  QueuedUsenetReleaseDTO,
+  QueueUsenetReleaseRequest,
+  SaveQualityProfileRequest,
+  ReleaseScoreDTO,
+  ReleaseSelectionDTO,
+  SelectReleaseRequest,
+  TestReleaseRequest,
   PlaybackInfoDTO,
   TmdbDetail,
   TmdbEpisode,
@@ -487,6 +501,56 @@ export const api = {
   },
   updateNotificationSettings(body: UpdateNotificationSettingsRequest) {
     return request<NotificationSettingsDTO>('/api/notifications/settings', { method: 'PUT', body });
+  },
+  testDiscordNotification() {
+    return request<SettingsTestResultDTO>('/api/notifications/test-discord', { method: 'POST' });
+  },
+  testEmailNotification() {
+    return request<SettingsTestResultDTO>('/api/notifications/test-email', { method: 'POST' });
+  },
+
+  // Unified settings (admin)
+  getSettings() {
+    return request<SettingsBundleDTO>('/api/settings');
+  },
+  updateSettings(body: UpdateSettingsBundleRequest) {
+    return request<SettingsBundleDTO>('/api/settings', { method: 'PUT', body });
+  },
+  listDownloadClients() {
+    return request<DownloadClientDTO[]>('/api/settings/download-clients');
+  },
+  createDownloadClient(body: SaveDownloadClientRequest) {
+    return request<DownloadClientDTO>('/api/settings/download-clients', { method: 'POST', body });
+  },
+  updateDownloadClient(id: string, body: SaveDownloadClientRequest) {
+    return request<DownloadClientDTO>(`/api/settings/download-clients/${encodeURIComponent(id)}`, { method: 'PUT', body });
+  },
+  deleteDownloadClient(id: string) {
+    return request<{ ok: true }>(`/api/settings/download-clients/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+  testDownloadClient(id: string) {
+    return request<DownloadClientTestResultDTO>(`/api/settings/download-clients/${encodeURIComponent(id)}/test`, { method: 'POST' });
+  },
+  listQualityProfiles() {
+    return request<QualityProfileDTO[]>('/api/settings/quality-profiles');
+  },
+  createQualityProfile(body: SaveQualityProfileRequest) {
+    return request<QualityProfileDTO>('/api/settings/quality-profiles', { method: 'POST', body });
+  },
+  updateQualityProfile(id: string, body: SaveQualityProfileRequest) {
+    return request<QualityProfileDTO>(`/api/settings/quality-profiles/${encodeURIComponent(id)}`, { method: 'PUT', body });
+  },
+  deleteQualityProfile(id: string) {
+    return request<{ ok: true }>(`/api/settings/quality-profiles/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+  testRelease(profileId: string, body: TestReleaseRequest) {
+    return request<ReleaseScoreDTO>(`/api/settings/quality-profiles/${encodeURIComponent(profileId)}/test-release`, { method: 'POST', body });
+  },
+  selectRelease(profileId: string, body: SelectReleaseRequest) {
+    return request<ReleaseSelectionDTO>(`/api/settings/quality-profiles/${encodeURIComponent(profileId)}/select-release`, { method: 'POST', body });
+  },
+  queueUsenetRelease(profileId: string, body: QueueUsenetReleaseRequest) {
+    return request<QueuedUsenetReleaseDTO>(`/api/settings/quality-profiles/${encodeURIComponent(profileId)}/queue-usenet-release`, { method: 'POST', body });
   },
 
   // Admin dashboard

@@ -361,6 +361,17 @@ NotificationSettings (singleton)
 | `WatchProgress` | Per-profile save state (position, duration, completed) |
 | `NotificationSettings` | Singleton for Discord/SMTP config |
 
+## Desktop app
+
+The Windows, macOS, and Linux desktop clients connect to any self-hosted Flux URL, store that server choice locally, and render the deployment's real frontend in a sandboxed Electron window. They add automatic GitHub Release updates where the unsigned platform permits them, Discord Rich Presence for active playback, a native update command, and an accessible change-server flow. Desktop releases use `pc-v<version>` tags so they stay separate from Android releases.
+
+```bash
+npm run dev:desktop
+npm run dist:desktop
+```
+
+See [apps/desktop/README.md](apps/desktop/README.md) for Discord application setup, GitHub Release packaging, update behavior, and the desktop security boundary.
+
 ## Development
 
 ```bash
@@ -414,6 +425,8 @@ flux/
 | `npm run dev` | Full Docker Compose stack |
 | `npm run dev:backend` | Backend with hot reload |
 | `npm run dev:frontend` | Frontend with hot reload |
+| `npm run dev:desktop` | Electron desktop client |
+| `npm run dist:desktop` | Package the Windows desktop installer |
 | `npm run build` | Build all workspaces |
 | `npm run typecheck` | Type-check all workspaces |
 | `npm run lint` | Lint all workspaces |

@@ -52,11 +52,13 @@ function toDTO(
 ): NotificationSettingsDTO {
   return {
     discordEnabled: row.discordEnabled,
-    discordWebhookUrl: row.discordWebhookUrl,
+    discordWebhookUrl: null,
+    discordWebhookConfigured: Boolean(row.discordWebhookUrl),
     smtpEnabled: row.smtpEnabled,
     smtpHost: row.smtpHost,
     smtpPort: row.smtpPort,
     smtpUsername: row.smtpUsername,
     smtpFromAddress: row.smtpFromAddress,
+    smtpPasswordConfigured: Boolean(row.smtpPassword),
   };
 }

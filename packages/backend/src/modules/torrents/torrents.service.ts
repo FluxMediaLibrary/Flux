@@ -3,7 +3,7 @@
  * seeding stop, and removal. Admin-only at the route layer.
  */
 import { Buffer } from 'node:buffer';
-import { readFile } from 'node:fs/promises';
+import { readFile, statfs } from 'node:fs/promises';
 import type {
   TorrentDTO,
   TorrentFileGuess,
@@ -13,6 +13,7 @@ import type { MediaType } from '@flux/shared';
 import type { Request, Torrent } from '@prisma/client';
 import parseTorrent from 'parse-torrent';
 import { prisma } from '../../lib/db.js';
+import { getServerSettings } from '../settings/settings.service.js';
 import { ApiError } from '../../lib/errors.js';
 import {
   guessFromTorrentName,
@@ -33,9 +34,48 @@ import type { ConfirmTorrentInput } from './torrents.schema.js';
 import { torrentPostprocessQueue } from '../../jobs/queues.js';
 import { torrentFilePath } from '../../lib/media-paths.js';
 import { getSeasonEpisodes as getTmdbSeasonEpisodes } from '../tmdb/tmdb.service.js';
+import { config } from '../../config.js';
 
 // Track torrents already enqueued for postprocessing (prevents duplicates)
 const postprocessEnqueued = new Set<string>();
+const RETRY_DELAYS_MS = [60_000, 5 * 60_000, 15 * 60_000] as const;
+
+async function scheduleTorrentRetry(id: string, error: unknown): Promise<void> {
+  const row = await prisma.torrent.findUnique({ where: { id }, select: { retryCount: true } });
+  if (!row) return;
+  const nextCount = row.retryCount + 1;
+  const delay = RETRY_DELAYS_MS[Math.min(nextCount - 1, RETRY_DELAYS_MS.length - 1)]!;
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  await prisma.torrent.update({
+    where: { id },
+    data: {
+      status: 'ERROR',
+      errorMessage: errorMessage || 'Failed to start torrent download.',
+      retryCount: { increment: 1 },
+      nextRetryAt: nextCount <= RETRY_DELAYS_MS.length ? new Date(Date.now() + delay) : null,
+    },
+  });
+}
+
+async function ensureMinimumFreeSpace(): Promise<void> {
+  const settings = await getServerSettings();
+  if (settings.minimumFreeSpaceGb <= 0) return;
+  try {
+    const disk = await statfs(config.DOWNLOAD_ROOT);
+    const freeBytes = Number(disk.bavail) * Number(disk.bsize);
+    const requiredBytes = settings.minimumFreeSpaceGb * 1024 ** 3;
+    if (freeBytes < requiredBytes) {
+      throw ApiError.badRequest(
+        `Download storage has less than the configured ${settings.minimumFreeSpaceGb} GB free`,
+        'DOWNLOAD_FREE_SPACE_LOW',
+      );
+    }
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    // Existing deployments may create the mounted download root lazily. The
+    // download client remains authoritative when the filesystem cannot be read.
+  }
+}
 
 /**
  * Enqueue a finished download's post-process job exactly once. Gates on
@@ -573,6 +613,37 @@ export async function stopTorrent(id: string): Promise<TorrentDTO> {
   return mapTorrentToDTO(updated);
 }
 
+/** Apply the configured seeding thresholds without ever deleting library files. */
+export async function enforceTorrentSeedingPolicy(): Promise<number> {
+  const settings = await getServerSettings();
+  if (settings.torrentSeedRatio === null && settings.torrentSeedTimeMinutes === null) return 0;
+  const torrents = await prisma.torrent.findMany({ where: { status: 'SEEDING' }, orderBy: { id: 'asc' } });
+  let stopped = 0;
+  for (const torrent of torrents) {
+    const live = await getLiveStats(torrent.infoHash);
+    if (!live) continue;
+    const thresholds = [
+      settings.torrentSeedRatio !== null ? live.ratio >= settings.torrentSeedRatio : null,
+      settings.torrentSeedTimeMinutes !== null && torrent.seedingSince
+        ? Date.now() - torrent.seedingSince.getTime() >= settings.torrentSeedTimeMinutes * 60_000
+        : settings.torrentSeedTimeMinutes === null ? null : false,
+    ].filter((value): value is boolean => value !== null);
+    if (thresholds.length === 0 || !thresholds.every(Boolean)) continue;
+
+    if (settings.torrentRemoveAfterSeeding) await removeTorrent(torrent.infoHash, false);
+    else await stopSeeding(torrent.infoHash);
+    await prisma.torrent.update({
+      where: { id: torrent.id },
+      data: {
+        status: 'STOPPED', seedingSince: null, ratio: live.ratio,
+        uploadedBytes: BigInt(live.uploaded), uploadSpeed: live.uploadSpeed,
+      },
+    });
+    stopped++;
+  }
+  return stopped;
+}
+
 export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
   const row = await prisma.torrent.findUnique({
     where: { id },
@@ -611,6 +682,7 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
   let added: AddTorrentResult;
   try {
     const dataCheck = await detectExistingData(buffer);
+    if (!dataCheck.complete) await ensureMinimumFreeSpace();
     added = await addTorrent(buffer, {
       verifyExisting: dataCheck.filesOnDisk > 0,
     });
@@ -619,13 +691,7 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await prisma.torrent.update({
-      where: { id },
-      data: {
-        status: 'ERROR',
-        errorMessage: message,
-      },
-    });
+    await scheduleTorrentRetry(id, err);
     throw ApiError.badRequest(`Failed to restart torrent: ${message}`, 'TORRENT_RETRY_FAILED');
   }
 
@@ -647,6 +713,8 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
     data: {
       status: seeded ? 'SEEDING' : 'DOWNLOADING',
       errorMessage: null,
+      retryCount: 0,
+      nextRetryAt: null,
       progress: live?.progress ?? 0,
       downloadSpeed: live?.downloadSpeed ?? 0,
       uploadSpeed: live?.uploadSpeed ?? 0,
@@ -679,14 +747,31 @@ export async function markTorrentStartFailed(
   id: string,
   error: unknown,
 ): Promise<void> {
-  const message = error instanceof Error ? error.message : String(error);
-  await prisma.torrent.update({
-    where: { id },
-    data: {
+  await scheduleTorrentRetry(id, error);
+}
+
+export async function retryFailedTorrents(): Promise<number> {
+  if (!(await getServerSettings()).retryFailedDownloads) return 0;
+  const rows = await prisma.torrent.findMany({
+    where: {
       status: 'ERROR',
-      errorMessage: message || 'Failed to start torrent download.',
+      nextRetryAt: { lte: new Date() },
+      retryCount: { lte: RETRY_DELAYS_MS.length },
     },
+    orderBy: [{ nextRetryAt: 'asc' }, { id: 'asc' }],
+    take: 10,
+    select: { id: true },
   });
+  let restarted = 0;
+  for (const row of rows) {
+    try {
+      await retryTorrentDownload(row.id);
+      restarted++;
+    } catch {
+      // retryTorrentDownload records the error and schedules the next attempt.
+    }
+  }
+  return restarted;
 }
 
 /** Remove a torrent and optionally delete its files. */
@@ -729,6 +814,7 @@ export async function startDownloading(
   }
 
   const dataCheck = await detectExistingData(buffer);
+  if (!dataCheck.complete) await ensureMinimumFreeSpace();
   const added = await addTorrent(buffer, {
     verifyExisting: dataCheck.filesOnDisk > 0,
   });
@@ -746,6 +832,8 @@ export async function startDownloading(
     data: {
       status: seeded ? 'SEEDING' : 'DOWNLOADING',
       errorMessage: null,
+      retryCount: 0,
+      nextRetryAt: null,
       progress: live?.progress ?? 0,
       downloadSpeed: live?.downloadSpeed ?? 0,
       uploadSpeed: live?.uploadSpeed ?? 0,

@@ -291,6 +291,8 @@ model Torrent {
   // confirmed per-file episode mapping for season packs (Json array)
   fileMapping Json?
   errorMessage String?
+  retryCount   Int       @default(0)
+  nextRetryAt  DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -378,4 +380,100 @@ model NotificationSettings {
   updatedAt         DateTime @updatedAt @default(now())
 
   @@map("notification_settings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Server settings, download clients, and release quality profiles
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ServerSettings {
+  id          String  @id @default("singleton")
+  serverName  String
+  frontendUrl String
+  apiUrl      String?
+  timezone    String  @default("UTC")
+  language    String  @default("en")
+
+  defaultInviteExpiryHours Int @default(72)
+
+  automatedDownloads        Boolean @default(false)
+  preferredProtocol         String  @default("TORRENT_ONLY")
+  defaultDownloadClientId   String?
+  defaultQualityProfileId   String?
+  automaticSearch           Boolean @default(false)
+  automaticUpgrades         Boolean @default(false)
+  retryFailedDownloads      Boolean @default(true)
+  minimumFreeSpaceGb        Int     @default(10)
+  completedImportBehavior   String  @default("COPY")
+  torrentSeedRatio          Float?
+  torrentSeedTimeMinutes    Int?
+  torrentRemoveAfterSeeding Boolean @default(false)
+  usenetRemoveCompleted     Boolean @default(true)
+  usenetRemoveFailed        Boolean @default(false)
+
+  directPlayEnabled         Boolean @default(true)
+  directStreamEnabled       Boolean @default(true)
+  transcodingEnabled        Boolean @default(true)
+  localBitrateLimitMbps     Int?
+  remoteBitrateLimitMbps    Int?
+  hardwareAcceleration      String  @default("NONE")
+  preferredAudioLanguage    String?
+  preferredSubtitleLanguage String?
+  subtitlesMode             String  @default("FOREIGN_ONLY")
+  autoplayEnabled           Boolean @default(true)
+  resumeBehavior            String  @default("ASK")
+  skipIntroEnabled          Boolean @default(true)
+
+  tmdbApiKey String?
+
+  downloadClientsSeeded  Boolean @default(false)
+  qualityProfilesSeeded  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("server_settings")
+}
+
+model DownloadClient {
+  id         String   @id @default(cuid())
+  name       String
+  type       String
+  enabled    Boolean  @default(true)
+  host       String
+  port       Int
+  useHttps   Boolean  @default(false)
+  username   String?
+  credential String?
+  category   String?
+  priority   Int      @default(0)
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([enabled, priority])
+  @@map("download_clients")
+}
+
+model QualityProfile {
+  id                      String   @id @default(cuid())
+  name                    String
+  enabled                 Boolean  @default(true)
+  allowedResolutions      String[]
+  sourceTypes             String[]
+  videoCodecs             String[]
+  hdrFormats              String[]
+  audioFormats            String[]
+  audioChannels           String[]
+  languages               String[]
+  releaseGroups           String[]
+  minimumSizeMb           Int?
+  maximumSizeMb           Int?
+  rules                   Json
+  upgradeCutoffScore      Int      @default(100)
+  minimumScoreImprovement Int      @default(10)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@map("quality_profiles")
 }

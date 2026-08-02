@@ -1,0 +1,94 @@
+name: Publish Desktop App
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing pc-v GitHub Release tag to build for
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }} desktop release
+    if: startsWith(github.event.release.tag_name || inputs.tag, 'pc-v')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            platform: win
+            asset_pattern: 'latest.yml|\.(exe|blockmap)$'
+          - name: macOS
+            os: macos-latest
+            platform: mac
+            asset_pattern: 'latest-mac.yml|\.(dmg|zip|blockmap)$'
+          - name: Linux
+            os: ubuntu-latest
+            platform: linux
+            asset_pattern: 'latest-linux.*\.yml|\.(AppImage|deb|rpm|blockmap)$'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FLUX_DISCORD_CLIENT_ID: ${{ vars.FLUX_DISCORD_CLIENT_ID }}
+      CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Match desktop version to release tag
+        shell: bash
+        run: |
+          version="${RELEASE_TAG#pc-v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must be pc-v followed by a semantic version, such as pc-v1.2.3." >&2
+            exit 1
+          fi
+          npm version "$version" --workspace @flux/desktop --no-git-tag-version
+
+      - name: Test desktop package
+        run: npm test --workspace @flux/desktop
+
+      - name: Build desktop packages and update metadata
+        run: npm run dist --workspace @flux/desktop -- --${{ matrix.platform }}
+
+      - name: Upload desktop assets to GitHub Release
+        shell: pwsh
+        env:
+          ASSET_PATTERN: ${{ matrix.asset_pattern }}
+        run: |
+          $assets = Get-ChildItem apps/desktop/release -File |
+            Where-Object { $_.Name -match $env:ASSET_PATTERN } |
+            Select-Object -ExpandProperty FullName
+          if (-not $assets) { throw "No ${{ matrix.name }} desktop release assets were produced." }
+          gh release upload $env:RELEASE_TAG @assets --clobber

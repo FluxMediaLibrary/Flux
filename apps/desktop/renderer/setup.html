@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self';" />
+    <title>Connect Flux</title>
+    <style>
+      :root { color-scheme: dark; --ink: #f7f3eb; --muted: #99958d; --line: #292720; --ember: #e6a84a; --ember-hot: #f2bd68; --bg: #080b0d; }
+      * { box-sizing: border-box; }
+      html, body { min-height: 100%; margin: 0; }
+      body { background: var(--bg); color: var(--ink); font-family: Georgia, 'Times New Roman', serif; overflow: hidden; }
+      body::before { content: ''; position: fixed; inset: 0; pointer-events: none; opacity: .18; background-image: radial-gradient(circle at 1px 1px, #6b6458 1px, transparent 0); background-size: 24px 24px; mask-image: linear-gradient(to bottom, #000, transparent 75%); }
+      main { min-height: 100vh; display: grid; grid-template-columns: minmax(300px, .85fr) minmax(520px, 1.15fr); position: relative; }
+      .brand { min-height: 100vh; padding: clamp(42px, 7vw, 96px); display: flex; flex-direction: column; justify-content: space-between; border-right: 1px solid var(--line); }
+      .mark { display: flex; align-items: center; gap: 14px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 800; letter-spacing: .22em; text-transform: uppercase; }
+      .mark i { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; background: var(--ember); color: #17120b; font-style: normal; font-size: 22px; }
+      .brand-copy { max-width: 560px; }
+      .eyebrow { color: var(--ember); font: 700 11px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .2em; text-transform: uppercase; }
+      h1 { max-width: 620px; margin: 22px 0 20px; font-size: clamp(52px, 7vw, 102px); line-height: .88; letter-spacing: -.06em; font-weight: 500; }
+      .brand p { max-width: 460px; color: var(--muted); font: 400 16px/1.7 ui-sans-serif, system-ui, sans-serif; }
+      .version { color: #66635d; font: 600 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; }
+      .connect { padding: clamp(42px, 8vw, 120px); display: flex; align-items: center; }
+      form { width: min(600px, 100%); }
+      form h2 { margin: 0 0 12px; font-size: clamp(30px, 4vw, 48px); font-weight: 500; letter-spacing: -.035em; }
+      form > p { margin: 0 0 42px; color: var(--muted); font: 400 15px/1.65 ui-sans-serif, system-ui, sans-serif; }
+      label { display: block; margin-bottom: 10px; font: 700 11px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+      .input-row { display: grid; grid-template-columns: 1fr auto; border-bottom: 1px solid #555047; transition: border-color .18s ease; }
+      .input-row:focus-within { border-color: var(--ember); }
+      input { min-width: 0; border: 0; outline: 0; padding: 17px 4px; background: transparent; color: var(--ink); font: 500 18px/1.2 ui-sans-serif, system-ui, sans-serif; }
+      input::placeholder { color: #57534d; }
+      button { align-self: center; border: 1px solid #6d5938; border-radius: 4px; padding: 12px 18px; background: var(--ember); color: #17120b; cursor: pointer; font: 800 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .04em; }
+      button:hover { background: var(--ember-hot); }
+      button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+      button:disabled { opacity: .45; cursor: wait; }
+      #status { min-height: 24px; margin-top: 16px; color: #d97868; font: 500 13px/1.5 ui-sans-serif, system-ui, sans-serif; }
+      .hint { margin-top: 38px; padding-left: 16px; border-left: 2px solid var(--line); color: #77736c; font: 400 13px/1.6 ui-sans-serif, system-ui, sans-serif; }
+      @media (max-width: 900px) { body { overflow: auto; } main { grid-template-columns: 1fr; } .brand { min-height: auto; gap: 80px; border-right: 0; border-bottom: 1px solid var(--line); } .connect { min-height: 50vh; } h1 { font-size: 60px; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="brand">
+        <div class="mark"><i>F</i> Flux Desktop</div>
+        <div class="brand-copy">
+          <span class="eyebrow">Your library. Your server.</span>
+          <h1>Dim the lights.</h1>
+          <p>Connect the desktop player to the Flux instance you already run. Your account, profiles, requests, and library stay on your server.</p>
+        </div>
+        <span class="version" id="version">Desktop client</span>
+      </section>
+      <section class="connect">
+        <form id="server-form">
+          <h2>Where does Flux live?</h2>
+          <p>Enter the address you use to open Flux in a browser. HTTP is supported for local networks; HTTPS is recommended everywhere else.</p>
+          <label for="server-url">Flux server address</label>
+          <div class="input-row">
+            <input id="server-url" name="server-url" type="text" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://flux.example.com" required autofocus />
+            <button id="connect-button" type="submit">Connect</button>
+          </div>
+          <div id="status" role="status" aria-live="polite"></div>
+          <div class="hint">Flux checks the server before saving it. You can change this address later from the Flux application menu.</div>
+        </form>
+      </section>
+    </main>
+    <script src="./setup.js"></script>
+  </body>
+</html>

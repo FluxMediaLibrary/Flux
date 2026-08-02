@@ -10,6 +10,7 @@ import { torrentDownloadDir, torrentFilePath, safeJoin } from './media-paths.js'
 import { writeFile, mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import parseTorrent from 'parse-torrent';
+import { getActiveTransmissionConfig } from '../modules/settings/settings.service.js';
 
 let _sessionId: string | null = null;
 
@@ -33,11 +34,12 @@ export interface TorrentLiveStats {
 // ---------------------------------------------------------------------------
 
 async function rpc(method: string, args: Record<string, unknown> = {}): Promise<unknown> {
-  const auth = Buffer.from(`${config.TRANSMISSION_USER}:${config.TRANSMISSION_PASS}`).toString('base64');
+  const transmission = await getActiveTransmissionConfig();
+  const auth = Buffer.from(`${transmission.username}:${transmission.password}`).toString('base64');
 
   let res: Response;
   try {
-    res = await fetch(config.TRANSMISSION_RPC_URL, {
+    res = await fetch(transmission.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -48,18 +50,18 @@ async function rpc(method: string, args: Record<string, unknown> = {}): Promise<
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`Transmission RPC unavailable at ${config.TRANSMISSION_RPC_URL}: ${message}`);
+    throw new Error(`Transmission RPC unavailable: ${message}`);
   }
 
   if (res.status === 401 || res.status === 403) {
-    throw new Error(`Transmission RPC authentication failed at ${config.TRANSMISSION_RPC_URL}`);
+    throw new Error('Transmission RPC authentication failed');
   }
 
   if (res.status === 409) {
     _sessionId = res.headers.get('X-Transmission-Session-Id');
     if (!_sessionId) throw new Error('Transmission: no session ID in 409 response');
 
-    res = await fetch(config.TRANSMISSION_RPC_URL, {
+    res = await fetch(transmission.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -145,6 +147,7 @@ export async function checkTorrentClient(): Promise<{
   pexEnabled?: boolean;
   message?: string;
 }> {
+  const transmission = await getActiveTransmissionConfig();
   try {
     const session = (await rpc('session-get')) as {
       version?: string;
@@ -161,7 +164,7 @@ export async function checkTorrentClient(): Promise<{
     }
     return {
       ok: true,
-      url: config.TRANSMISSION_RPC_URL,
+      url: transmission.url,
       version: session.version,
       peerPort: session['peer-port'],
       peerPortOpen,
@@ -171,7 +174,7 @@ export async function checkTorrentClient(): Promise<{
   } catch (err) {
     return {
       ok: false,
-      url: config.TRANSMISSION_RPC_URL,
+      url: transmission.url,
       message: err instanceof Error ? err.message : String(err),
     };
   }

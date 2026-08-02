@@ -29,6 +29,7 @@ import type {
 } from '@flux/shared';
 import { prisma } from '../../lib/db.js';
 import { config } from '../../config.js';
+import { getTmdbApiKey } from '../settings/settings.service.js';
 import { ApiError } from '../../lib/errors.js';
 
 const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -180,7 +181,7 @@ async function tmdbFetch<T>(
   params: Record<string, string> = {},
 ): Promise<T> {
   const url = new URL(`${TMDB_BASE}${path}`);
-  url.searchParams.set('api_key', config.TMDB_API_KEY);
+  url.searchParams.set('api_key', await getTmdbApiKey());
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   const cacheKey = url.pathname + '?' + url.searchParams.toString();

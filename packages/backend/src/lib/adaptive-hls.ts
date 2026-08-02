@@ -35,9 +35,11 @@ const MAX_ADAPTIVE_VARIANTS = 2;
  * Filter quality tiers to those not exceeding source resolution.
  * Always includes at least the lowest tier (360p).
  */
-export function applicableTiers(sourceWidth: number, sourceHeight: number): QualityTier[] {
+export function applicableTiers(sourceWidth: number, sourceHeight: number, maxVideoBitrateKbps?: number | null): QualityTier[] {
   const tiers = QUALITY_TIERS.filter(
-    (tier) => tier.height <= sourceHeight && tier.height <= MAX_SOFTWARE_TRANSCODE_HEIGHT,
+    (tier) => tier.height <= sourceHeight
+      && tier.height <= MAX_SOFTWARE_TRANSCODE_HEIGHT
+      && (maxVideoBitrateKbps == null || tier.videoBitrate <= maxVideoBitrateKbps),
   ).slice(0, MAX_ADAPTIVE_VARIANTS);
 
   return tiers.length > 0 ? tiers : [QUALITY_TIERS[QUALITY_TIERS.length - 1]!];
@@ -69,13 +71,17 @@ export function buildAdaptiveHlsArgs(
   videoStreamIndex?: number,
   audioStreamIndex?: number,
   startTimeSeconds = 0,
+  maxVideoBitrateKbps?: number | null,
+  hardwareAcceleration = 'NONE',
 ): string[] {
-  const tiers = applicableTiers(sourceWidth ?? 1920, sourceHeight ?? 1080);
+  const tiers = applicableTiers(sourceWidth ?? 1920, sourceHeight ?? 1080, maxVideoBitrateKbps);
   const canCopy = sourceCodec === 'h264' && audioCodec === 'aac';
   const resetEncodedTimestamps = canCopy ? '' : ',setpts=PTS-STARTPTS';
   const videoMap = typeof videoStreamIndex === 'number' ? `0:${videoStreamIndex}` : '0:v:0';
   const hasAudio = typeof audioStreamIndex === 'number' && audioCodec !== null;
   const audioMap = hasAudio ? `0:${audioStreamIndex}` : null;
+  const useVaapi = hardwareAcceleration === 'VAAPI';
+  const hardwareFilter = useVaapi ? ',format=nv12,hwupload' : '';
 
   if (canCopy && tiers.length <= 1) {
     // Single-quality remux — simple case, no filter_complex needed.
@@ -108,17 +114,18 @@ export function buildAdaptiveHlsArgs(
   const filterParts: string[] = [];
   if (tiers.length === 1) {
     // Single tier — just copy, no split needed
-    filterParts.push(`[${videoMap}]scale=w=${tiers[0]!.width}:h=${tiers[0]!.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1${resetEncodedTimestamps}[v0out]`);
+    filterParts.push(`[${videoMap}]scale=w=${tiers[0]!.width}:h=${tiers[0]!.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1${resetEncodedTimestamps}${hardwareFilter}[v0out]`);
   } else {
     filterParts.push(`[${videoMap}]split=${tiers.length}${tiers.map((_, i) => `[v${i}]`).join('')}`);
     for (let i = 0; i < tiers.length; i++) {
       const t = tiers[i]!;
-      filterParts.push(`[v${i}]scale=w=${t.width}:h=${t.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1${resetEncodedTimestamps}[v${i}out]`);
+      filterParts.push(`[v${i}]scale=w=${t.width}:h=${t.height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1${resetEncodedTimestamps}${hardwareFilter}[v${i}out]`);
     }
   }
 
   const args: string[] = [
     '-fflags', '+genpts',
+    ...(useVaapi ? ['-vaapi_device', '/dev/dri/renderD128'] : []),
     ...(startTimeSeconds > 0 ? ['-ss', startTimeSeconds.toFixed(3)] : []),
     '-i', sourceFile,
     '-filter_complex', filterParts.join(';'),
@@ -127,12 +134,18 @@ export function buildAdaptiveHlsArgs(
   // Video maps + codecs
   for (let i = 0; i < tiers.length; i++) {
     const t = tiers[i]!;
+    const encoderArgs = hardwareAcceleration === 'NVENC'
+      ? ['-c:v:' + i, 'h264_nvenc', '-preset:v:' + i, 'p4', '-cq:v:' + i, '23']
+      : hardwareAcceleration === 'QSV'
+        ? ['-c:v:' + i, 'h264_qsv', '-preset:v:' + i, 'faster', '-global_quality:v:' + i, '23']
+        : hardwareAcceleration === 'VIDEOTOOLBOX'
+          ? ['-c:v:' + i, 'h264_videotoolbox', '-q:v:' + i, '65']
+          : hardwareAcceleration === 'VAAPI'
+            ? ['-c:v:' + i, 'h264_vaapi', '-qp:v:' + i, '23']
+            : ['-c:v:' + i, 'libx264', '-preset:v:' + i, 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
     args.push(
       '-map', `[v${i}out]`,
-      '-c:v:' + i, 'libx264',
-      '-preset:v:' + i, 'veryfast',
-      '-crf', '23',
-      '-pix_fmt', 'yuv420p',
+      ...encoderArgs,
       '-b:v:' + i, String(t.videoBitrate) + 'k',
       '-maxrate:v:' + i, String(t.maxrate) + 'k',
       '-bufsize:v:' + i, String(t.bufsize) + 'k',
@@ -184,6 +197,81 @@ export function buildAdaptiveHlsArgs(
   );
 
   return args;
+}
+
+/**
+ * Build the single-rendition HLS stream used by Cast receivers.
+ *
+ * A Chromecast only consumes one rendition at a time, while encoding two
+ * software renditions can make the receiver catch the encoder's live edge and
+ * stall indefinitely. Keep Cast to one bitrate-limited, at-most-1080p encode so
+ * segment production stays comfortably ahead of playback.
+ */
+export function buildCastHlsArgs(
+  sourceFile: string,
+  sessionDir: string,
+  sourceWidth: number | null,
+  sourceHeight: number | null,
+  videoStreamIndex?: number,
+  audioStreamIndex?: number,
+  startTimeSeconds = 0,
+  maxVideoBitrateKbps?: number | null,
+  hardwareAcceleration = 'NONE',
+): string[] {
+  const tier = applicableTiers(
+    sourceWidth ?? 1920,
+    sourceHeight ?? 1080,
+    maxVideoBitrateKbps,
+  )[0]!;
+  const videoMap = typeof videoStreamIndex === 'number' ? `0:${videoStreamIndex}` : '0:v:0';
+  const hasAudio = typeof audioStreamIndex === 'number';
+  const useVaapi = hardwareAcceleration === 'VAAPI';
+  const hardwareFilter = useVaapi ? ',format=nv12,hwupload' : '';
+  const videoFilter = [
+    `scale=w=${tier.width}:h=${tier.height}:force_original_aspect_ratio=decrease:force_divisible_by=2`,
+    'setsar=1',
+    'setpts=PTS-STARTPTS',
+  ].join(',') + hardwareFilter;
+  const encoderArgs = hardwareAcceleration === 'NVENC'
+    ? ['-c:v', 'h264_nvenc', '-preset', 'p4', '-cq', '23']
+    : hardwareAcceleration === 'QSV'
+      ? ['-c:v', 'h264_qsv', '-preset', 'faster', '-global_quality', '23']
+      : hardwareAcceleration === 'VIDEOTOOLBOX'
+        ? ['-c:v', 'h264_videotoolbox', '-q:v', '65']
+        : hardwareAcceleration === 'VAAPI'
+          ? ['-c:v', 'h264_vaapi', '-qp', '23']
+          : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'];
+
+  return [
+    '-fflags', '+genpts',
+    ...(useVaapi ? ['-vaapi_device', '/dev/dri/renderD128'] : []),
+    ...(startTimeSeconds > 0 ? ['-ss', startTimeSeconds.toFixed(3)] : []),
+    '-i', sourceFile,
+    '-map', videoMap,
+    ...(hasAudio ? ['-map', `0:${audioStreamIndex}`] : []),
+    '-sn', '-dn',
+    '-vf', videoFilter,
+    ...encoderArgs,
+    '-b:v', `${tier.videoBitrate}k`,
+    '-maxrate', `${tier.maxrate}k`,
+    '-bufsize', `${tier.bufsize}k`,
+    '-force_key_frames', 'expr:gte(t,n_forced*4)',
+    ...(hasAudio
+      ? ['-c:a', 'aac', '-b:a', `${tier.audioBitrate}k`, '-ac', '2', '-af', 'aresample=async=1:first_pts=0']
+      : []),
+    '-avoid_negative_ts', 'make_zero',
+    '-muxdelay', '0', '-muxpreload', '0',
+    '-max_muxing_queue_size', '1024',
+    '-f', 'hls',
+    '-hls_time', '4',
+    '-hls_list_size', '0',
+    '-hls_playlist_type', 'event',
+    '-hls_flags', 'independent_segments+temp_file',
+    '-hls_segment_type', 'mpegts',
+    '-start_number', '0',
+    '-hls_segment_filename', path.join(sessionDir, 'segment_%05d.ts'),
+    path.join(sessionDir, 'index.m3u8'),
+  ];
 }
 
 /**

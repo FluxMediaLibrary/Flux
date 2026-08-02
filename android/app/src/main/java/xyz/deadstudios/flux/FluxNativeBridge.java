@@ -31,6 +31,18 @@ final class FluxNativeBridge {
     }
 
     @JavascriptInterface
+    public void loadCastMedia(String json) {
+        main.post(() -> {
+            try {
+                activity.loadCastMediaFromWeb(NativePlaybackContext.fromJson(json));
+            } catch (Exception error) {
+                Log.w("FluxNativeBridge", "Rejected Cast media load", error);
+                activity.notifyCastError("The selected episode could not be sent to the TV");
+            }
+        });
+    }
+
+    @JavascriptInterface
     public String getCastState() {
         return activity.getCastStateJson();
     }

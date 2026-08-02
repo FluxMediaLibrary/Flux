@@ -5,6 +5,7 @@
  * so callers (e.g. postprocess.ts) don't need to wrap them in try/catch.
  */
 import { prisma } from '../../lib/db.js';
+import { deliverDiscord, deliverEmail } from './notifications.delivery.js';
 
 // ─── Public API ────────────────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ export async function notifyNewRequest(requestId: string): Promise<void> {
 
     // Discord
     if (settings.discordEnabled && settings.discordWebhookUrl) {
-      await sendDiscord(
+      await deliverDiscord(
         settings.discordWebhookUrl,
         `📥 **New request** — *${title}* by ${userEmail}`,
       );
@@ -46,14 +47,16 @@ export async function notifyNewRequest(requestId: string): Promise<void> {
 
     // SMTP
     if (settings.smtpEnabled && userEmail) {
-      await sendEmail({
+      await deliverEmail({
         to: userEmail,
         subject: `Request received: ${title}`,
         body: `Your request for "${title}" has been received and is pending approval.`,
       });
     }
-  } catch (err) {
-    console.error('[Notifications] notifyNewRequest failed:', err);
+  } catch {
+    // Do not log transport errors: some clients include secret-bearing URLs or
+    // authentication details in their error metadata.
+    console.error('[Notifications] notifyNewRequest delivery failed');
   }
 }
 
@@ -86,7 +89,7 @@ export async function notifyRequestFulfilled(requestId: string): Promise<void> {
 
     // Discord
     if (settings.discordEnabled && settings.discordWebhookUrl) {
-      await sendDiscord(
+      await deliverDiscord(
         settings.discordWebhookUrl,
         `✅ **Request fulfilled** — *${title}* for ${userEmail} is now available`,
       );
@@ -94,14 +97,14 @@ export async function notifyRequestFulfilled(requestId: string): Promise<void> {
 
     // SMTP
     if (settings.smtpEnabled && userEmail) {
-      await sendEmail({
+      await deliverEmail({
         to: userEmail,
         subject: `Now available: ${title}`,
         body: `Great news! "${title}" has been downloaded and is now available to stream in your library.`,
       });
     }
-  } catch (err) {
-    console.error('[Notifications] notifyRequestFulfilled failed:', err);
+  } catch {
+    console.error('[Notifications] notifyRequestFulfilled delivery failed');
   }
 }
 
@@ -117,47 +120,4 @@ async function getSettings() {
     create: {},
     update: {},
   });
-}
-
-/**
- * Send a simple text message to a Discord webhook URL.
- * Catches all errors — never throws.
- */
-async function sendDiscord(
-  webhookUrl: string,
-  content: string,
-): Promise<void> {
-  try {
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content }),
-    });
-
-    if (!response.ok) {
-      console.error(
-        `[Notifications] Discord webhook returned ${response.status}: ${await response.text().catch(() => '?')}`,
-      );
-    }
-  } catch (err) {
-    console.error('[Notifications] Discord webhook send failed:', err);
-  }
-}
-
-/**
- * "Send" an email via SMTP.
- *
- * TODO(Phase 10+): add nodemailer dependency and implement real SMTP sending
- * with the configured host/port/credentials/auth.  For now this logs the
- * intent so the pipeline isn't blocked.
- */
-async function sendEmail(opts: {
-  to: string;
-  subject: string;
-  body: string;
-}): Promise<void> {
-  // TODO: add nodemailer and wire up real SMTP sending using the stored settings
-  console.log(
-    `[Notifications] Would email ${opts.to}: "${opts.subject}"`,
-  );
 }

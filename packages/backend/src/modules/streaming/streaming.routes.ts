@@ -13,7 +13,7 @@ import {
   buildHlsFfmpegArgs,
   getPlaybackInfo,
 } from './streaming.service.js';
-import { buildAdaptiveHlsArgs } from '../../lib/adaptive-hls.js';
+import { buildAdaptiveHlsArgs, buildCastHlsArgs } from '../../lib/adaptive-hls.js';
 import { preferHlsStartAtBeginning } from '../../lib/hls-manifest.js';
 import {
   ensureTrickplay,
@@ -27,6 +27,7 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { isValidCastSession } from '../../lib/cast-sessions.js';
+import { getServerSettings } from '../settings/settings.service.js';
 
 // ── In-memory session tracking ──────────────────────────────────────────────
 // Maps a (mediaItemId, episodeId) pair → sessionDir so segment routes know
@@ -58,8 +59,9 @@ function sessionKey(
   audioStreamIndex?: number,
   startTimeSeconds = 0,
   forceAdaptive = false,
+  receiverOptimized = false,
 ): string {
-  return `${sessionBaseKey(mediaItemId, episodeId, audioStreamIndex)}::adaptive=${forceAdaptive ? '1' : '0'}::start=${startTimeSeconds.toFixed(3)}`;
+  return `${sessionBaseKey(mediaItemId, episodeId, audioStreamIndex)}::adaptive=${forceAdaptive ? '1' : '0'}::receiver=${receiverOptimized ? '1' : '0'}::start=${startTimeSeconds.toFixed(3)}`;
 }
 
 function parseStartTime(value: string | undefined): number {
@@ -234,6 +236,9 @@ async function spawnTranscode(
   audioStreamIndex?: number,
   startTimeSeconds = 0,
   forceAdaptive = false,
+  maxBitrateMbps?: number | null,
+  hardwareAcceleration = 'NONE',
+  receiverOptimized = false,
 ): Promise<{ manifest: 'index.m3u8' | 'master.m3u8'; transcode: TranscodeState }> {
   const probe = await probeMedia(sourceFile, audioStreamIndex);
 
@@ -243,6 +248,25 @@ async function spawnTranscode(
     probe.videoCodec !== 'h264' ||
     (probe.audioCodec !== null && probe.audioCodec !== 'aac');
 
+  if (receiverOptimized && needsTranscode && probe.width && probe.height) {
+    const args = buildCastHlsArgs(
+      sourceFile,
+      sessionDir,
+      probe.width,
+      probe.height,
+      probe.videoStreamIndex ?? undefined,
+      probe.audioStreamIndex ?? undefined,
+      startTimeSeconds,
+      maxBitrateMbps ? maxBitrateMbps * 1000 : null,
+      hardwareAcceleration,
+    );
+    console.log(
+      `[Transcode] Cast single-rendition video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} ` +
+      `${probe.width}x${probe.height}`,
+    );
+    return { manifest: 'index.m3u8', transcode: spawnTrackedTranscode(args) };
+  }
+
   if ((needsTranscode || forceAdaptive) && probe.width && probe.height) {
     const args = buildAdaptiveHlsArgs(
       sourceFile, sessionDir,
@@ -251,6 +275,8 @@ async function spawnTranscode(
       probe.videoStreamIndex ?? undefined,
       probe.audioStreamIndex ?? undefined,
       startTimeSeconds,
+      maxBitrateMbps ? maxBitrateMbps * 1000 : null,
+      hardwareAcceleration,
     );
     console.log(
       `[Transcode] adaptive forced=${forceAdaptive} video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} ` +
@@ -266,6 +292,7 @@ async function spawnTranscode(
     sessionDir,
     audioStreamIndex,
     startTimeSeconds,
+    hardwareAcceleration,
   );
   console.log(
     `[Transcode] single video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} → ${args.includes('copy') ? 'remux/partial-copy' : 'transcode'}`,
@@ -418,6 +445,9 @@ export const streamingRoutes: FastifyPluginAsync = async (
     '/:mediaItemId',
     { preHandler: [app.requireProfileStream] },
     async (request, reply) => {
+      if (!(await getServerSettings()).directPlayEnabled) {
+        throw ApiError.badRequest('Direct Play is disabled in server settings', 'DIRECT_PLAY_DISABLED');
+      }
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { episodeId } = request.query as { episodeId?: string };
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
@@ -497,6 +527,14 @@ export const streamingRoutes: FastifyPluginAsync = async (
           : undefined;
       const startTimeSeconds = parseStartTime(startTime);
       const forceAdaptive = adaptive === '1';
+      const receiverOptimized = Boolean(request.castPlayback);
+      const playbackSettings = await getServerSettings();
+      if (forceAdaptive && !playbackSettings.transcodingEnabled) {
+        throw ApiError.badRequest('Transcoding is disabled in server settings', 'TRANSCODING_DISABLED');
+      }
+      if (!playbackSettings.directStreamEnabled && !playbackSettings.transcodingEnabled) {
+        throw ApiError.badRequest('HLS playback is disabled in server settings', 'HLS_DISABLED');
+      }
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
       const baseKey = sessionBaseKey(mediaItemId, episodeId, audioStreamIndex);
@@ -506,6 +544,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
         audioStreamIndex,
         startTimeSeconds,
         forceAdaptive,
+        receiverOptimized,
       );
       const token = streamToken(request);
 
@@ -530,6 +569,12 @@ export const streamingRoutes: FastifyPluginAsync = async (
           mediaItemId,
           episodeId,
         );
+        if (!playbackSettings.transcodingEnabled) {
+          const source = await probeMedia(sourceFile, audioStreamIndex);
+          if (source.videoCodec !== 'h264' || (source.audioCodec !== null && source.audioCodec !== 'aac')) {
+            throw ApiError.badRequest('This file requires transcoding, which is disabled in server settings', 'TRANSCODING_DISABLED');
+          }
+        }
         // Re-check after the await: the set below is synchronous, so two
         // concurrent requests can't both spawn a transcode for the same key.
         session = hlsSessions.get(key);
@@ -537,12 +582,19 @@ export const streamingRoutes: FastifyPluginAsync = async (
           await discardOtherSessions(baseKey, key);
           const sessionDir = safeJoin(config.TRANSCODE_ROOT, randomUUID());
           await fs.promises.mkdir(sessionDir, { recursive: true });
+          const requestedAcceleration = playbackSettings.hardwareAcceleration;
+          const hardwareAcceleration = requestedAcceleration === 'AUTO'
+            ? (process.platform === 'darwin' ? 'VIDEOTOOLBOX' : fs.existsSync('/dev/dri/renderD128') ? 'VAAPI' : 'NONE')
+            : requestedAcceleration;
           const started = await spawnTranscode(
             sourceFile,
             sessionDir,
             audioStreamIndex,
             startTimeSeconds,
             forceAdaptive,
+            playbackSettings.remoteBitrateLimitMbps ?? playbackSettings.localBitrateLimitMbps,
+            hardwareAcceleration,
+            receiverOptimized,
           );
           manifestType = started.manifest;
           session = { dir: sessionDir, manifest: manifestType, transcode: started.transcode, lastAccessAt: Date.now() };
@@ -553,6 +605,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
             audioStreamIndex,
             startTimeSeconds,
             forceAdaptive,
+            receiverOptimized,
             manifestType,
           }, '[Cast/HLS] started transcode session');
         }
@@ -597,7 +650,14 @@ export const streamingRoutes: FastifyPluginAsync = async (
       // cause of a hard stop ~one segment in. Harmless for short clips.
       // For adaptive streams, segments are nested under stream_0/.
       const segDir = manifestType === 'master.m3u8' ? 'stream_0' : '.';
-      await pollForSessionFile(session, path.join(session.dir, segDir, 'segment_00002.ts'), 16, 500);
+      const runwaySegment = receiverOptimized ? 4 : 2;
+      const runwayPolls = receiverOptimized ? 26 : 16;
+      await pollForSessionFile(
+        session,
+        path.join(session.dir, segDir, `segment_${String(runwaySegment).padStart(5, '0')}.ts`),
+        runwayPolls,
+        500,
+      );
       if (session.transcode.failure) {
         request.log.error({
           mediaItemId,
@@ -617,6 +677,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
         manifestType,
         startTimeSeconds,
         forceAdaptive,
+        receiverOptimized,
       }, '[Cast/HLS] serving manifest');
       return sendManifest(fs.readFileSync(manifestPath, 'utf-8'));
     },
@@ -642,6 +703,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
           : undefined;
       const startTimeSeconds = parseStartTime(startTime);
       const forceAdaptive = adaptive === '1';
+      const receiverOptimized = Boolean(request.castPlayback);
 
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
       receiverCors(reply);
@@ -652,6 +714,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
         audioStreamIndex,
         startTimeSeconds,
         forceAdaptive,
+        receiverOptimized,
       );
       const session = hlsSessions.get(key);
       if (!session) {
