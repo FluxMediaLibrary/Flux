@@ -23,6 +23,12 @@ export interface DesktopAppInfo {
 export interface DesktopWindowState {
   maximized: boolean;
   fullscreen: boolean;
+  workAreaInsets: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
 }
 
 declare global {

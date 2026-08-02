@@ -10,6 +10,7 @@ build/
 out/
 *.tsbuildinfo
 apps/desktop/release/
+apps/desktop/smoke-release/
 !apps/desktop/build/
 !apps/desktop/build/icon.ico
 !apps/desktop/build/icon.png

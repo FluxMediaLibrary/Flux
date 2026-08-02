@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 const TITLE_BAR_HEIGHT = 38;
+const PLAYER_DOCK_GUTTER = 48;
 const TITLE_BAR_CSS = `
   :root {
     --flux-desktop-titlebar-height: ${TITLE_BAR_HEIGHT}px;
@@ -13,12 +14,17 @@ const TITLE_BAR_CSS = `
   html.flux-desktop-shell body > main,
   html.flux-desktop-shell body > main .brand,
   html.flux-desktop-shell .centered-viewport,
-  html.flux-desktop-shell .fx-player-shell--fill {
+  html.flux-desktop-shell .fx-player-shell--fill,
+  html.flux-desktop-shell .fx-player--fill {
     min-height: calc(100vh - var(--flux-desktop-titlebar-height)) !important;
   }
 
   html.flux-desktop-shell .watch-stage {
     top: var(--flux-desktop-titlebar-height) !important;
+  }
+
+  html.flux-desktop-shell .fx-player {
+    --fx-player-bottom-inset: var(--flux-desktop-workarea-bottom, 0px) !important;
   }
 
   html.flux-desktop-native-fullscreen body {
@@ -169,6 +175,11 @@ function updateWindowState(state) {
   const maximizeButton = document.querySelector('#flux-desktop-maximize');
   const maximized = Boolean(state?.maximized);
   const fullscreen = Boolean(state?.fullscreen);
+  const bottomInset = Math.max(0, Number(state?.workAreaInsets?.bottom) || 0);
+  root.style.setProperty(
+    '--flux-desktop-workarea-bottom',
+    `${fullscreen ? 0 : Math.max(PLAYER_DOCK_GUTTER, bottomInset)}px`,
+  );
   root.classList.toggle('flux-desktop-native-fullscreen', fullscreen);
   if (maximizeButton) {
     maximizeButton.dataset.maximized = String(maximized);

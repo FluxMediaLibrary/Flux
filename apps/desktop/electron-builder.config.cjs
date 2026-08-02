@@ -35,6 +35,7 @@ module.exports = {
   },
   nsis: {
     oneClick: false,
+    include: path.join('build', 'installer.nsh'),
     perMachine: false,
     allowElevation: true,
     allowToChangeInstallationDirectory: true,

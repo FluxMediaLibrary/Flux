@@ -7,12 +7,14 @@ const {
   ipcMain,
   Menu,
   net,
+  screen,
   shell,
 } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { DiscordPresenceService } = require('./discord-service.cjs');
 const { desktopReleaseFeedUrl, selectLatestDesktopRelease } = require('./release-channel.cjs');
 const { isSameServer, normalizeServerUrl } = require('./server-url.cjs');
+const { buildUpdatePresentation, normalizeUpdateFeedUrl } = require('./update-presentation.cjs');
 
 const REPOSITORY_URL = 'https://github.com/FluxMediaLibrary/Flux';
 const UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
@@ -20,12 +22,26 @@ const packageMetadata = require('../package.json');
 const discordClientId = String(process.env.FLUX_DISCORD_CLIENT_ID || packageMetadata.fluxDiscordClientId || '').trim();
 
 let mainWindow = null;
+let updateWindow = null;
 let manualUpdateCheck = false;
+let updateCheckInFlight = false;
+let updateRelease = null;
+let updatePresentation = null;
 let updateTimer = null;
 let quittingForUpdate = false;
+let htmlFullscreen = false;
 let discord = null;
 
 async function configureDesktopUpdateFeed() {
+  const feedOverride = String(process.env.FLUX_DESKTOP_UPDATE_FEED_URL || '').trim();
+  if (feedOverride) {
+    autoUpdater.setFeedURL({ provider: 'generic', url: normalizeUpdateFeedUrl(feedOverride) });
+    return {
+      name: String(process.env.FLUX_DESKTOP_UPDATE_RELEASE_NAME || '').trim(),
+      body: String(process.env.FLUX_DESKTOP_UPDATE_RELEASE_NOTES || '').trim(),
+      html_url: null,
+    };
+  }
   const response = await net.fetch(`${REPOSITORY_URL.replace('github.com', 'api.github.com/repos')}/releases?per_page=100`, {
     headers: {
       Accept: 'application/vnd.github+json',
@@ -37,6 +53,7 @@ async function configureDesktopUpdateFeed() {
   const release = selectLatestDesktopRelease(await response.json());
   if (!release) throw new Error('No published Flux desktop release was found.');
   autoUpdater.setFeedURL({ provider: 'generic', url: desktopReleaseFeedUrl(release.tag_name) });
+  return release;
 }
 
 function settingsPath() {
@@ -62,6 +79,10 @@ function writeSettings(settings) {
 
 function setupUrl() {
   return new URL(`file:///${path.join(__dirname, '..', 'renderer', 'setup.html').replaceAll('\\', '/')}`).toString();
+}
+
+function updateUrl() {
+  return new URL(`file:///${path.join(__dirname, '..', 'renderer', 'update.html').replaceAll('\\', '/')}`).toString();
 }
 
 function trustedSender(event, allowSetup = false) {
@@ -151,9 +172,21 @@ function configureNavigation(window) {
 }
 
 function getWindowState() {
+  let workAreaInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isFullScreen() && !htmlFullscreen) {
+    const bounds = mainWindow.getBounds();
+    const workArea = screen.getDisplayMatching(bounds).workArea;
+    workAreaInsets = {
+      top: Math.max(0, workArea.y - bounds.y),
+      right: Math.max(0, bounds.x + bounds.width - (workArea.x + workArea.width)),
+      bottom: Math.max(0, bounds.y + bounds.height - (workArea.y + workArea.height)),
+      left: Math.max(0, workArea.x - bounds.x),
+    };
+  }
   return {
     maximized: Boolean(mainWindow?.isMaximized()),
-    fullscreen: Boolean(mainWindow?.isFullScreen()),
+    fullscreen: Boolean(mainWindow?.isFullScreen() || htmlFullscreen),
+    workAreaInsets,
   };
 }
 
@@ -192,8 +225,18 @@ function createWindow() {
   });
   mainWindow.on('maximize', sendWindowState);
   mainWindow.on('unmaximize', sendWindowState);
+  mainWindow.on('move', sendWindowState);
+  mainWindow.on('resize', sendWindowState);
   mainWindow.on('enter-full-screen', sendWindowState);
   mainWindow.on('leave-full-screen', sendWindowState);
+  mainWindow.webContents.on('enter-html-full-screen', () => {
+    htmlFullscreen = true;
+    sendWindowState();
+  });
+  mainWindow.webContents.on('leave-html-full-screen', () => {
+    htmlFullscreen = false;
+    sendWindowState();
+  });
   mainWindow.on('closed', () => { mainWindow = null; });
   openFlux().catch((error) => {
     dialog.showErrorBox('Flux could not start', error.message);
@@ -239,9 +282,18 @@ async function checkForUpdates(manual = false) {
     });
     return;
   }
+  if (updateCheckInFlight) {
+    if (manual) await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      message: 'Flux is already checking for updates.',
+      detail: 'The result will appear as soon as the update check finishes.',
+    });
+    return;
+  }
+  updateCheckInFlight = true;
   manualUpdateCheck = manualUpdateCheck || manual;
   try {
-    await configureDesktopUpdateFeed();
+    updateRelease = await configureDesktopUpdateFeed();
     await autoUpdater.checkForUpdates();
   } catch (error) {
     if (manual) await dialog.showMessageBox(mainWindow, {
@@ -250,14 +302,77 @@ async function checkForUpdates(manual = false) {
       detail: error.message,
     });
     manualUpdateCheck = false;
+  } finally {
+    updateCheckInFlight = false;
   }
+}
+
+function sendUpdateState(state) {
+  if (!updateWindow || updateWindow.isDestroyed()) return;
+  updateWindow.webContents.send('desktop-updater:state-changed', state);
+}
+
+async function openUpdatePrompt(info) {
+  updatePresentation = {
+    phase: 'available',
+    ...buildUpdatePresentation(info, updateRelease),
+    percent: 0,
+    error: null,
+  };
+  if (updateWindow && !updateWindow.isDestroyed()) {
+    sendUpdateState(updatePresentation);
+    updateWindow.show();
+    updateWindow.focus();
+    return;
+  }
+
+  updateWindow = new BrowserWindow({
+    width: 640,
+    height: 560,
+    minWidth: 560,
+    minHeight: 480,
+    parent: mainWindow || undefined,
+    modal: Boolean(mainWindow),
+    show: false,
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    backgroundColor: '#080b0d',
+    icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'update-preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      spellcheck: false,
+    },
+  });
+  updateWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  updateWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== updateUrl()) event.preventDefault();
+  });
+  updateWindow.once('ready-to-show', () => updateWindow?.show());
+  updateWindow.on('close', (event) => {
+    if (!quittingForUpdate && (updatePresentation?.phase === 'downloading' || updatePresentation?.phase === 'installing')) {
+      event.preventDefault();
+    }
+  });
+  updateWindow.on('closed', () => { updateWindow = null; });
+  await updateWindow.loadURL(updateUrl());
 }
 
 function configureUpdater() {
   if (!app.isPackaged) return;
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.logger = console;
+
+  autoUpdater.on('update-available', (info) => {
+    manualUpdateCheck = false;
+    openUpdatePrompt(info).catch((error) => console.error('[desktop] update prompt failed', error));
+  });
 
   autoUpdater.on('update-not-available', async () => {
     if (manualUpdateCheck) await dialog.showMessageBox(mainWindow, {
@@ -269,21 +384,30 @@ function configureUpdater() {
   });
   autoUpdater.on('error', (error) => {
     console.error('[desktop] updater error', error);
-  });
-  autoUpdater.on('update-downloaded', async (info) => {
-    manualUpdateCheck = false;
-    const result = await dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      buttons: ['Restart Flux', 'Later'],
-      defaultId: 0,
-      cancelId: 1,
-      message: `Flux ${info.version} is ready.`,
-      detail: 'Restart now to finish installing the update. If you choose Later, it will install when Flux closes.',
-    });
-    if (result.response === 0) {
-      quittingForUpdate = true;
-      autoUpdater.quitAndInstall(false, true);
+    if (updatePresentation?.phase === 'downloading') {
+      updatePresentation = { ...updatePresentation, phase: 'error', error: error.message };
+      sendUpdateState(updatePresentation);
     }
+  });
+  autoUpdater.on('download-progress', (progress) => {
+    if (!updatePresentation || updatePresentation.phase !== 'downloading') return;
+    updatePresentation = {
+      ...updatePresentation,
+      percent: Math.max(0, Math.min(100, Number(progress.percent) || 0)),
+    };
+    sendUpdateState(updatePresentation);
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    manualUpdateCheck = false;
+    updatePresentation = {
+      ...(updatePresentation || buildUpdatePresentation(info, updateRelease)),
+      phase: 'installing',
+      percent: 100,
+      error: null,
+    };
+    sendUpdateState(updatePresentation);
+    quittingForUpdate = true;
+    setTimeout(() => autoUpdater.quitAndInstall(true, true), 700);
   });
 
   setTimeout(() => checkForUpdates(false), 10_000).unref?.();
@@ -292,6 +416,38 @@ function configureUpdater() {
 }
 
 function registerIpc() {
+  ipcMain.handle('desktop-updater:get-state', (event) => {
+    if (event.senderFrame?.url !== updateUrl()) throw new Error('Untrusted update window.');
+    return updatePresentation;
+  });
+
+  ipcMain.handle('desktop-updater:respond', (event, action) => {
+    if (event.senderFrame?.url !== updateUrl()) throw new Error('Untrusted update window.');
+    if (action === 'later') {
+      if (updatePresentation?.phase !== 'downloading' && updatePresentation?.phase !== 'installing') {
+        updateWindow?.close();
+      }
+      return { ok: true };
+    }
+    if (action !== 'update' && action !== 'retry') throw new Error('Unknown update action.');
+    if (!updatePresentation || !['available', 'error'].includes(updatePresentation.phase)) {
+      return { ok: false };
+    }
+    updatePresentation = { ...updatePresentation, phase: 'downloading', percent: 0, error: null };
+    sendUpdateState(updatePresentation);
+    autoUpdater.downloadUpdate().catch((error) => {
+      updatePresentation = { ...updatePresentation, phase: 'error', error: error.message };
+      sendUpdateState(updatePresentation);
+    });
+    return { ok: true };
+  });
+
+  ipcMain.handle('desktop-updater:open-release', (event) => {
+    if (event.senderFrame?.url !== updateUrl()) throw new Error('Untrusted update window.');
+    if (updatePresentation?.releaseUrl) shell.openExternal(updatePresentation.releaseUrl).catch(() => {});
+    return { ok: true };
+  });
+
   ipcMain.handle('desktop:get-app-info', (event) => {
     requireTrustedSender(event, true);
     return {

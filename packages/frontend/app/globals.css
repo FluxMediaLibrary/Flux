@@ -4691,7 +4691,7 @@ media-player.fx-player .fx-debug-row span:last-child {
 /* ── Timeline / seek bar ─────────────────────────────────────────────────── */
 media-player.fx-player .fx-timeline {
   position: absolute;
-  bottom: 56px; /* sits above control bar */
+  bottom: calc(56px + var(--fx-player-bottom-inset)); /* sits above control bar */
   left: 20px; right: 20px;
   z-index: 11;
 }
@@ -4779,7 +4779,7 @@ media-player.fx-player .fx-seek-preview-time {
 /* ── Bottom control bar ──────────────────────────────────────────────────── */
 media-player.fx-player .fx-controls {
   position: absolute;
-  bottom: 0; left: 0; right: 0;
+  bottom: var(--fx-player-bottom-inset); left: 0; right: 0;
   z-index: 10;
   padding: 20px 16px 16px;
   opacity: 0;
@@ -4953,7 +4953,7 @@ media-player.fx-player .fx-settings-check {
 /* ── Skip button (intro / recap / credits) ──────────────────────────────── */
 media-player.fx-player .fx-skip-btn {
   position: absolute;
-  bottom: 80px;
+  bottom: calc(80px + var(--fx-player-bottom-inset));
   right: 20px;
   z-index: 12;
   padding: 8px 18px;
@@ -5024,6 +5024,7 @@ media-player.fx-player .fx-scrub-time {
 
 /* Harden the Flux player chrome against Vidstack host/rendering changes. */
 .fx-player {
+  --fx-player-bottom-inset: max(env(safe-area-inset-bottom, 0px), var(--flux-desktop-workarea-bottom, 0px));
   position: relative;
   display: block;
   width: 100%;
@@ -5129,7 +5130,7 @@ media-player.fx-player .fx-scrub-time {
   position: absolute;
   left: 20px;
   right: 20px;
-  bottom: 66px;
+  bottom: calc(66px + var(--fx-player-bottom-inset));
   z-index: 12;
   cursor: pointer;
   touch-action: none;
@@ -5229,7 +5230,7 @@ media-player.fx-player .fx-scrub-time {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: var(--fx-player-bottom-inset);
   z-index: 11;
   padding: 26px 18px 16px;
   opacity: 0;
@@ -5413,7 +5414,7 @@ media-player.fx-player .fx-scrub-time {
 .fx-player .fx-next-episode {
   position: absolute;
   right: 24px;
-  bottom: 104px;
+  bottom: calc(104px + var(--fx-player-bottom-inset));
   z-index: 16;
   display: grid;
   gap: 2px;
@@ -5470,7 +5471,7 @@ media-player.fx-player .fx-scrub-time {
 .fx-player .fx-skip-btn {
   position: absolute;
   right: 24px;
-  bottom: 98px;
+  bottom: calc(98px + var(--fx-player-bottom-inset));
   z-index: 14;
   padding: 9px 18px;
   border: 1px solid rgba(255,255,255,.25);
@@ -5491,7 +5492,7 @@ media-player.fx-player .fx-scrub-time {
 .fx-player .fx-skip-intro {
   position: absolute;
   right: 24px;
-  bottom: 98px;
+  bottom: calc(98px + var(--fx-player-bottom-inset));
   z-index: 15;
   display: inline-flex;
   align-items: center;

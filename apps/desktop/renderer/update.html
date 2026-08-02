@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self';" />
+    <title>Flux Desktop Update</title>
+    <style>
+      :root { color-scheme: dark; --ink: #f4f4f5; --muted: rgba(255,255,255,.6); --dim: rgba(255,255,255,.38); --line: rgba(255,255,255,.09); --blue: #60a5fa; --blue-hot: #93c5fd; --bg: #080b0d; --panel: #11151a; }
+      * { box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; margin: 0; }
+      body { overflow: hidden; background: var(--bg); color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      body::before { content: ''; position: fixed; inset: 0; pointer-events: none; opacity: .14; background-image: radial-gradient(circle at 1px 1px, #7b8490 1px, transparent 0); background-size: 22px 22px; mask-image: linear-gradient(to bottom, #000, transparent 72%); }
+      .window { position: relative; height: 100%; display: grid; grid-template-rows: 42px minmax(0, 1fr); border: 1px solid var(--line); background: linear-gradient(145deg, rgba(96,165,250,.045), transparent 42%); }
+      .titlebar { display: flex; align-items: center; gap: 9px; padding-left: 14px; border-bottom: 1px solid var(--line); background: rgba(8,11,13,.92); -webkit-app-region: drag; }
+      .mark { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 5px; background: var(--blue); color: #0b1118; font-size: 11px; font-weight: 900; }
+      .wordmark { font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+      .titlebar-spacer { flex: 1; }
+      .close { width: 46px; height: 41px; border: 0; border-left: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer; font-size: 21px; font-weight: 300; line-height: 1; -webkit-app-region: no-drag; }
+      .close:hover { color: #fff; background: #c42b1c; }
+      .close:focus-visible, button:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+      main { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding: 30px 34px 28px; }
+      .eyebrow { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; color: var(--blue); font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+      .eyebrow::before { content: ''; width: 18px; height: 1px; background: currentColor; }
+      h1 { margin: 0; max-width: 510px; font-family: Georgia, 'Times New Roman', serif; font-size: 38px; font-weight: 500; line-height: 1.05; letter-spacing: -.035em; }
+      .summary { margin: 12px 0 22px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+      .notes-shell { min-height: 0; overflow: hidden; border: 1px solid var(--line); background: rgba(17,21,26,.72); }
+      .notes-label { padding: 11px 15px; border-bottom: 1px solid var(--line); color: var(--dim); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+      #notes { height: 100%; max-height: 225px; overflow-y: auto; padding: 15px 18px 20px; color: rgba(255,255,255,.76); font-size: 13px; line-height: 1.6; scrollbar-color: rgba(255,255,255,.18) transparent; }
+      #notes h2 { margin: 13px 0 6px; color: var(--ink); font-size: 14px; }
+      #notes h2:first-child { margin-top: 0; }
+      #notes p { margin: 0 0 8px; }
+      #notes ul { margin: 4px 0 10px; padding-left: 20px; }
+      #notes li { margin: 3px 0; }
+      .footer { padding-top: 22px; }
+      .progress-wrap { display: none; margin-bottom: 17px; }
+      .progress-copy { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 8px; color: var(--muted); font-size: 12px; }
+      .progress-track { height: 3px; overflow: hidden; background: rgba(255,255,255,.1); }
+      .progress-bar { width: 0; height: 100%; background: var(--blue); box-shadow: 0 0 14px rgba(96,165,250,.5); transition: width .18s ease; }
+      .error { display: none; margin-bottom: 14px; color: #fca5a5; font-size: 12px; line-height: 1.5; }
+      .actions { display: flex; align-items: center; gap: 10px; }
+      .actions button { min-height: 40px; padding: 0 17px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--ink); cursor: pointer; font: inherit; font-size: 12px; font-weight: 750; letter-spacing: .02em; }
+      .actions button:hover { border-color: rgba(255,255,255,.22); background: rgba(255,255,255,.06); }
+      .actions .primary { border-color: transparent; background: var(--blue); color: #08111d; }
+      .actions .primary:hover { background: var(--blue-hot); }
+      .actions .release { display: none; margin-right: auto; padding-left: 0; border: 0; color: var(--muted); }
+      .actions .release:hover { color: var(--ink); background: transparent; }
+      body[data-phase='downloading'] .progress-wrap,
+      body[data-phase='installing'] .progress-wrap { display: block; }
+      body[data-phase='downloading'] .notes-shell,
+      body[data-phase='installing'] .notes-shell { opacity: .5; }
+      body[data-phase='downloading'] .close,
+      body[data-phase='installing'] .close,
+      body[data-phase='downloading'] #later,
+      body[data-phase='installing'] #later,
+      body[data-phase='downloading'] #update,
+      body[data-phase='installing'] #update { display: none; }
+      body[data-phase='error'] .error { display: block; }
+    </style>
+  </head>
+  <body data-phase="available">
+    <div class="window">
+      <header class="titlebar">
+        <span class="mark" aria-hidden="true">F</span>
+        <span class="wordmark">Flux Update</span>
+        <span class="titlebar-spacer"></span>
+        <button class="close" id="close" type="button" aria-label="Close update">×</button>
+      </header>
+      <main>
+        <section>
+          <div class="eyebrow" id="version">Desktop update</div>
+          <h1 id="title">A new cut is ready.</h1>
+          <p class="summary" id="summary">Review what changed, then choose when Flux should update.</p>
+        </section>
+        <section class="notes-shell" aria-label="Release changelog">
+          <div class="notes-label">What changed</div>
+          <div id="notes"></div>
+        </section>
+        <footer class="footer">
+          <div class="progress-wrap" role="status" aria-live="polite">
+            <div class="progress-copy"><span id="progress-label">Downloading update…</span><span id="progress-percent">0%</span></div>
+            <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+          </div>
+          <div class="error" id="error" role="alert"></div>
+          <div class="actions">
+            <button class="release" id="release" type="button">View full release</button>
+            <button id="later" type="button">Not now</button>
+            <button class="primary" id="update" type="button">Update and restart</button>
+          </div>
+        </footer>
+      </main>
+    </div>
+    <script src="./update.js"></script>
+  </body>
+</html>
