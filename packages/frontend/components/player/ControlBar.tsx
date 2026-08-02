@@ -211,7 +211,12 @@ export function ControlBar({
           />
         </div>}
 
-        <button className="fx-btn" type="button" onClick={() => remote.toggleFullscreen()} aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+        <button
+          className="fx-btn"
+          type="button"
+          onClick={(event) => remote.toggleFullscreen('prefer-media', event.nativeEvent)}
+          aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+        >
           {fullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
         </button>
       </div>

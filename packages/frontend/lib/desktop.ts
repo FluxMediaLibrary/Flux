@@ -20,6 +20,11 @@ export interface DesktopAppInfo {
   repositoryUrl: string;
 }
 
+export interface DesktopWindowState {
+  maximized: boolean;
+  fullscreen: boolean;
+}
+
 declare global {
   interface Window {
     FLUX_DESKTOP_APP?: boolean;
@@ -30,6 +35,10 @@ declare global {
       configureServer: (url: string) => Promise<{ ok: true; serverUrl: string }>;
       changeServer: () => Promise<{ ok: true }>;
       checkForUpdates: () => Promise<{ ok: true }>;
+      getWindowState: () => Promise<DesktopWindowState>;
+      minimizeWindow: () => Promise<DesktopWindowState>;
+      toggleMaximizeWindow: () => Promise<DesktopWindowState>;
+      closeWindow: () => Promise<void>;
       setActivity: (presence: DesktopPlaybackPresence) => void;
       clearActivity: () => void;
     };

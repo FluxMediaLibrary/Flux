@@ -1,6 +1,6 @@
 {
   "name": "@flux/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Flux desktop client with automatic updates and Discord Rich Presence.",
   "main": "src/main.cjs",

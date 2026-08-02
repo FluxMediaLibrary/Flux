@@ -129,7 +129,37 @@ function configureNavigation(window) {
   };
   window.webContents.on('will-navigate', guardNavigation);
   window.webContents.on('will-redirect', guardNavigation);
-  window.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+
+  const canUseFullscreen = (webContents, requestingUrl) => {
+    const serverUrl = readSettings().serverUrl;
+    return Boolean(
+      serverUrl
+      && webContents === window.webContents
+      && isSameServer(requestingUrl || webContents.getURL(), serverUrl),
+    );
+  };
+
+  window.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin) => (
+    permission === 'fullscreen' && canUseFullscreen(webContents, requestingOrigin)
+  ));
+  window.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    callback(
+      permission === 'fullscreen'
+      && canUseFullscreen(webContents, details.requestingUrl),
+    );
+  });
+}
+
+function getWindowState() {
+  return {
+    maximized: Boolean(mainWindow?.isMaximized()),
+    fullscreen: Boolean(mainWindow?.isFullScreen()),
+  };
+}
+
+function sendWindowState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('desktop:window-state-changed', getWindowState());
 }
 
 function createWindow() {
@@ -139,6 +169,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     show: false,
+    frame: false,
     backgroundColor: '#080b0d',
     icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     autoHideMenuBar: process.platform !== 'darwin',
@@ -154,7 +185,15 @@ function createWindow() {
   });
 
   configureNavigation(mainWindow);
-  mainWindow.once('ready-to-show', () => mainWindow?.show());
+  mainWindow.once('ready-to-show', () => {
+    if (!mainWindow) return;
+    mainWindow.maximize();
+    mainWindow.show();
+  });
+  mainWindow.on('maximize', sendWindowState);
+  mainWindow.on('unmaximize', sendWindowState);
+  mainWindow.on('enter-full-screen', sendWindowState);
+  mainWindow.on('leave-full-screen', sendWindowState);
   mainWindow.on('closed', () => { mainWindow = null; });
   openFlux().catch((error) => {
     dialog.showErrorBox('Flux could not start', error.message);
@@ -288,6 +327,29 @@ function registerIpc() {
     requireTrustedSender(event, true);
     await checkForUpdates(true);
     return { ok: true };
+  });
+
+  ipcMain.handle('desktop:get-window-state', (event) => {
+    requireTrustedSender(event, true);
+    return getWindowState();
+  });
+
+  ipcMain.handle('desktop:minimize-window', (event) => {
+    requireTrustedSender(event, true);
+    mainWindow?.minimize();
+    return getWindowState();
+  });
+
+  ipcMain.handle('desktop:toggle-maximize-window', (event) => {
+    requireTrustedSender(event, true);
+    if (mainWindow?.isMaximized()) mainWindow.unmaximize();
+    else mainWindow?.maximize();
+    return getWindowState();
+  });
+
+  ipcMain.handle('desktop:close-window', (event) => {
+    requireTrustedSender(event, true);
+    mainWindow?.close();
   });
 
   ipcMain.on('desktop:set-activity', (event, presence) => {
