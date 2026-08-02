@@ -86,6 +86,9 @@ export async function getSettingsBundle(): Promise<SettingsBundleDTO> {
       serverName: row.serverName, frontendUrl: row.frontendUrl, apiUrl: row.apiUrl,
       timezone: row.timezone, language: row.language, defaultInviteExpiryHours: row.defaultInviteExpiryHours,
     },
+    storage: {
+      reserveSpaceGb: row.storageReserveGb,
+    },
     downloads: {
       automatedDownloads: row.automatedDownloads,
       preferredProtocol: row.preferredProtocol as SettingsBundleDTO['downloads']['preferredProtocol'],
@@ -138,7 +141,12 @@ export async function updateSettings(input: UpdateSettingsBundleRequest): Promis
     const profile = await prisma.qualityProfile.findUnique({ where: { id: input.downloads.defaultQualityProfileId } });
     if (!profile?.enabled) throw ApiError.badRequest('The default quality profile must exist and be enabled', 'INVALID_DEFAULT_PROFILE');
   }
-  const data = { ...(input.general ?? {}), ...(input.downloads ?? {}), ...(input.playback ?? {}) } as Prisma.ServerSettingsUpdateInput;
+  const data = {
+    ...(input.general ?? {}),
+    ...(input.storage ? { storageReserveGb: input.storage.reserveSpaceGb } : {}),
+    ...(input.downloads ?? {}),
+    ...(input.playback ?? {}),
+  } as Prisma.ServerSettingsUpdateInput;
   if (input.integrations && Object.prototype.hasOwnProperty.call(input.integrations, 'tmdbApiKey')) {
     data.tmdbApiKey = input.integrations.tmdbApiKey;
   }

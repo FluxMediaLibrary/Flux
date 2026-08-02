@@ -852,14 +852,54 @@ export interface IntegrationSettingsDTO {
 
 export interface SettingsBundleDTO {
   general: GeneralSettingsDTO;
+  storage: StoragePolicySettingsDTO;
   downloads: DownloadSettingsDTO;
   playback: PlaybackSettingsDTO;
   notifications: NotificationSettingsDTO;
   integrations: IntegrationSettingsDTO;
 }
 
+export interface StorageLibraryRootDTO {
+  path: string;
+  mountPath: string;
+  label: string;
+  primary: boolean;
+  source: 'ENVIRONMENT' | 'MANAGED';
+  available: boolean;
+  totalBytes: number | null;
+  freeBytes: number | null;
+}
+
+export interface StorageDriveCandidateDTO {
+  id: string;
+  mountPath: string;
+  suggestedRoot: string;
+  label: string;
+  filesystem: string;
+  source: string;
+  writable: boolean;
+  alreadyAdded: boolean;
+  primary: boolean;
+  totalBytes: number | null;
+  freeBytes: number | null;
+}
+
+export interface StorageSettingsDTO {
+  primaryRoot: string;
+  roots: StorageLibraryRootDTO[];
+}
+
+export interface StoragePolicySettingsDTO {
+  reserveSpaceGb: number;
+}
+
+export interface AddStorageDriveRequest {
+  driveId: string;
+}
+
 export interface UpdateSettingsBundleRequest {
   general?: Partial<GeneralSettingsDTO>;
+  storage?: Partial<StoragePolicySettingsDTO>;
   downloads?: Partial<DownloadSettingsDTO>;
   playback?: Partial<PlaybackSettingsDTO>;
   integrations?: { tmdbApiKey?: string | null };

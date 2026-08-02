@@ -14,8 +14,11 @@
  */
 
 import path from 'node:path';
+import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
 import { config } from '../config.js';
+import { getLibraryRootState } from './library-roots.js';
+import { chooseMediaRoot, type RootCapacity } from './storage-policy.js';
 
 /** All resolved media root directories. */
 export const MEDIA_ROOTS = config.MEDIA_ROOTS.map((r) => path.resolve(r));
@@ -40,7 +43,8 @@ export async function resolveFilePath(filePath: string): Promise<string | null> 
   }
 
   // Relative path: try each root
-  for (const root of MEDIA_ROOTS) {
+  const { roots } = await getLibraryRootState();
+  for (const root of roots) {
     const resolved = safeJoin(root, filePath);
     try {
       await fs.access(resolved);
@@ -53,36 +57,31 @@ export async function resolveFilePath(filePath: string): Promise<string | null> 
 }
 
 /**
- * Select the best media root for placing a new file.
- * Picks the writable root with the most free space above `minFreeBytes`.
- * If none meet the threshold, picks the writable root with the most free space.
+ * Keep filling roots in configured order. A root is skipped when placing the
+ * incoming payload there would leave less than the configured reserve.
  */
 export async function selectMediaRoot(
-  minFreeBytes: number = config.MEDIA_SPILLOVER_THRESHOLD_BYTES,
+  requiredBytes = 0,
 ): Promise<string> {
-  let best = MEDIA_ROOTS[0]!;
-  let bestFree = 0;
-  let bestAboveThreshold: string | null = null;
-  let bestAboveThresholdFree = 0;
+  const { primaryRoot, roots, reserveSpaceBytes } = await getLibraryRootState();
+  const capacities: RootCapacity[] = [];
 
-  for (const root of MEDIA_ROOTS) {
+  for (const root of roots) {
     try {
+      await fs.access(root, constants.W_OK);
       const stats = await fs.statfs(root);
       const free = stats.bavail * stats.bsize;
-      if (free >= minFreeBytes && free > bestAboveThresholdFree) {
-        bestAboveThreshold = root;
-        bestAboveThresholdFree = free;
-      }
-      if (free > bestFree) {
-        bestFree = free;
-        best = root;
-      }
+      capacities.push({ root, freeBytes: free });
     } catch {
       // root unavailable, skip
     }
   }
 
-  return bestAboveThreshold ?? best;
+  const selected = chooseMediaRoot(capacities, requiredBytes, reserveSpaceBytes);
+  if (!selected) {
+    throw new Error('No configured library drive has enough free space for this import');
+  }
+  return selected;
 }
 
 /** Strip characters illegal on common filesystems; collapse whitespace. */
@@ -128,8 +127,10 @@ export async function moviePlacement(
   title: string,
   year: number | null,
   ext: string,
+  requiredBytes = 0,
+  selectedRoot?: string,
 ): Promise<MoviePlacement> {
-  const root = await selectMediaRoot();
+  const root = selectedRoot ?? await selectMediaRoot(requiredBytes);
   const moviesRoot = path.posix.join(root, 'movies');
   const label = year ? `${sanitizeSegment(title)} (${year})` : sanitizeSegment(title);
   const dir = safeJoin(moviesRoot, label);
@@ -152,8 +153,10 @@ export async function episodePlacement(
   season: number,
   episode: number,
   ext: string,
+  requiredBytes = 0,
+  selectedRoot?: string,
 ): Promise<EpisodePlacement> {
-  const root = await selectMediaRoot();
+  const root = selectedRoot ?? await selectMediaRoot(requiredBytes);
   const tvRoot = path.posix.join(root, 'tv');
   const show = sanitizeSegment(showTitle);
   const showDir = safeJoin(tvRoot, show);

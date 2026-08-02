@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { ApiError } from '../../lib/errors.js';
 import { writeAuditEvent } from '../admin/admin-control.service.js';
 import {
+  addStorageDriveSchema,
   saveDownloadClientSchema,
   saveQualityProfileSchema,
   selectReleaseSchema,
@@ -9,6 +10,11 @@ import {
   testReleaseSchema,
   updateSettingsSchema,
 } from './settings.schema.js';
+import {
+  addStorageDrive,
+  discoverStorageDrives,
+  getStorageSettings,
+} from './storage.service.js';
 import {
   deleteDownloadClient,
   deleteQualityProfile,
@@ -37,6 +43,22 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       targetType: 'SETTINGS',
       targetId: Object.keys(body).sort().join(','),
       details: { sections: Object.keys(body).sort() },
+    });
+    return result;
+  });
+
+  app.get('/storage', async () => getStorageSettings());
+  app.get('/storage/drives', async () => discoverStorageDrives());
+  app.post('/storage/drives', async (request) => {
+    const body = addStorageDriveSchema.parse(request.body);
+    const result = await addStorageDrive(body.driveId);
+    await writeAuditEvent({
+      actorId: request.account!.id,
+      action: 'STORAGE_DRIVE_ADDED',
+      targetType: 'STORAGE',
+      targetId: body.driveId,
+      targetLabel: result.roots.at(-1)?.label,
+      details: { roots: result.roots.length },
     });
     return result;
   });

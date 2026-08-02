@@ -11,13 +11,16 @@ import type {
   SaveDownloadClientRequest,
   SaveQualityProfileRequest,
   SettingsBundleDTO,
+  StorageDriveCandidateDTO,
+  StorageSettingsDTO,
 } from '@flux/shared';
 import { api, FluxApiError } from '@/lib/api';
 import { LoadingState, PageError, PageHeader } from '@/components/admin/AdminUI';
 
-type Tab = 'general' | 'downloads' | 'download-clients' | 'quality-profiles' | 'playback' | 'notifications' | 'integrations';
+type Tab = 'general' | 'storage' | 'downloads' | 'download-clients' | 'quality-profiles' | 'playback' | 'notifications' | 'integrations';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: 'General' },
+  { id: 'storage', label: 'Storage' },
   { id: 'downloads', label: 'Downloads' },
   { id: 'download-clients', label: 'Download Clients' },
   { id: 'quality-profiles', label: 'Quality Profiles' },
@@ -57,6 +60,11 @@ export function SettingsWorkspace() {
   const [draft, setDraft] = useState<SettingsBundleDTO | null>(null);
   const [clients, setClients] = useState<DownloadClientDTO[]>([]);
   const [profiles, setProfiles] = useState<QualityProfileDTO[]>([]);
+  const [storageDrives, setStorageDrives] = useState<StorageSettingsDTO | null>(null);
+  const [driveCandidates, setDriveCandidates] = useState<StorageDriveCandidateDTO[]>([]);
+  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
+  const [discoveringDrives, setDiscoveringDrives] = useState(false);
+  const [activatingDriveId, setActivatingDriveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,10 +87,10 @@ export function SettingsWorkspace() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [settings, clientRows, profileRows] = await Promise.all([
-        api.getSettings(), api.listDownloadClients(), api.listQualityProfiles(),
+      const [settings, clientRows, profileRows, storageSettings] = await Promise.all([
+        api.getSettings(), api.listDownloadClients(), api.listQualityProfiles(), api.getStorageSettings(),
       ]);
-      setOriginal(settings); setDraft(settings); setClients(clientRows); setProfiles(profileRows);
+      setOriginal(settings); setDraft(settings); setClients(clientRows); setProfiles(profileRows); setStorageDrives(storageSettings);
       setTestProfileId((current) => current && profileRows.some((profile) => profile.id === current) ? current : profileRows[0]?.id ?? null);
     } catch (err) { setError(message(err, 'Settings could not be loaded.')); }
     finally { setLoading(false); }
@@ -117,7 +125,7 @@ export function SettingsWorkspace() {
 
   const anyDirty = useMemo(() => {
     if (!draft || !original) return false;
-    return !same(draft.general, original.general) || !same(draft.downloads, original.downloads)
+    return !same(draft.general, original.general) || !same(draft.storage, original.storage) || !same(draft.downloads, original.downloads)
       || !same(draft.playback, original.playback) || !same(draft.notifications, original.notifications)
       || Boolean(discordSecret || smtpSecret || tmdbSecret)
       || Boolean(clientEditor && !same(clientEditor, clientBaseline))
@@ -140,7 +148,7 @@ export function SettingsWorkspace() {
     window.history.pushState(null, '', `${pathname}?${params.toString()}`);
   }
 
-  function updateSection<K extends 'general' | 'downloads' | 'playback' | 'notifications'>(section: K, values: Partial<SettingsBundleDTO[K]>) {
+  function updateSection<K extends 'general' | 'storage' | 'downloads' | 'playback' | 'notifications'>(section: K, values: Partial<SettingsBundleDTO[K]>) {
     setDraft((current) => current ? { ...current, [section]: { ...current[section], ...values } } : current);
   }
 
@@ -163,7 +171,7 @@ export function SettingsWorkspace() {
     if (!draft || hasValidationErrors) return;
     setSaving(true); setError(null); setNotice(null);
     try {
-      if (activeTab === 'general' || activeTab === 'downloads' || activeTab === 'playback') {
+      if (activeTab === 'general' || activeTab === 'storage' || activeTab === 'downloads' || activeTab === 'playback') {
         const result = await api.updateSettings({ [activeTab]: draft[activeTab] });
         setOriginal(result); setDraft(result);
       } else if (activeTab === 'notifications') {
@@ -274,6 +282,25 @@ export function SettingsWorkspace() {
     finally { setSaving(false); }
   }
 
+  async function openDrivePicker() {
+    setDrivePickerOpen(true); setDiscoveringDrives(true); setError(null); setNotice(null);
+    try { setDriveCandidates(await api.discoverStorageDrives()); }
+    catch (err) { setError(message(err, 'Server drives could not be discovered.')); }
+    finally { setDiscoveringDrives(false); }
+  }
+
+  async function addDrive(drive: StorageDriveCandidateDTO) {
+    if (!drive.writable || drive.alreadyAdded) return;
+    if (!window.confirm(`Add “${drive.label}” as an overflow library drive? Flux will prepare folders without moving existing media.`)) return;
+    setActivatingDriveId(drive.id); setError(null); setNotice(null);
+    try {
+      const next = await api.addStorageDrive(drive.id);
+      setStorageDrives(next); setDrivePickerOpen(false); setDriveCandidates([]);
+      setNotice(`${drive.label} is ready as overflow storage. The primary drive remains unchanged.`);
+    } catch (err) { setError(message(err, 'The drive could not be prepared.')); }
+    finally { setActivatingDriveId(null); }
+  }
+
   if (loading) return <div className="control-page"><PageHeader title="Settings" description="Server behavior, acquisition, playback, and integrations." /><LoadingState cards={4} /></div>;
   if (!draft || !original) return <div className="control-page"><PageHeader title="Settings" description="Server behavior, acquisition, playback, and integrations." /><PageError message={error ?? 'Settings could not be loaded.'} onRetry={() => { setLoading(true); void load(); }} /></div>;
 
@@ -288,6 +315,7 @@ export function SettingsWorkspace() {
       {sectionDirty && <div className="settings-unsaved"><span /> Unsaved changes</div>}
 
       {activeTab === 'general' && <GeneralTab value={draft.general} update={(values) => updateSection('general', values)} errors={validation} androidInfo={androidInfo} androidAutomaticUpdates={androidAutomaticUpdates} setAndroidAutomaticUpdates={setNativeAutomaticUpdates} />}
+      {activeTab === 'storage' && storageDrives && <StorageTab drives={storageDrives} policy={draft.storage} update={(values) => updateSection('storage', values)} errors={validation} candidates={driveCandidates} pickerOpen={drivePickerOpen} discovering={discoveringDrives} addingId={activatingDriveId} openPicker={openDrivePicker} closePicker={() => setDrivePickerOpen(false)} add={addDrive} />}
       {activeTab === 'downloads' && <DownloadsTab value={draft.downloads} clients={clients} profiles={profiles} update={(values) => updateSection('downloads', values)} errors={validation} />}
       {activeTab === 'download-clients' && <ClientsTab clients={clients} editor={clientEditor} setEditor={setClientEditor} edit={editClient} remove={removeClient} test={testClient} errors={clientEditor ? validateClient(clientEditor) : {}} busy={saving || testing} />}
       {activeTab === 'quality-profiles' && <ProfilesTab profiles={profiles} editor={profileEditor} setEditor={setProfileEditor} edit={editProfile} remove={removeProfile} errors={profileEditor ? validateProfile(profileEditor) : {}} testProfileId={testProfileId} setTestProfileId={setTestProfileId} releaseTitle={releaseTitle} setReleaseTitle={setReleaseTitle} releaseSize={releaseSize} setReleaseSize={setReleaseSize} runTest={runReleaseTest} result={releaseResult} busy={saving || testing} />}
@@ -319,8 +347,41 @@ function GeneralTab({ value, update, errors, androidInfo, androidAutomaticUpdate
   return <div className="settings-stack"><Section title="Server identity" description="Shown to web, mobile, and connected clients."><div className="settings-grid"><Field label="Server name" error={errors.serverName}><input className="control-input" value={value.serverName} onChange={(event) => update({ serverName: event.target.value })} /></Field><Field label="Language" error={errors.language}><input className="control-input" value={value.language} onChange={(event) => update({ language: event.target.value })} placeholder="en" /></Field><Field label="Time zone" error={errors.timezone} hint="IANA name, for example America/Chicago"><input className="control-input" value={value.timezone} onChange={(event) => update({ timezone: event.target.value })} /></Field></div></Section><Section title="Public addresses" description="Used for invite links, client branding, and remote playback handoff."><div className="settings-grid"><Field label="Frontend URL" error={errors.frontendUrl}><input className="control-input" type="url" value={value.frontendUrl} onChange={(event) => update({ frontendUrl: event.target.value })} /></Field><Field label="Public API URL" error={errors.apiUrl} hint="Optional; incoming request origin is used when empty."><input className="control-input" type="url" value={value.apiUrl ?? ''} onChange={(event) => update({ apiUrl: event.target.value || null })} /></Field></div></Section><Section title="Invite defaults" description="Applied when an administrator creates an invite without choosing an expiry."><Field label="Default expiry (hours)" error={errors.defaultInviteExpiryHours}><input className="control-input" type="number" min="1" max="8760" value={value.defaultInviteExpiryHours} onChange={(event) => update({ defaultInviteExpiryHours: Number(event.target.value) })} /></Field></Section>{androidInfo && <Section title="Android app updates" description="Native app update controls preserved from the existing Settings page."><div className="settings-meta-grid"><div><span>Installed version</span><strong>{androidInfo.versionName ?? 'Unknown'}{typeof androidInfo.versionCode === 'number' ? ` (${androidInfo.versionCode})` : ''}</strong></div>{androidInfo.updateServer && <div><span>Update server</span><strong>{androidInfo.updateServer}</strong></div>}</div><Toggle label="Check for updates automatically" checked={androidAutomaticUpdates} onChange={setAndroidAutomaticUpdates} /><div className="settings-row-actions"><button className="control-button primary" type="button" onClick={() => window.FluxNative?.checkForUpdates?.()}>Check for updates</button><button className="control-button" type="button" onClick={() => window.FluxNative?.clearUpdateDownloads?.()}>Clear downloaded files</button></div></Section>}</div>;
 }
 
+function formatStorageBytes(bytes: number | null): string {
+  if (bytes === null) return 'Unavailable';
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / (1024 ** index);
+  return `${value >= 100 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
+}
+
+function StorageTab({ drives, policy, update, errors, candidates, pickerOpen, discovering, addingId, openPicker, closePicker, add }: { drives: StorageSettingsDTO; policy: SettingsBundleDTO['storage']; update: (value: Partial<SettingsBundleDTO['storage']>) => void; errors: Record<string, string>; candidates: StorageDriveCandidateDTO[]; pickerOpen: boolean; discovering: boolean; addingId: string | null; openPicker: () => void; closePicker: () => void; add: (drive: StorageDriveCandidateDTO) => void }) {
+  const primary = drives.roots.find((root) => root.primary) ?? drives.roots[0];
+  const used = primary && primary.totalBytes !== null && primary.freeBytes !== null ? Math.max(0, primary.totalBytes - primary.freeBytes) : null;
+  const percent = primary?.totalBytes && used !== null ? Math.min(100, (used / primary.totalBytes) * 100) : 0;
+  return <div className="settings-stack">
+    <section className="settings-storage-hero">
+      <div className="settings-drive-mark" aria-hidden="true"><span /></div>
+      <div className="settings-storage-copy"><span className="settings-eyebrow">Primary library drive</span><h2>{primary?.label ?? 'Storage unavailable'}</h2><code>{drives.primaryRoot}</code><p>Flux keeps importing here until the next item would cross your free-space reserve, then spills the whole import to the next drive.</p></div>
+      <div className="settings-storage-capacity"><strong>{formatStorageBytes(primary?.freeBytes ?? null)}</strong><span>free of {formatStorageBytes(primary?.totalBytes ?? null)}</span><div className="settings-capacity-track" aria-label={`${percent.toFixed(0)}% used`}><i style={{ width: `${percent}%` }} /></div></div>
+      <button className="control-button primary settings-add-drive" type="button" onClick={openPicker}>Add new drive</button>
+    </section>
+    <Section title="Automatic spillover" description="The incoming movie or show size is counted before Flux chooses a drive.">
+      <div className="settings-policy-row"><Field label="Keep at least this much free (GB)" error={errors.reserveSpaceGb} hint="Default: 20 GB. Applied to every library drive before an import starts."><input className="control-input" type="number" min="0" step="1" value={policy.reserveSpaceGb} onChange={(event) => update({ reserveSpaceGb: Number(event.target.value) })} /></Field><div className="settings-policy-example"><span>Routing rule</span><strong>free space − incoming size ≥ {policy.reserveSpaceGb || 0} GB</strong><small>If false, Flux tries the next prepared drive in order.</small></div></div>
+    </Section>
+    <Section title="Library drive order" description="Existing files stay where they are. Overflow drives receive only imports that no longer fit safely on an earlier drive.">
+      <div className="settings-root-list">{drives.roots.map((root, index) => <article key={root.path} className={`settings-root-row${root.primary ? ' active' : ''}`}><span className="settings-root-index">{String(index + 1).padStart(2, '0')}</span><div><strong>{root.label}</strong><code>{root.path}</code></div><div className="settings-root-space"><strong>{formatStorageBytes(root.freeBytes)}</strong><span>free</span></div><em>{root.primary ? 'Primary' : root.available ? 'Overflow' : 'Offline'}</em></article>)}</div>
+    </Section>
+    <Section title="What gets prepared" description="Adding a drive does not repartition, format, or mount the server disk.">
+      <div className="settings-setup-strip"><div><span>01</span><strong>Verify access</strong><small>Real backend write check</small></div><div><span>02</span><strong>Create structure</strong><small>movies and tv folders</small></div><div><span>03</span><strong>Add overflow route</strong><small>Primary remains unchanged</small></div></div>
+    </Section>
+    {pickerOpen && <div className="settings-drive-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !addingId) closePicker(); }}><section className="settings-drive-dialog" role="dialog" aria-modal="true" aria-labelledby="drive-picker-title"><header><div><span className="settings-eyebrow">Server storage</span><h2 id="drive-picker-title">Add overflow drive</h2><p>Only mounted filesystems visible to the Flux backend are shown.</p></div><button className="settings-dialog-close" type="button" aria-label="Close drive picker" disabled={Boolean(addingId)} onClick={closePicker}>×</button></header>{discovering ? <div className="settings-drive-loading"><i /><span>Scanning mounted filesystems…</span></div> : candidates.length ? <div className="settings-drive-options">{candidates.map((drive) => { const driveUsed = drive.totalBytes !== null && drive.freeBytes !== null ? drive.totalBytes - drive.freeBytes : null; const drivePercent = drive.totalBytes && driveUsed !== null ? Math.min(100, (driveUsed / drive.totalBytes) * 100) : 0; return <article key={drive.id} className={`${drive.primary ? 'active' : ''}${!drive.writable ? ' disabled' : ''}`}><div className="settings-drive-option-head"><div className="settings-drive-mark small" aria-hidden="true"><span /></div><div><strong>{drive.label}</strong><code>{drive.mountPath}</code></div>{drive.primary && <em>Primary</em>}</div><div className="settings-drive-option-space"><span>{formatStorageBytes(drive.freeBytes)} free</span><span>{formatStorageBytes(drive.totalBytes)} total</span></div><div className="settings-capacity-track"><i style={{ width: `${drivePercent}%` }} /></div><footer><span>{drive.writable ? `Flux library: ${drive.suggestedRoot}` : 'Read-only for Flux'}</span><button className="control-button" type="button" disabled={!drive.writable || drive.alreadyAdded || Boolean(addingId)} onClick={() => add(drive)}>{addingId === drive.id ? 'Preparing…' : drive.alreadyAdded ? 'Already added' : 'Add as overflow'}</button></footer></article>; })}</div> : <div className="settings-drive-empty"><strong>No writable drives found</strong><p>Mount the drive under the host storage directory exposed to Flux, then scan again.</p><button className="control-button" type="button" onClick={openPicker}>Scan again</button></div>}</section></div>}
+  </div>;
+}
+
 function DownloadsTab({ value, clients, profiles, update, errors }: { value: SettingsBundleDTO['downloads']; clients: DownloadClientDTO[]; profiles: QualityProfileDTO[]; update: (value: Partial<SettingsBundleDTO['downloads']>) => void; errors: Record<string, string> }) {
-  return <div className="settings-stack"><Section title="Automation" description="Global policy for backend acquisition jobs. Manual torrent upload remains available regardless of this switch."><Toggle label="Enable automated downloads" checked={value.automatedDownloads} onChange={(automatedDownloads) => update({ automatedDownloads })} /><Toggle label="Automatic search" checked={value.automaticSearch} onChange={(automaticSearch) => update({ automaticSearch })} /><Toggle label="Automatic upgrades" checked={value.automaticUpgrades} onChange={(automaticUpgrades) => update({ automaticUpgrades })} /><Toggle label="Retry failed downloads" checked={value.retryFailedDownloads} onChange={(retryFailedDownloads) => update({ retryFailedDownloads })} /></Section><Section title="Selection defaults" description="Controls protocol preference and which configured client/profile wins by default."><div className="settings-grid"><Field label="Preferred protocol"><select className="control-select" value={value.preferredProtocol} onChange={(event) => update({ preferredProtocol: event.target.value as SettingsBundleDTO['downloads']['preferredProtocol'] })}><option value="TORRENT_ONLY">Torrent only</option><option value="USENET_ONLY">Usenet only</option><option value="PREFER_TORRENT">Prefer Torrent</option><option value="PREFER_USENET">Prefer Usenet</option><option value="EITHER">Either</option></select></Field><Field label="Default download client" error={errors.defaultDownloadClientId}><select className="control-select" value={value.defaultDownloadClientId ?? ''} onChange={(event) => update({ defaultDownloadClientId: event.target.value || null })}><option value="">None</option>{clients.filter((client) => client.enabled).map((client) => <option key={client.id} value={client.id}>{client.name} · {client.type}</option>)}</select></Field><Field label="Default quality profile" error={errors.defaultQualityProfileId}><select className="control-select" value={value.defaultQualityProfileId ?? ''} onChange={(event) => update({ defaultQualityProfileId: event.target.value || null })}><option value="">None</option>{profiles.filter((profile) => profile.enabled).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></Field></div></Section><Section title="Import and disk policy" description="Applied to completed jobs before media is admitted to the library."><div className="settings-grid"><Field label="Minimum free disk space (GB)" error={errors.minimumFreeSpaceGb}><input className="control-input" type="number" min="0" value={value.minimumFreeSpaceGb} onChange={(event) => update({ minimumFreeSpaceGb: Number(event.target.value) })} /></Field><Field label="Completed import behavior"><select className="control-select" value={value.completedImportBehavior} onChange={(event) => update({ completedImportBehavior: event.target.value as 'COPY' | 'MOVE' })}><option value="COPY">Copy into library</option><option value="MOVE">Move into library</option></select></Field></div></Section><Section title="Torrent lifecycle" description="Seeding limits are optional. Removal never deletes library copies."><div className="settings-grid"><Field label="Seed ratio" error={errors.torrentSeedRatio}><input className="control-input" type="number" min="0" step="0.1" placeholder="Unlimited" value={value.torrentSeedRatio ?? ''} onChange={(event) => update({ torrentSeedRatio: event.target.value ? Number(event.target.value) : null })} /></Field><Field label="Seed time (minutes)" error={errors.torrentSeedTimeMinutes}><input className="control-input" type="number" min="1" placeholder="Unlimited" value={value.torrentSeedTimeMinutes ?? ''} onChange={(event) => update({ torrentSeedTimeMinutes: event.target.value ? Number(event.target.value) : null })} /></Field></div><Toggle label="Remove torrent after seeding limits are met" checked={value.torrentRemoveAfterSeeding} onChange={(torrentRemoveAfterSeeding) => update({ torrentRemoveAfterSeeding })} /></Section><Section title="Usenet cleanup" description="Removes only jobs matching a configured Flux category, leaving unrelated client history untouched."><Toggle label="Remove completed Usenet jobs" checked={value.usenetRemoveCompleted} onChange={(usenetRemoveCompleted) => update({ usenetRemoveCompleted })} /><Toggle label="Remove failed Usenet jobs" checked={value.usenetRemoveFailed} onChange={(usenetRemoveFailed) => update({ usenetRemoveFailed })} /></Section></div>;
+  return <div className="settings-stack"><Section title="Automation" description="Global policy for backend acquisition jobs. Manual torrent upload remains available regardless of this switch."><Toggle label="Enable automated downloads" checked={value.automatedDownloads} onChange={(automatedDownloads) => update({ automatedDownloads })} /><Toggle label="Automatic search" checked={value.automaticSearch} onChange={(automaticSearch) => update({ automaticSearch })} /><Toggle label="Automatic upgrades" checked={value.automaticUpgrades} onChange={(automaticUpgrades) => update({ automaticUpgrades })} /><Toggle label="Retry failed downloads" checked={value.retryFailedDownloads} onChange={(retryFailedDownloads) => update({ retryFailedDownloads })} /></Section><Section title="Selection defaults" description="Controls protocol preference and which configured client/profile wins by default."><div className="settings-grid"><Field label="Preferred protocol"><select className="control-select" value={value.preferredProtocol} onChange={(event) => update({ preferredProtocol: event.target.value as SettingsBundleDTO['downloads']['preferredProtocol'] })}><option value="TORRENT_ONLY">Torrent only</option><option value="USENET_ONLY">Usenet only</option><option value="PREFER_TORRENT">Prefer Torrent</option><option value="PREFER_USENET">Prefer Usenet</option><option value="EITHER">Either</option></select></Field><Field label="Default download client" error={errors.defaultDownloadClientId}><select className="control-select" value={value.defaultDownloadClientId ?? ''} onChange={(event) => update({ defaultDownloadClientId: event.target.value || null })}><option value="">None</option>{clients.filter((client) => client.enabled).map((client) => <option key={client.id} value={client.id}>{client.name} · {client.type}</option>)}</select></Field><Field label="Default quality profile" error={errors.defaultQualityProfileId}><select className="control-select" value={value.defaultQualityProfileId ?? ''} onChange={(event) => update({ defaultQualityProfileId: event.target.value || null })}><option value="">None</option>{profiles.filter((profile) => profile.enabled).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></Field></div></Section><Section title="Import and disk policy" description="Download staging has its own safety floor; library-drive spillover is configured in Storage."><div className="settings-grid"><Field label="Download staging reserve (GB)" error={errors.minimumFreeSpaceGb}><input className="control-input" type="number" min="0" value={value.minimumFreeSpaceGb} onChange={(event) => update({ minimumFreeSpaceGb: Number(event.target.value) })} /></Field><Field label="Completed import behavior"><select className="control-select" value={value.completedImportBehavior} onChange={(event) => update({ completedImportBehavior: event.target.value as 'COPY' | 'MOVE' })}><option value="COPY">Copy into library</option><option value="MOVE">Move into library</option></select></Field></div></Section><Section title="Torrent lifecycle" description="Seeding limits are optional. Removal never deletes library copies."><div className="settings-grid"><Field label="Seed ratio" error={errors.torrentSeedRatio}><input className="control-input" type="number" min="0" step="0.1" placeholder="Unlimited" value={value.torrentSeedRatio ?? ''} onChange={(event) => update({ torrentSeedRatio: event.target.value ? Number(event.target.value) : null })} /></Field><Field label="Seed time (minutes)" error={errors.torrentSeedTimeMinutes}><input className="control-input" type="number" min="1" placeholder="Unlimited" value={value.torrentSeedTimeMinutes ?? ''} onChange={(event) => update({ torrentSeedTimeMinutes: event.target.value ? Number(event.target.value) : null })} /></Field></div><Toggle label="Remove torrent after seeding limits are met" checked={value.torrentRemoveAfterSeeding} onChange={(torrentRemoveAfterSeeding) => update({ torrentRemoveAfterSeeding })} /></Section><Section title="Usenet cleanup" description="Removes only jobs matching a configured Flux category, leaving unrelated client history untouched."><Toggle label="Remove completed Usenet jobs" checked={value.usenetRemoveCompleted} onChange={(usenetRemoveCompleted) => update({ usenetRemoveCompleted })} /><Toggle label="Remove failed Usenet jobs" checked={value.usenetRemoveFailed} onChange={(usenetRemoveFailed) => update({ usenetRemoveFailed })} /></Section></div>;
 }
 
 function ClientsTab({ clients, editor, setEditor, edit, remove, test, errors, busy }: { clients: DownloadClientDTO[]; editor: (SaveDownloadClientRequest & { id?: string }) | null; setEditor: React.Dispatch<React.SetStateAction<(SaveDownloadClientRequest & { id?: string }) | null>>; edit: (client?: DownloadClientDTO) => void; remove: (client: DownloadClientDTO) => void; test: (client: DownloadClientDTO) => void; errors: Record<string, string>; busy: boolean }) {
@@ -353,6 +414,8 @@ function validateTab(tab: Tab, settings: SettingsBundleDTO, extra: { discordSecr
     if (!settings.general.timezone.trim()) errors.timezone = 'Time zone is required.';
     if (!/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(settings.general.language)) errors.language = 'Use a language tag such as en or en-US.';
     if (settings.general.defaultInviteExpiryHours < 1) errors.defaultInviteExpiryHours = 'Expiry must be at least one hour.';
+  } else if (tab === 'storage') {
+    if (!Number.isInteger(settings.storage.reserveSpaceGb) || settings.storage.reserveSpaceGb < 0) errors.reserveSpaceGb = 'Reserve must be a whole number of gigabytes.';
   } else if (tab === 'downloads') {
     if (settings.downloads.minimumFreeSpaceGb < 0) errors.minimumFreeSpaceGb = 'Free space cannot be negative.';
   } else if (tab === 'playback') {

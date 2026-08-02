@@ -63,9 +63,9 @@ const envSchema = z.object({
   DOWNLOAD_ROOT: z.string().min(1).default('/data/downloads'),
   TRANSCODE_ROOT: z.string().min(1).default('/data/transcode'),
 
-  /** When picking a media root for new files, skip roots with less than this
-   * many free bytes. Default 10 GB. */
-  MEDIA_SPILLOVER_THRESHOLD_BYTES: z.coerce.number().int().min(0).default(10_737_418_240),
+  /** Fallback library reserve before database-backed settings are available.
+   * The Settings storage policy takes ownership after migrations run. */
+  MEDIA_SPILLOVER_THRESHOLD_BYTES: z.coerce.number().int().min(0).default(21_474_836_480),
 
   /** How often the background poller sweeps for finished torrents (ms). */
   TORRENT_POLL_INTERVAL_MS: z.coerce

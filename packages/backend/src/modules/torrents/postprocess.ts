@@ -3,7 +3,7 @@
  * Copies files into the media library and fulfills associated requests.
  */
 import { prisma } from '../../lib/db.js';
-import { moviePlacement, episodePlacement } from '../../lib/media-paths.js';
+import { moviePlacement, episodePlacement, selectMediaRoot } from '../../lib/media-paths.js';
 import { isVideoFile, fileExtension } from '../../lib/filename.js';
 import { analyzeAndStoreMedia } from '../../lib/media-analyzer.js';
 import { ensureTrickplay } from '../../lib/trickplay-generator.js';
@@ -94,6 +94,7 @@ export async function processTorrentPostprocess(
     );
 
     let mediaItemId: string;
+    let importedMoviePath: string | null = null;
     const placedEpisodeMappings: FileMappingEntry[] = [];
 
     if (torrent.category === 'MOVIE') {
@@ -118,7 +119,9 @@ export async function processTorrentPostprocess(
         tmdbDetail.title,
         tmdbDetail.year,
         fileExtension(largestVideo.name),
+        largestVideo.length,
       );
+      importedMoviePath = placement.file;
 
       await mkdir(placement.dir, { recursive: true });
       const source = path.join(torrentData.downloadDir, largestVideo.path);
@@ -197,6 +200,12 @@ export async function processTorrentPostprocess(
       mediaItemId = mediaItem.id;
 
       const files = torrentData.files as unknown as TorrentFile[];
+      const mappedPaths = new Set(fileMapping.map((mapping) => mapping.path));
+      const requiredBytes = files.reduce(
+        (total, file) => total + (mappedPaths.has(file.path) ? file.length : 0),
+        0,
+      );
+      const showRoot = await selectMediaRoot(requiredBytes);
       const seasons = [...new Set(fileMapping.map((mapping) => mapping.season))];
       const episodeMetaBySeason = new Map(
         await Promise.all(
@@ -230,6 +239,8 @@ export async function processTorrentPostprocess(
           mapping.season,
           mapping.episode,
           fileExtension(matchedFile.name),
+          matchedFile.length,
+          showRoot,
         );
 
         await mkdir(placement.seasonDir, { recursive: true });
@@ -299,11 +310,8 @@ export async function processTorrentPostprocess(
     // Runs ffprobe on each file and stores codec/stream info in the DB so
     // future playback decisions are instant instead of a fresh ffprobe spawn.
     if (torrent.category === 'MOVIE') {
-      const files = torrentData.files as unknown as TorrentFile[];
-      const videoFiles = files.filter((f) => isVideoFile(f.name));
-      const largestVideo = videoFiles.reduce((a, b) => a.length > b.length ? a : b);
-      const placement = await moviePlacement(tmdbDetail.title, tmdbDetail.year, fileExtension(largestVideo.name));
-      analyzeMediaAssets(placement.file, { mediaItemId }).catch((err) => {
+      if (!importedMoviePath) throw new Error('Movie import path was not recorded');
+      analyzeMediaAssets(importedMoviePath, { mediaItemId }).catch((err) => {
         console.error(`[PostProcess] Media analysis failed for movie ${mediaItemId}:`, err);
       });
     } else {

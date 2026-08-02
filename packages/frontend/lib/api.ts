@@ -38,6 +38,8 @@ import type {
   SettingsBundleDTO,
   UpdateSettingsBundleRequest,
   SettingsTestResultDTO,
+  StorageDriveCandidateDTO,
+  StorageSettingsDTO,
   DownloadClientDTO,
   DownloadClientTestResultDTO,
   SaveDownloadClientRequest,
@@ -515,6 +517,18 @@ export const api = {
   },
   updateSettings(body: UpdateSettingsBundleRequest) {
     return request<SettingsBundleDTO>('/api/settings', { method: 'PUT', body });
+  },
+  getStorageSettings() {
+    return request<StorageSettingsDTO>('/api/settings/storage');
+  },
+  discoverStorageDrives() {
+    return request<StorageDriveCandidateDTO[]>('/api/settings/storage/drives');
+  },
+  addStorageDrive(driveId: string) {
+    return request<StorageSettingsDTO>('/api/settings/storage/drives', {
+      method: 'POST',
+      body: { driveId },
+    });
   },
   listDownloadClients() {
     return request<DownloadClientDTO[]>('/api/settings/download-clients');

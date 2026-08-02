@@ -96,6 +96,8 @@ services:
       - /storage/flux-downloads:/data/downloads
       - transcode:/data/transcode
       - /storage/flux-extra:/data/extra
+      # Exposes server-mounted storage to the Settings drive picker.
+      - ${FLUX_STORAGE_DISCOVERY_ROOT:-/storage}:/storage
       - ./releases/android:/data/releases/android:ro
 
   frontend:

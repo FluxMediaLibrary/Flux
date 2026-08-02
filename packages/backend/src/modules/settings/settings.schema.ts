@@ -11,6 +11,9 @@ export const updateSettingsSchema = z.object({
     language: z.string().trim().regex(/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/).optional(),
     defaultInviteExpiryHours: z.number().int().min(1).max(8760).optional(),
   }).strict().optional(),
+  storage: z.object({
+    reserveSpaceGb: z.number().int().min(0).max(1_000_000).optional(),
+  }).strict().optional(),
   downloads: z.object({
     automatedDownloads: z.boolean().optional(),
     preferredProtocol: z.enum(['TORRENT_ONLY', 'USENET_ONLY', 'PREFER_TORRENT', 'PREFER_USENET', 'EITHER']).optional(),
@@ -44,6 +47,10 @@ export const updateSettingsSchema = z.object({
   integrations: z.object({
     tmdbApiKey: z.string().trim().min(8).max(512).nullable().optional(),
   }).strict().optional(),
+}).strict();
+
+export const addStorageDriveSchema = z.object({
+  driveId: z.string().trim().min(1).max(128),
 }).strict();
 
 export const saveDownloadClientSchema = z.object({

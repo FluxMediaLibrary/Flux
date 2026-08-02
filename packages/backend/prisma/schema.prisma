@@ -426,6 +426,10 @@ model ServerSettings {
 
   tmdbApiKey String?
 
+  primaryMediaRoot  String?
+  managedMediaRoots String[] @default([])
+  storageReserveGb  Int      @default(20)
+
   downloadClientsSeeded  Boolean @default(false)
   qualityProfilesSeeded  Boolean @default(false)
 

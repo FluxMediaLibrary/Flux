@@ -8,6 +8,7 @@ import path from 'node:path';
 import { prisma } from '../../lib/db.js';
 import { config } from '../../config.js';
 import { safeJoin, resolveFilePath } from '../../lib/media-paths.js';
+import { getLibraryRootState } from '../../lib/library-roots.js';
 import { analyzeAndStoreMedia } from '../../lib/media-analyzer.js';
 import { ensureTrickplay } from '../../lib/trickplay-generator.js';
 import { ApiError } from '../../lib/errors.js';
@@ -120,9 +121,10 @@ async function directorySize(dir: string): Promise<number> {
   return bytes;
 }
 
-function containingMediaRoot(filePath: string): string | null {
+async function containingMediaRoot(filePath: string): Promise<string | null> {
   const resolved = path.resolve(filePath);
-  for (const root of config.MEDIA_ROOTS.map((entry) => path.resolve(entry))) {
+  const { roots } = await getLibraryRootState();
+  for (const root of roots) {
     const rel = path.relative(root, resolved);
     if (rel === '' || rel === '.' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
       return root;
@@ -134,7 +136,7 @@ function containingMediaRoot(filePath: string): string | null {
 async function resolveDeletableMediaPath(filePath: string): Promise<{ filePath: string; root: string } | null> {
   const resolved = await resolveFilePath(filePath);
   if (!resolved) return null;
-  const root = containingMediaRoot(resolved);
+  const root = await containingMediaRoot(resolved);
   if (!root) {
     throw ApiError.badRequest(
       'Refusing to delete a media file outside configured media roots',
@@ -490,8 +492,9 @@ export async function getAdminInfo(): Promise<AdminInfoDTO> {
   };
 
   // ── Storage roots (paths only; disk usage via df in container) ─────────
+  const libraryRootState = await getLibraryRootState();
   const [mediaRoots, downloadRoot, transcodeRoot] = await Promise.all([
-    Promise.all(config.MEDIA_ROOTS.map((r) => getStorageRoot(r))),
+    Promise.all(libraryRootState.roots.map((r) => getStorageRoot(r))),
     getStorageRoot(config.DOWNLOAD_ROOT),
     getStorageRoot(config.TRANSCODE_ROOT),
   ]);

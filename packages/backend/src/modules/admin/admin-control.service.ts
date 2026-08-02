@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import { ADMIN_PERMISSIONS, type AdminActivityEventDTO, type AdminOverviewDTO, type AdminPermission, type AdminPlaybackSessionDTO, type AdminSignalDTO, type AdminUserDTO, type UpdateAdminUserRequest } from '@flux/shared';
 import { Prisma } from '@prisma/client';
 import { config } from '../../config.js';
+import { getLibraryRootState } from '../../lib/library-roots.js';
 import { prisma } from '../../lib/db.js';
 import { ApiError } from '../../lib/errors.js';
 import { resolveFilePath } from '../../lib/media-paths.js';
@@ -114,7 +115,8 @@ export async function getAdminPlayback(limit = 12): Promise<AdminPlaybackSession
 
 async function storageUsage(): Promise<{ used: number | null; total: number | null; percent: number | null }> {
   try {
-    const stats = await fs.statfs(config.MEDIA_ROOTS[0]!);
+    const { primaryRoot } = await getLibraryRootState();
+    const stats = await fs.statfs(primaryRoot);
     const total = stats.blocks * stats.bsize;
     const free = stats.bavail * stats.bsize;
     const used = Math.max(0, total - free);
