@@ -179,3 +179,60 @@ export async function addStorageDrive(id: string): Promise<StorageSettingsDTO> {
   invalidateLibraryRootState();
   return getStorageSettings();
 }
+
+function samePath(a: string, b: string): boolean {
+  return path.resolve(a) === path.resolve(b);
+}
+
+function isInsidePath(root: string, candidate: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative === '' || relative === '.' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+async function countAbsoluteLibraryFilesUnderRoot(root: string): Promise<number> {
+  const [movies, episodes] = await Promise.all([
+    prisma.mediaItem.findMany({ where: { filePath: { not: null } }, select: { filePath: true } }),
+    prisma.episode.findMany({ where: { filePath: { not: null } }, select: { filePath: true } }),
+  ]);
+
+  return [...movies, ...episodes].filter((row) =>
+    row.filePath !== null && path.isAbsolute(row.filePath) && isInsidePath(root, row.filePath),
+  ).length;
+}
+
+export async function removeStorageDrive(rootPath: string): Promise<StorageSettingsDTO> {
+  const target = path.resolve(rootPath);
+  const environmentRoots = environmentMediaRoots();
+  if (environmentRoots.some((root) => samePath(root, target))) {
+    throw ApiError.badRequest(
+      'Environment-configured library drives must be removed from server configuration',
+      'STORAGE_DRIVE_ENVIRONMENT',
+    );
+  }
+
+  const settings = await getServerSettings();
+  const primaryRoot = settings.primaryMediaRoot ?? environmentRoots[0];
+  if (primaryRoot && samePath(primaryRoot, target)) {
+    throw ApiError.badRequest('The primary library drive cannot be removed', 'STORAGE_DRIVE_PRIMARY');
+  }
+
+  const managedMediaRoots = settings.managedMediaRoots.map((root) => path.resolve(root));
+  if (!managedMediaRoots.some((root) => samePath(root, target))) {
+    throw ApiError.notFound('That managed library drive is not configured', 'STORAGE_DRIVE_NOT_CONFIGURED');
+  }
+
+  const referencedFiles = await countAbsoluteLibraryFilesUnderRoot(target);
+  if (referencedFiles > 0) {
+    throw ApiError.badRequest(
+      `This drive still has ${referencedFiles} library file reference${referencedFiles === 1 ? '' : 's'}. Delete or move that media before removing the drive.`,
+      'STORAGE_DRIVE_IN_USE',
+    );
+  }
+
+  await prisma.serverSettings.update({
+    where: { id: 'singleton' },
+    data: { managedMediaRoots: managedMediaRoots.filter((root) => !samePath(root, target)) },
+  });
+  invalidateLibraryRootState();
+  return getStorageSettings();
+}

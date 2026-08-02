@@ -680,12 +680,11 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
   }
 
   let added: AddTorrentResult;
+  let dataCheck: Awaited<ReturnType<typeof detectExistingData>>;
   try {
-    const dataCheck = await detectExistingData(buffer);
+    dataCheck = await detectExistingData(buffer);
     if (!dataCheck.complete) await ensureMinimumFreeSpace();
-    added = await addTorrent(buffer, {
-      verifyExisting: dataCheck.filesOnDisk > 0,
-    });
+    added = await addTorrent(buffer, { verifyExisting: true });
     if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {
       throw new Error(`Transmission returned infoHash ${added.infoHash}, expected ${row.infoHash}`);
     }
@@ -704,10 +703,11 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
   });
 
   const live = await getLiveStats(row.infoHash);
-  // Only a duplicate add (Transmission already had it) goes straight back to
-  // SEEDING. A fresh add with complete data still passes through DOWNLOADING so
-  // the post-process pipeline imports/reconciles the library copy.
-  const seeded = added.reused && live?.done === true;
+  // Only a duplicate add with a payload Flux can still see on disk goes straight
+  // back to SEEDING. Transmission can report a stale duplicate as complete after
+  // the underlying files were deleted, so the local completeness check is the
+  // guardrail.
+  const seeded = dataCheck.complete && added.reused && live?.done === true;
   const updated = await prisma.torrent.update({
     where: { id },
     data: {
@@ -815,17 +815,16 @@ export async function startDownloading(
 
   const dataCheck = await detectExistingData(buffer);
   if (!dataCheck.complete) await ensureMinimumFreeSpace();
-  const added = await addTorrent(buffer, {
-    verifyExisting: dataCheck.filesOnDisk > 0,
-  });
+  const added = await addTorrent(buffer, { verifyExisting: true });
   if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {
     throw new Error(`Transmission returned infoHash ${added.infoHash}, expected ${row.infoHash}`);
   }
   const live = await getLiveStats(row.infoHash);
-  // Only a duplicate add (Transmission already had it) goes straight back to
-  // SEEDING. A fresh add with complete data still passes through DOWNLOADING so
-  // the post-process pipeline imports/reconciles the library copy.
-  const seeded = added.reused && live?.done === true;
+  // Only a duplicate add with a payload Flux can still see on disk goes straight
+  // back to SEEDING. Transmission can report a stale duplicate as complete after
+  // the underlying files were deleted, so the local completeness check is the
+  // guardrail.
+  const seeded = dataCheck.complete && added.reused && live?.done === true;
 
   await prisma.torrent.update({
     where: { id: torrentId },

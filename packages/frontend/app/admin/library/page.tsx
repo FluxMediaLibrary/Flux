@@ -26,6 +26,7 @@ type RepairTarget = AdminLibraryAcquisitionTargetDTO & {
 };
 type DeleteTarget = {
   item: AdminLibraryItemDTO;
+  season?: AdminLibrarySeasonDTO;
   episode?: AdminLibraryEpisodeDTO;
 };
 
@@ -330,16 +331,24 @@ export default function AdminLibraryPage() {
   async function deleteSelectedMedia() {
     if (!deleteTarget) return;
     const target = deleteTarget;
-    const targetKey = target.episode ? `episode:${target.episode.id}` : `item:${target.item.id}`;
+    const targetKey = target.episode
+      ? `episode:${target.episode.id}`
+      : target.season
+        ? `season:${target.item.id}:s${target.season.season}`
+        : `item:${target.item.id}`;
     setDeletingTarget(targetKey);
     setNotice(null);
     setError(null);
     try {
       const result = target.episode
         ? await api.deleteAdminEpisode(target.episode.id)
+        : target.season
+          ? await api.deleteAdminSeason(target.item.id, target.season.season)
         : await api.deleteAdminMedia(target.item.id);
       const label = target.episode
         ? `${target.item.title} S${target.episode.season} E${target.episode.episode}`
+        : target.season
+          ? `${target.item.title} season ${target.season.season}`
         : target.item.title;
       setNotice(formatDeleteNotice(result, label));
       setDeleteTarget(null);
@@ -525,6 +534,7 @@ export default function AdminLibraryPage() {
                   onAnalyze={() => void analyzeMedia(item)}
                   onClearMissing={(episode) => void clearMissingFile(item, episode)}
                   onDelete={(episode) => setDeleteTarget({ item, episode })}
+                  onDeleteSeason={(season) => setDeleteTarget({ item, season })}
                   onScanSeason={(season) => void rescanSeasonIntros(item, season, false)}
                   onForceScanSeason={(season) => setForceScanTarget({ item, season })}
                   onEditIntro={(episode) => setSegmentEditor({ item, episode })}
@@ -536,11 +546,13 @@ export default function AdminLibraryPage() {
       )}
       <ConfirmDialog
         open={deleteTarget !== null}
-        title={deleteTarget?.episode ? 'Delete this episode?' : 'Delete this title?'}
+        title={deleteTarget?.episode ? 'Delete this episode?' : deleteTarget?.season ? 'Delete this season?' : 'Delete this title?'}
         description={deleteTarget?.episode
           ? `This removes ${deleteTarget.item.title} S${deleteTarget.episode.season} E${deleteTarget.episode.episode} from Flux and deletes its media file when it is inside a configured media root.`
+          : deleteTarget?.season
+            ? `This removes ${deleteTarget.item.title} season ${deleteTarget.season.season} from Flux and deletes its episode files when they are inside configured media roots.`
           : `This removes ${deleteTarget?.item.title ?? 'this title'} from Flux and deletes its movie or episode files when they are inside configured media roots.`}
-        confirmLabel={deleteTarget?.episode ? 'Delete episode' : 'Delete title'}
+        confirmLabel={deleteTarget?.episode ? 'Delete episode' : deleteTarget?.season ? 'Delete season' : 'Delete title'}
         dangerous
         busy={deletingTarget !== null}
         onClose={() => {
@@ -693,6 +705,7 @@ function LibraryHealthRow({
   onAnalyze,
   onClearMissing,
   onDelete,
+  onDeleteSeason,
   onScanSeason,
   onForceScanSeason,
   onEditIntro,
@@ -709,6 +722,7 @@ function LibraryHealthRow({
   onAnalyze: () => void;
   onClearMissing: (episode?: AdminLibraryEpisodeDTO) => void;
   onDelete: (episode?: AdminLibraryEpisodeDTO) => void;
+  onDeleteSeason: (season: AdminLibrarySeasonDTO) => void;
   onScanSeason: (season: number) => void;
   onForceScanSeason: (season: number) => void;
   onEditIntro: (episode: AdminLibraryEpisodeDTO) => void;
@@ -815,6 +829,7 @@ function LibraryHealthRow({
             const bad = season.brokenEpisodes > 0;
             const warn = season.missingEpisodes > 0 || season.unanalyzedEpisodes > 0;
             const syncingSeason = syncingTarget === `${item.id}:s${season.season}`;
+            const deletingSeason = deletingTarget === `season:${item.id}:s${season.season}`;
             return (
               <div
                 key={season.season}
@@ -878,6 +893,14 @@ function LibraryHealthRow({
                     </button>
                   </>
                 )}
+                <button
+                  type="button"
+                  className="admin-season-action danger"
+                  onClick={() => onDeleteSeason(season)}
+                  disabled={deletingSeason}
+                >
+                  {deletingSeason ? 'Deleting' : 'Delete'}
+                </button>
               </div>
             );
           })}

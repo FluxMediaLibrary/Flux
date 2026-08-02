@@ -1201,6 +1201,51 @@ export async function deleteLibraryEpisode(
   };
 }
 
+export async function deleteLibrarySeason(
+  mediaItemId: string,
+  season: number,
+): Promise<AdminMediaDeleteResultDTO> {
+  const item = await prisma.mediaItem.findUnique({
+    where: { id: mediaItemId },
+    select: {
+      id: true,
+      type: true,
+      episodes: {
+        where: { season },
+        select: { id: true, filePath: true },
+      },
+    },
+  });
+
+  if (!item) {
+    throw ApiError.notFound(`Media item ${mediaItemId} not found`);
+  }
+  if (item.type !== 'SHOW') {
+    throw ApiError.badRequest('Season deletion only applies to shows', 'NOT_A_SHOW');
+  }
+
+  const prepared = await buildDeletableFileList(item.episodes.map((episode) => episode.filePath));
+  if (item.episodes.length > 0) {
+    await prisma.episode.deleteMany({
+      where: {
+        mediaItemId: item.id,
+        season,
+      },
+    });
+  }
+  const deleted = await deletePreparedFiles(prepared.files);
+  clearDirectorySizeCache();
+
+  return {
+    mediaItemId: item.id,
+    episodeId: null,
+    deletedRecords: item.episodes.length,
+    deletedFiles: deleted.deletedFiles,
+    deletedBytes: deleted.deletedBytes,
+    skippedFiles: [...prepared.skippedFiles, ...deleted.skippedFiles],
+  };
+}
+
 export async function pruneTranscodeCache(
   maxAgeSeconds = 30 * 60,
 ): Promise<AdminStorageCleanupResultDTO> {

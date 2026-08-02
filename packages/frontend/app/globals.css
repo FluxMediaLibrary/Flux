@@ -1397,6 +1397,14 @@ table.data tr:last-child td {
   cursor: wait;
   opacity: .72;
 }
+.admin-season-action.danger {
+  color: var(--danger);
+}
+.admin-season-action.danger:hover,
+.admin-season-action.danger:focus-visible {
+  background: var(--danger);
+  color: #fff;
+}
 .admin-episode-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));

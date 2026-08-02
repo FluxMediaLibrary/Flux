@@ -65,6 +65,7 @@ export function SettingsWorkspace() {
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   const [discoveringDrives, setDiscoveringDrives] = useState(false);
   const [activatingDriveId, setActivatingDriveId] = useState<string | null>(null);
+  const [removingDrivePath, setRemovingDrivePath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -301,6 +302,17 @@ export function SettingsWorkspace() {
     finally { setActivatingDriveId(null); }
   }
 
+  async function removeDrive(path: string, label: string) {
+    if (!window.confirm(`Remove "${label}" from Flux overflow storage? This does not delete files from the disk.`)) return;
+    setRemovingDrivePath(path); setError(null); setNotice(null);
+    try {
+      const next = await api.removeStorageDrive(path);
+      setStorageDrives(next);
+      setNotice(`${label} was removed from overflow storage.`);
+    } catch (err) { setError(message(err, 'The drive could not be removed.')); }
+    finally { setRemovingDrivePath(null); }
+  }
+
   if (loading) return <div className="control-page"><PageHeader title="Settings" description="Server behavior, acquisition, playback, and integrations." /><LoadingState cards={4} /></div>;
   if (!draft || !original) return <div className="control-page"><PageHeader title="Settings" description="Server behavior, acquisition, playback, and integrations." /><PageError message={error ?? 'Settings could not be loaded.'} onRetry={() => { setLoading(true); void load(); }} /></div>;
 
@@ -315,7 +327,7 @@ export function SettingsWorkspace() {
       {sectionDirty && <div className="settings-unsaved"><span /> Unsaved changes</div>}
 
       {activeTab === 'general' && <GeneralTab value={draft.general} update={(values) => updateSection('general', values)} errors={validation} androidInfo={androidInfo} androidAutomaticUpdates={androidAutomaticUpdates} setAndroidAutomaticUpdates={setNativeAutomaticUpdates} />}
-      {activeTab === 'storage' && storageDrives && <StorageTab drives={storageDrives} policy={draft.storage} update={(values) => updateSection('storage', values)} errors={validation} candidates={driveCandidates} pickerOpen={drivePickerOpen} discovering={discoveringDrives} addingId={activatingDriveId} openPicker={openDrivePicker} closePicker={() => setDrivePickerOpen(false)} add={addDrive} />}
+      {activeTab === 'storage' && storageDrives && <StorageTab drives={storageDrives} policy={draft.storage} update={(values) => updateSection('storage', values)} errors={validation} candidates={driveCandidates} pickerOpen={drivePickerOpen} discovering={discoveringDrives} addingId={activatingDriveId} removingPath={removingDrivePath} openPicker={openDrivePicker} closePicker={() => setDrivePickerOpen(false)} add={addDrive} remove={removeDrive} />}
       {activeTab === 'downloads' && <DownloadsTab value={draft.downloads} clients={clients} profiles={profiles} update={(values) => updateSection('downloads', values)} errors={validation} />}
       {activeTab === 'download-clients' && <ClientsTab clients={clients} editor={clientEditor} setEditor={setClientEditor} edit={editClient} remove={removeClient} test={testClient} errors={clientEditor ? validateClient(clientEditor) : {}} busy={saving || testing} />}
       {activeTab === 'quality-profiles' && <ProfilesTab profiles={profiles} editor={profileEditor} setEditor={setProfileEditor} edit={editProfile} remove={removeProfile} errors={profileEditor ? validateProfile(profileEditor) : {}} testProfileId={testProfileId} setTestProfileId={setTestProfileId} releaseTitle={releaseTitle} setReleaseTitle={setReleaseTitle} releaseSize={releaseSize} setReleaseSize={setReleaseSize} runTest={runReleaseTest} result={releaseResult} busy={saving || testing} />}
@@ -356,7 +368,7 @@ function formatStorageBytes(bytes: number | null): string {
   return `${value >= 100 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
 }
 
-function StorageTab({ drives, policy, update, errors, candidates, pickerOpen, discovering, addingId, openPicker, closePicker, add }: { drives: StorageSettingsDTO; policy: SettingsBundleDTO['storage']; update: (value: Partial<SettingsBundleDTO['storage']>) => void; errors: Record<string, string>; candidates: StorageDriveCandidateDTO[]; pickerOpen: boolean; discovering: boolean; addingId: string | null; openPicker: () => void; closePicker: () => void; add: (drive: StorageDriveCandidateDTO) => void }) {
+function StorageTab({ drives, policy, update, errors, candidates, pickerOpen, discovering, addingId, removingPath, openPicker, closePicker, add, remove }: { drives: StorageSettingsDTO; policy: SettingsBundleDTO['storage']; update: (value: Partial<SettingsBundleDTO['storage']>) => void; errors: Record<string, string>; candidates: StorageDriveCandidateDTO[]; pickerOpen: boolean; discovering: boolean; addingId: string | null; removingPath: string | null; openPicker: () => void; closePicker: () => void; add: (drive: StorageDriveCandidateDTO) => void; remove: (path: string, label: string) => void }) {
   const primary = drives.roots.find((root) => root.primary) ?? drives.roots[0];
   const used = primary && primary.totalBytes !== null && primary.freeBytes !== null ? Math.max(0, primary.totalBytes - primary.freeBytes) : null;
   const percent = primary?.totalBytes && used !== null ? Math.min(100, (used / primary.totalBytes) * 100) : 0;
@@ -371,7 +383,10 @@ function StorageTab({ drives, policy, update, errors, candidates, pickerOpen, di
       <div className="settings-policy-row"><Field label="Keep at least this much free (GB)" error={errors.reserveSpaceGb} hint="Default: 20 GB. Applied to every library drive before an import starts."><input className="control-input" type="number" min="0" step="1" value={policy.reserveSpaceGb} onChange={(event) => update({ reserveSpaceGb: Number(event.target.value) })} /></Field><div className="settings-policy-example"><span>Routing rule</span><strong>free space − incoming size ≥ {policy.reserveSpaceGb || 0} GB</strong><small>If false, Flux tries the next prepared drive in order.</small></div></div>
     </Section>
     <Section title="Library drive order" description="Existing files stay where they are. Overflow drives receive only imports that no longer fit safely on an earlier drive.">
-      <div className="settings-root-list">{drives.roots.map((root, index) => <article key={root.path} className={`settings-root-row${root.primary ? ' active' : ''}`}><span className="settings-root-index">{String(index + 1).padStart(2, '0')}</span><div><strong>{root.label}</strong><code>{root.path}</code></div><div className="settings-root-space"><strong>{formatStorageBytes(root.freeBytes)}</strong><span>free</span></div><em>{root.primary ? 'Primary' : root.available ? 'Overflow' : 'Offline'}</em></article>)}</div>
+      <div className="settings-root-list">{drives.roots.map((root, index) => {
+        const removable = root.source === 'MANAGED' && !root.primary;
+        return <article key={root.path} className={`settings-root-row${root.primary ? ' active' : ''}`}><span className="settings-root-index">{String(index + 1).padStart(2, '0')}</span><div><strong>{root.label}</strong><code>{root.path}</code></div><div className="settings-root-space"><strong>{formatStorageBytes(root.freeBytes)}</strong><span>free</span></div><em>{root.primary ? 'Primary' : root.available ? 'Overflow' : 'Offline'}</em><div className="settings-root-actions">{removable ? <button className="control-button danger" type="button" disabled={removingPath === root.path} onClick={() => remove(root.path, root.label)}>{removingPath === root.path ? 'Removing...' : 'Remove'}</button> : <span>{root.source === 'ENVIRONMENT' ? 'Env' : ''}</span>}</div></article>;
+      })}</div>
     </Section>
     <Section title="What gets prepared" description="Adding a drive does not repartition, format, or mount the server disk.">
       <div className="settings-setup-strip"><div><span>01</span><strong>Verify access</strong><small>Real backend write check</small></div><div><span>02</span><strong>Create structure</strong><small>movies and tv folders</small></div><div><span>03</span><strong>Add overflow route</strong><small>Primary remains unchanged</small></div></div>

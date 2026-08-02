@@ -13,6 +13,7 @@ import {
   analyzeLibraryItem,
   deleteLibraryEpisode,
   deleteLibraryMediaItem,
+  deleteLibrarySeason,
   clearMissingEpisodeFile,
   clearMissingLibraryFile,
   getAdminInfo,
@@ -336,6 +337,17 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     const { episodeId } = request.params as { episodeId: string };
     const result = await deleteLibraryEpisode(episodeId);
     await writeAuditEvent({ actorId: request.account!.id, action: 'EPISODE_DELETED', targetType: 'EPISODE', targetId: episodeId, details: result });
+    return result;
+  });
+
+  app.delete('/library/:id/seasons/:season', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const { id, season: rawSeason } = request.params as { id: string; season: string };
+    const season = Number(rawSeason);
+    if (!Number.isInteger(season) || season <= 0) {
+      throw ApiError.badRequest('Season must be a positive integer', 'INVALID_SEASON');
+    }
+    const result = await deleteLibrarySeason(id, season);
+    await writeAuditEvent({ actorId: request.account!.id, action: 'SEASON_DELETED', targetType: 'MEDIA_ITEM', targetId: id, details: { season, ...result } });
     return result;
   });
 

@@ -216,9 +216,9 @@ export async function addTorrent(
 
   // Explicitly start the torrent (paused: false doesn't always work), including
   // duplicate/existing torrents during admin retry.
-  if (opts.verifyExisting && !result['torrent-duplicate']) {
-    // Hash-check local data first so an already-downloaded file seeds instead
-    // of being downloaded again.
+  if (opts.verifyExisting) {
+    // Hash-check local data first so stale duplicate state cannot keep
+    // claiming "complete" after the files were deleted from disk.
     await rpc('torrent-verify', { ids: [added.hashString] });
   }
   await rpc('torrent-start', { ids: [added.hashString] });

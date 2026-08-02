@@ -53,6 +53,10 @@ export const addStorageDriveSchema = z.object({
   driveId: z.string().trim().min(1).max(128),
 }).strict();
 
+export const removeStorageDriveSchema = z.object({
+  path: z.string().trim().min(1).max(2000),
+}).strict();
+
 export const saveDownloadClientSchema = z.object({
   name: z.string().trim().min(1).max(80),
   type: z.enum(['TRANSMISSION', 'SABNZBD', 'NZBGET']),

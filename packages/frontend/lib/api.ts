@@ -530,6 +530,12 @@ export const api = {
       body: { driveId },
     });
   },
+  removeStorageDrive(path: string) {
+    return request<StorageSettingsDTO>('/api/settings/storage/drives', {
+      method: 'DELETE',
+      body: { path },
+    });
+  },
   listDownloadClients() {
     return request<DownloadClientDTO[]>('/api/settings/download-clients');
   },
@@ -649,6 +655,12 @@ export const api = {
   deleteAdminEpisode(episodeId: string) {
     return request<AdminMediaDeleteResultDTO>(
       `/api/admin/library/episodes/${encodeURIComponent(episodeId)}`,
+      { method: 'DELETE' },
+    );
+  },
+  deleteAdminSeason(mediaItemId: string, season: number) {
+    return request<AdminMediaDeleteResultDTO>(
+      `/api/admin/library/${encodeURIComponent(mediaItemId)}/seasons/${encodeURIComponent(String(season))}`,
       { method: 'DELETE' },
     );
   },

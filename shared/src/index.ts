@@ -897,6 +897,10 @@ export interface AddStorageDriveRequest {
   driveId: string;
 }
 
+export interface RemoveStorageDriveRequest {
+  path: string;
+}
+
 export interface UpdateSettingsBundleRequest {
   general?: Partial<GeneralSettingsDTO>;
   storage?: Partial<StoragePolicySettingsDTO>;

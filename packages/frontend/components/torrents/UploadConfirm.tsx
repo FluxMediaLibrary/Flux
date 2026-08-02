@@ -196,7 +196,10 @@ export function UploadConfirm({
 
   const existingDataNote = useMemo(() => {
     const existing = parsed?.existingData;
-    if (!existing || existing.filesOnDisk <= 0) return null;
+    if (!existing) return null;
+    if (existing.filesOnDisk <= 0) {
+      return 'No matching payload files were found on disk. Flux will not treat this upload as seedable.';
+    }
     if (existing.complete) {
       return `All ${existing.totalFiles} file${existing.totalFiles === 1 ? '' : 's'} already exist on disk — this will verify the data and start seeding without re-downloading.`;
     }

@@ -3,6 +3,7 @@ import { ApiError } from '../../lib/errors.js';
 import { writeAuditEvent } from '../admin/admin-control.service.js';
 import {
   addStorageDriveSchema,
+  removeStorageDriveSchema,
   saveDownloadClientSchema,
   saveQualityProfileSchema,
   selectReleaseSchema,
@@ -14,6 +15,7 @@ import {
   addStorageDrive,
   discoverStorageDrives,
   getStorageSettings,
+  removeStorageDrive,
 } from './storage.service.js';
 import {
   deleteDownloadClient,
@@ -58,6 +60,18 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       targetType: 'STORAGE',
       targetId: body.driveId,
       targetLabel: result.roots.at(-1)?.label,
+      details: { roots: result.roots.length },
+    });
+    return result;
+  });
+  app.delete('/storage/drives', async (request) => {
+    const body = removeStorageDriveSchema.parse(request.body);
+    const result = await removeStorageDrive(body.path);
+    await writeAuditEvent({
+      actorId: request.account!.id,
+      action: 'STORAGE_DRIVE_REMOVED',
+      targetType: 'STORAGE',
+      targetLabel: body.path,
       details: { roots: result.roots.length },
     });
     return result;
