@@ -4,6 +4,7 @@ const packageMetadata = require('./package.json');
 module.exports = {
   appId: 'xyz.deadstudios.flux.desktop',
   productName: 'Flux',
+  executableName: 'Flux',
   asar: true,
   compression: 'maximum',
   // discord-rpc's only native optional dependency is a protocol-registration
@@ -48,6 +49,7 @@ module.exports = {
       { target: 'zip', arch: ['x64', 'arm64'] },
     ],
     icon: path.join('build', 'icon.png'),
+    identity: null,
     category: 'public.app-category.entertainment',
     artifactName: 'Flux-${version}-mac-${arch}.${ext}',
   },
@@ -59,6 +61,7 @@ module.exports = {
     ],
     icon: path.join('build', 'icon.png'),
     category: 'AudioVideo',
+    syncDesktopName: true,
     maintainer: 'FluxMediaLibrary',
     synopsis: 'Desktop client for a self-hosted Flux media library',
     artifactName: 'Flux-${version}-linux-${arch}.${ext}',

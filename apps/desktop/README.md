@@ -18,16 +18,26 @@ Create a Discord application named `Flux`, upload a square fallback art asset wi
 
 While the desktop client is on a watch page, the frontend sends the movie/show title, season and episode, poster URL, pause state, and authoritative player position to the isolated preload bridge. The main process publishes a Watching activity with a repository button and start/end timestamps. Discord's buttons are only visible to other users viewing the presence.
 
-For GitHub builds, add the ID as the repository variable `FLUX_DISCORD_CLIENT_ID` under Actions variables. The desktop app still runs if this variable is omitted, but Rich Presence stays disabled.
+The public Discord application ID is stored in the desktop package metadata. `FLUX_DISCORD_CLIENT_ID` can override it for a local build; no Discord secret or user token is used.
 
-## GitHub Releases and updates
+## Local packaging and GitHub Releases
 
-Publishing a desktop GitHub Release such as `pc-v1.2.3` runs `.github/workflows/desktop-release.yml`. Android releases use their own tags and never enter the desktop update channel. The workflow builds and uploads:
+Publishing a `pc-v<version>` GitHub Release builds and uploads ready-to-use packages for Windows, macOS, and Linux. Android releases use their own tags and never enter the desktop update channel. The local script provides a manual rebuild/upload path when needed.
 
-- Windows NSIS installers for x64 and ARM64;
-- macOS DMG and ZIP packages for Intel and Apple Silicon;
-- Linux AppImage, Debian, and RPM packages for x64 and ARM64;
-- platform update metadata and blockmaps used by `electron-updater`.
+The package version in `apps/desktop/package.json` must match the release tag. To rebuild a platform locally, create or reuse a release such as `pc-v1.2.3`, then run:
+
+```powershell
+# Windows: NSIS installers for x64 and ARM64
+powershell -ExecutionPolicy Bypass -File ./scripts/release-desktop.ps1 -Platform win -Tag pc-v1.2.3
+
+# macOS: DMG and ZIP packages for Intel and Apple Silicon
+pwsh ./scripts/release-desktop.ps1 -Platform mac -Tag pc-v1.2.3
+
+# Linux: AppImage, Debian, and RPM packages for x64 and ARM64
+pwsh ./scripts/release-desktop.ps1 -Platform linux -Tag pc-v1.2.3
+```
+
+The script authenticates with GitHub CLI, runs the desktop tests, builds locally, and uploads the installers plus platform update metadata and blockmaps directly to the existing release. macOS packages must be produced on macOS; they cannot be built on Windows.
 
 Installed builds check shortly after launch and every four hours. Updates download in the background, prompt for a restart when ready, and install automatically on a later quit if the user postpones the restart.
 

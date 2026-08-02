@@ -38,23 +38,23 @@ jobs:
             platform: linux
             asset_pattern: 'latest-linux.*\.yml|\.(AppImage|deb|rpm|blockmap)$'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       FLUX_DISCORD_CLIENT_ID: ${{ vars.FLUX_DISCORD_CLIENT_ID }}
-      CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
 
     steps:
-      - name: Check out release tag
-        uses: actions/checkout@v4
+      - name: Check out desktop source
+        uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          # Release events build the immutable release tag. A manual dispatch
+          # builds the selected workflow ref so packaging fixes can be tested.
+          ref: ${{ github.event_name == 'release' && env.RELEASE_TAG || github.ref }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
