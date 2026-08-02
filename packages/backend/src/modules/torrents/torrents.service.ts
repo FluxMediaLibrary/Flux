@@ -38,7 +38,9 @@ import { config } from '../../config.js';
 
 // Track torrents already enqueued for postprocessing (prevents duplicates)
 const postprocessEnqueued = new Set<string>();
+const stalePayloadRecoveryAt = new Map<string, number>();
 const RETRY_DELAYS_MS = [60_000, 5 * 60_000, 15 * 60_000] as const;
+const STALE_PAYLOAD_RECOVERY_COOLDOWN_MS = 5 * 60_000;
 
 async function scheduleTorrentRetry(id: string, error: unknown): Promise<void> {
   const row = await prisma.torrent.findUnique({ where: { id }, select: { retryCount: true } });
@@ -175,17 +177,30 @@ async function addTorrentFromPreflight(
   row: Pick<Torrent, 'infoHash' | 'category' | 'fileMapping'>,
   buffer: Buffer,
   dataCheck: Awaited<ReturnType<typeof detectExistingData>>,
+  options: { forceCleanIncomplete?: boolean } = {},
 ): Promise<AddTorrentResult> {
-  if (!dataCheck.complete) {
+  if (!dataCheck.complete && options.forceCleanIncomplete) {
     // A stale Transmission entry can stay "complete" after files are deleted.
     // Remove only the client job, keep any partial payload, then re-add cleanly.
+    stalePayloadRecoveryAt.set(row.infoHash, Date.now());
     await removeTorrent(row.infoHash, false).catch(() => false);
   }
+  if (dataCheck.complete) stalePayloadRecoveryAt.delete(row.infoHash);
   const added = await addTorrent(buffer, { verifyExisting: true });
   if (added.infoHash.toLowerCase() !== row.infoHash.toLowerCase()) {
     throw new Error(`Transmission returned infoHash ${added.infoHash}, expected ${row.infoHash}`);
   }
   return added;
+}
+
+function shouldRecoverStalePayload(infoHash: string): boolean {
+  const now = Date.now();
+  const lastRecoveryAt = stalePayloadRecoveryAt.get(infoHash);
+  if (lastRecoveryAt && now - lastRecoveryAt < STALE_PAYLOAD_RECOVERY_COOLDOWN_MS) {
+    return false;
+  }
+  stalePayloadRecoveryAt.set(infoHash, now);
+  return true;
 }
 
 /**
@@ -207,9 +222,11 @@ async function enqueuePostprocessIfDone(row: Torrent, live: TorrentLiveStats): P
     let nextLive = live;
     let nextPayload = payload;
     try {
-      const buffer = await readFile(torrentFilePath(row.infoHash));
-      nextPayload = await preflightTorrentStart(row, buffer);
-      await addTorrentFromPreflight(row, buffer, nextPayload);
+      if (shouldRecoverStalePayload(row.infoHash)) {
+        const buffer = await readFile(torrentFilePath(row.infoHash));
+        nextPayload = await preflightTorrentStart(row, buffer);
+        await addTorrentFromPreflight(row, buffer, nextPayload, { forceCleanIncomplete: true });
+      }
       nextLive = await getLiveStats(row.infoHash) ?? live;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -240,6 +257,7 @@ async function enqueuePostprocessIfDone(row: Torrent, live: TorrentLiveStats): P
     return 'WAITING_FOR_PAYLOAD';
   }
 
+  stalePayloadRecoveryAt.delete(row.infoHash);
   postprocessEnqueued.add(row.id);
   console.log(`[Torrent] Done! Triggering postprocess for ${row.name} (${row.infoHash})`);
   try {
@@ -839,7 +857,7 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
   let dataCheck: Awaited<ReturnType<typeof detectExistingData>>;
   try {
     dataCheck = await preflightTorrentStart(row, buffer);
-    added = await addTorrentFromPreflight(row, buffer, dataCheck);
+    added = await addTorrentFromPreflight(row, buffer, dataCheck, { forceCleanIncomplete: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await scheduleTorrentRetry(id, err);
@@ -940,6 +958,7 @@ export async function removeTorrentById(
   }
 
   await removeTorrent(row.infoHash, deleteFiles);
+  stalePayloadRecoveryAt.delete(row.infoHash);
 
   await prisma.request.updateMany({
     where: {
@@ -969,7 +988,7 @@ export async function startDownloading(
   }
 
   const dataCheck = await preflightTorrentStart(row, buffer);
-  const added = await addTorrentFromPreflight(row, buffer, dataCheck);
+  const added = await addTorrentFromPreflight(row, buffer, dataCheck, { forceCleanIncomplete: true });
   const live = await getLiveStats(row.infoHash);
   // Only a duplicate add with a payload Flux can still see on disk goes straight
   // back to SEEDING. Transmission can report a stale duplicate as complete after
