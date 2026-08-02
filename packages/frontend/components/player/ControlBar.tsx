@@ -29,7 +29,7 @@ interface ControlBarProps {
   onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label'], positionSeconds?: number) => void;
   audioStreams: MediaStreamDTO[];
   selectedAudioStreamIndex: number | null;
-  onAudioStreamChange: (streamIndex: number | null) => void;
+  onAudioStreamChange: (streamIndex: number, positionSeconds?: number) => void;
   playbackMethod: 'direct' | 'hls';
   castState?: NativeCastState;
   castTransitioning?: boolean;

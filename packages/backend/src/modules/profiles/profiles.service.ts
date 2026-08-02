@@ -4,6 +4,7 @@
  * that carries `activeProfileId`.
  */
 import type {
+  AudioPreferenceDTO,
   ProfileDTO,
   ActivateProfileResponse,
   Role,
@@ -13,7 +14,7 @@ import { prisma } from '../../lib/db.js';
 import { signToken } from '../../lib/jwt.js';
 import { ApiError } from '../../lib/errors.js';
 import { toProfileDTO } from '../auth/auth.service.js';
-import type { CreateProfileInput, UpdateProfileInput } from './profiles.schema.js';
+import type { CreateProfileInput, UpdateAudioPreferenceInput, UpdateProfileInput } from './profiles.schema.js';
 
 export async function listProfiles(accountId: string): Promise<ProfileDTO[]> {
   const profiles = await prisma.profile.findMany({
@@ -51,6 +52,24 @@ export async function updateProfile(
     },
   });
   return toProfileDTO(profile);
+}
+
+export async function updateAudioPreference(
+  profileId: string,
+  input: UpdateAudioPreferenceInput,
+): Promise<AudioPreferenceDTO> {
+  const profile = await prisma.profile.update({
+    where: { id: profileId },
+    data: {
+      preferredAudioLanguage: input.language,
+      preferredAudioTitle: input.title,
+    },
+    select: {
+      preferredAudioLanguage: true,
+      preferredAudioTitle: true,
+    },
+  });
+  return profile;
 }
 
 async function getOwnedProfile(

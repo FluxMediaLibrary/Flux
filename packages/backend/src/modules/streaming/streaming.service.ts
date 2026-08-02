@@ -151,6 +151,111 @@ const DIRECT_VIDEO = new Set(['h264', 'vp9', 'vp8', 'av1']);
 /** Audio codecs browsers decode natively (AC3/EAC3/DTS are NOT here). */
 const DIRECT_AUDIO = new Set(['aac', 'mp3', 'opus', 'vorbis', 'flac']);
 
+const LANGUAGE_ALIASES: Record<string, string> = {
+  en: 'eng',
+  eng: 'eng',
+  english: 'eng',
+  ja: 'jpn',
+  jp: 'jpn',
+  jpn: 'jpn',
+  japanese: 'jpn',
+  es: 'spa',
+  spa: 'spa',
+  spanish: 'spa',
+  fr: 'fra',
+  fre: 'fra',
+  fra: 'fra',
+  french: 'fra',
+  de: 'deu',
+  ger: 'deu',
+  deu: 'deu',
+  german: 'deu',
+  it: 'ita',
+  ita: 'ita',
+  italian: 'ita',
+  ko: 'kor',
+  kor: 'kor',
+  korean: 'kor',
+  zh: 'zho',
+  chi: 'zho',
+  zho: 'zho',
+  chinese: 'zho',
+  pt: 'por',
+  por: 'por',
+  portuguese: 'por',
+  ru: 'rus',
+  rus: 'rus',
+  russian: 'rus',
+};
+
+function normalizeLanguage(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase().replace(/_/g, '-');
+  if (!normalized) return null;
+  const primary = normalized.split('-')[0]!;
+  return LANGUAGE_ALIASES[normalized] ?? LANGUAGE_ALIASES[primary] ?? primary;
+}
+
+function normalizeTrackTitle(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return normalized || null;
+}
+
+function audioStreamLanguageMatches(stream: MediaStream, preferredLanguage: string): boolean {
+  const streamLanguage = normalizeLanguage(stream.language);
+  if (streamLanguage === preferredLanguage) return true;
+  const title = normalizeTrackTitle(stream.title);
+  return title?.split(' ').some((token) => normalizeLanguage(token) === preferredLanguage) ?? false;
+}
+
+export function selectPreferredAudioStream(
+  streams: MediaStream[],
+  preferences: { language?: string | null; title?: string | null },
+): MediaStream | undefined {
+  const audioStreams = streams.filter((stream) => stream.type === 'audio');
+  if (audioStreams.length === 0) return undefined;
+
+  const preferredLanguage = normalizeLanguage(preferences.language);
+  const preferredTitle = normalizeTrackTitle(preferences.title);
+
+  if (preferredLanguage && preferredTitle) {
+    const exact = audioStreams.find((stream) =>
+      audioStreamLanguageMatches(stream, preferredLanguage) &&
+      normalizeTrackTitle(stream.title) === preferredTitle,
+    );
+    if (exact) return exact;
+  }
+
+  if (preferredLanguage) {
+    const languageMatch = audioStreams.find((stream) =>
+      audioStreamLanguageMatches(stream, preferredLanguage),
+    );
+    if (languageMatch) return languageMatch;
+  }
+
+  return audioStreams.find((stream) => stream.isDefault) ?? audioStreams[0];
+}
+
+export async function assertAudioStreamAvailable(
+  mediaItemId: string,
+  episodeId: string | undefined,
+  audioStreamIndex: number | undefined,
+): Promise<void> {
+  if (audioStreamIndex === undefined) return;
+  const stream = await prisma.mediaStream.findFirst({
+    where: {
+      ...(episodeId ? { episodeId } : { mediaItemId }),
+      type: 'audio',
+      index: audioStreamIndex,
+    },
+    select: { id: true },
+  });
+  if (!stream) {
+    throw ApiError.badRequest('The requested audio stream is not available for this video', 'AUDIO_STREAM_UNAVAILABLE');
+  }
+}
+
 export interface PlaybackDecision {
   /** True when the browser can play the file as-is (no transcode/remux). */
   directPlay: boolean;
@@ -373,10 +478,17 @@ export async function getPlaybackInfo(
   filePath: string,
   mediaItemId: string,
   episodeId?: string,
+  profileId?: string,
 ): Promise<PlaybackInfoDTO> {
-  const [decision, settings] = await Promise.all([
+  const [decision, settings, profile] = await Promise.all([
     decidePlayback(filePath, mediaItemId, episodeId),
     getServerSettings(),
+    profileId
+      ? prisma.profile.findUnique({
+          where: { id: profileId },
+          select: { preferredAudioLanguage: true, preferredAudioTitle: true },
+        })
+      : Promise.resolve(null),
   ]);
   const where = episodeId ? { episodeId } : { mediaItemId };
   const streams = await prisma.mediaStream.findMany({
@@ -384,6 +496,14 @@ export async function getPlaybackInfo(
     orderBy: { index: 'asc' },
   });
   const videoStream = primaryVideoStream(streams);
+  const preferredAudioLanguage = profile?.preferredAudioLanguage ?? settings.preferredAudioLanguage;
+  const preferredAudioTitle = profile?.preferredAudioTitle ?? null;
+  const selectedAudioStream = selectPreferredAudioStream(streams, {
+    language: preferredAudioLanguage,
+    title: preferredAudioTitle,
+  });
+  const selectedAudioStreamIndex = selectedAudioStream?.index ?? null;
+  const audioCodec = selectedAudioStream?.codec ?? decision.audioCodec;
   const segments = episodeId
     ? await prisma.mediaSegment.findMany({
         where: { episodeId },
@@ -393,7 +513,7 @@ export async function getPlaybackInfo(
 
   const directPlay = decision.directPlay && settings.directPlayEnabled;
   const canDirectStream = decision.videoCodec === 'h264'
-    && (decision.audioCodec === null || decision.audioCodec === 'aac');
+    && (audioCodec === null || audioCodec === 'aac');
   const hlsAvailable = settings.transcodingEnabled || (settings.directStreamEnabled && canDirectStream);
   const qualities = buildQualityOptions(directPlay, videoStream).filter((quality) => {
     if (quality.source === 'direct') return true;
@@ -406,13 +526,15 @@ export async function getPlaybackInfo(
     directPlay,
     hlsAvailable,
     videoCodec: decision.videoCodec,
-    audioCodec: decision.audioCodec,
+    audioCodec,
     durationSeconds: decision.durationSeconds,
+    selectedAudioStreamIndex,
     preferences: {
       autoplayEnabled: settings.autoplayEnabled,
       resumeBehavior: settings.resumeBehavior as PlaybackInfoDTO['preferences']['resumeBehavior'],
       skipIntroEnabled: settings.skipIntroEnabled,
-      preferredAudioLanguage: settings.preferredAudioLanguage,
+      preferredAudioLanguage,
+      preferredAudioTitle,
       preferredSubtitleLanguage: settings.preferredSubtitleLanguage,
       subtitlesMode: settings.subtitlesMode as PlaybackInfoDTO['preferences']['subtitlesMode'],
     },
@@ -442,14 +564,7 @@ export function buildHlsFfmpegArgs(
   const videoCopyable =
     probe.videoCodec != null && COPYABLE_VIDEO.has(probe.videoCodec);
 
-  // CRITICAL: only stream-copy the video when the audio is ALSO copied (a pure
-  // remux). If we copy H.264 but re-encode the audio, the copied video keeps the
-  // source's original (often offset) timestamps while the fresh AAC is realigned
-  // — the two tracks drift apart, the browser's MSE can no longer splice them,
-  // and playback deterministically dies a couple of segments in (~10s). Whenever
-  // we have to touch the audio we re-encode the video too so FFmpeg produces ONE
-  // coherent timeline that MSE can append cleanly.
-  const reencodeVideo = !videoCopyable || !audioCopyable;
+  const reencodeVideo = !videoCopyable;
   const encoderArgs = hardwareAcceleration === 'NVENC'
     ? ['-c:v', 'h264_nvenc', '-preset', 'p4', '-cq', '23']
     : hardwareAcceleration === 'QSV'

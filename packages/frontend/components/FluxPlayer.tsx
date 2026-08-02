@@ -28,6 +28,7 @@ import {
   canSwitchQualityInPlace,
   requiresAdaptiveTranscode,
 } from './player/quality-selection';
+import { audioPreferenceFromStream, selectedAudioStreamIndex as getSelectedAudioStreamIndex } from './player/audio-selection';
 import { shouldShowNextEpisodePrompt } from './player/next-episode';
 import {
   getMediaTimeOrigin,
@@ -99,6 +100,7 @@ export function FluxPlayer(props: FluxPlayerProps) {
     const start = Math.max(0, startPositionSeconds);
     setHlsStartTime(start);
     setDirectStartTime(start);
+    setAudioStreamIndex(null);
   }, [episodeId, mediaItemId, startPositionSeconds]);
 
   const loadSource = useCallback(() => {
@@ -114,14 +116,7 @@ export function FluxPlayer(props: FluxPlayerProps) {
           setLoading(false);
           return;
         }
-        const preferredAudioLanguage = info.preferences.preferredAudioLanguage?.toLowerCase() ?? null;
-        const preferredAudioStream = audioStreamIndex === null && preferredAudioLanguage
-          ? info.streams.find((stream) => stream.type === 'audio' && (
-              stream.language?.toLowerCase() === preferredAudioLanguage
-              || stream.title?.toLowerCase().includes(preferredAudioLanguage)
-            ))
-          : null;
-        const requestedAudioStreamIndex = audioStreamIndex ?? preferredAudioStream?.index ?? null;
+        const requestedAudioStreamIndex = audioStreamIndex ?? getSelectedAudioStreamIndex(info);
         const validAudioStreamIndex = requestedAudioStreamIndex !== null && info.streams.some(
           (stream) => stream.type === 'audio' && stream.index === requestedAudioStreamIndex,
         )
@@ -210,7 +205,7 @@ export function FluxPlayer(props: FluxPlayerProps) {
       onQualityChange={(quality, positionSeconds) => {
         const position = Number.isFinite(positionSeconds) ? Math.max(0, positionSeconds ?? 0) : 0;
         const nextSourceIsDirect = source.info
-          ? canKeepDirectPlayback(source.info, quality, audioStreamIndex)
+          ? canKeepDirectPlayback(source.info, quality, source.audioStreamIndex)
           : quality === 'Auto' || quality === 'Original';
         const nextRequiresAdaptive = source.info
           ? requiresAdaptiveTranscode(source.info, quality)
@@ -244,9 +239,17 @@ export function FluxPlayer(props: FluxPlayerProps) {
         }
         setQualityLabel(quality);
       }}
-      onAudioStreamChange={(streamIndex) => {
+      onAudioStreamChange={(streamIndex, positionSeconds) => {
+        const position = Number.isFinite(positionSeconds) ? Math.max(0, positionSeconds ?? 0) : 0;
+        const stream = source.info?.streams.find((item) => item.type === 'audio' && item.index === streamIndex);
+        if (stream) {
+          void api.updateAudioPreference(audioPreferenceFromStream(stream)).catch(() => {});
+        }
+        setDirectStartTime(position);
+        setHlsStartTime(Math.max(0.001, Math.round(position * 1000) / 1000));
         setAudioStreamIndex(streamIndex);
-        if (streamIndex !== null && qualityLabel === 'Original') setQualityLabel('Auto');
+        setHlsReloadNonce((nonce) => nonce + 1);
+        if (qualityLabel === 'Original') setQualityLabel('Auto');
       }}
       onTranscodeSeek={(time) => {
         setHlsStartTime(Math.max(0, Math.round(time * 1000) / 1000));
@@ -279,7 +282,7 @@ function FluxMediaPlayer({
 }: FluxPlayerProps & {
   source: PlayerSource;
   onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label'], positionSeconds?: number) => void;
-  onAudioStreamChange: (streamIndex: number | null) => void;
+  onAudioStreamChange: (streamIndex: number, positionSeconds?: number) => void;
   onTranscodeSeek: (time: number) => void;
   onFatalError: () => void;
 }) {
@@ -579,7 +582,7 @@ function FluxPlayerChrome({
   selectedQuality: PlaybackInfoDTO['qualities'][number]['label'];
   onQualityChange: (quality: PlaybackInfoDTO['qualities'][number]['label'], positionSeconds?: number) => void;
   selectedAudioStreamIndex: number | null;
-  onAudioStreamChange: (streamIndex: number | null) => void;
+  onAudioStreamChange: (streamIndex: number, positionSeconds?: number) => void;
   playbackMethod: PlayerSource['method'];
   timelineOffset: number;
   mediaTimeOriginRef: RefObject<number>;

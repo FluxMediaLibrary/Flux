@@ -8,6 +8,7 @@
  */
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import {
+  assertAudioStreamAvailable,
   getMediaFilePath,
   probeMedia,
   buildHlsFfmpegArgs,
@@ -68,6 +69,15 @@ function parseStartTime(value: string | undefined): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return 0;
   return Math.round(parsed * 1000) / 1000;
+}
+
+function parseAudioStreamIndex(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw ApiError.badRequest('Invalid audio stream identifier', 'AUDIO_STREAM_INVALID');
+  }
+  return parsed;
 }
 
 function publicApiBaseUrl(request: { protocol: string; headers: { host?: string } }): { baseUrl: string; warnings: string[] } {
@@ -244,9 +254,9 @@ async function spawnTranscode(
 
   // Use adaptive when we have resolution info AND the source needs a transcode
   // (not a pure copy/remux). Remuxing a single stream is faster and simpler.
-  const needsTranscode =
-    probe.videoCodec !== 'h264' ||
-    (probe.audioCodec !== null && probe.audioCodec !== 'aac');
+  const videoNeedsTranscode = probe.videoCodec !== 'h264';
+  const audioNeedsTranscode = probe.audioCodec !== null && probe.audioCodec !== 'aac';
+  const needsTranscode = videoNeedsTranscode || audioNeedsTranscode;
 
   if (receiverOptimized && needsTranscode && probe.width && probe.height) {
     const args = buildCastHlsArgs(
@@ -267,7 +277,7 @@ async function spawnTranscode(
     return { manifest: 'index.m3u8', transcode: spawnTrackedTranscode(args) };
   }
 
-  if ((needsTranscode || forceAdaptive) && probe.width && probe.height) {
+  if ((videoNeedsTranscode || forceAdaptive) && probe.width && probe.height) {
     const args = buildAdaptiveHlsArgs(
       sourceFile, sessionDir,
       probe.videoCodec, probe.audioCodec,
@@ -502,7 +512,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
       const { mediaItemId } = request.params as { mediaItemId: string };
       const { episodeId } = request.query as { episodeId?: string };
       const { filePath } = await getMediaFilePath(mediaItemId, episodeId);
-      return getPlaybackInfo(filePath, mediaItemId, episodeId);
+      return getPlaybackInfo(filePath, mediaItemId, episodeId, request.activeProfileId!);
     },
   );
 
@@ -521,10 +531,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
         startTime?: string;
         adaptive?: string;
       };
-      const audioStreamIndex =
-        audioStream !== undefined && Number.isInteger(Number(audioStream))
-          ? Number(audioStream)
-          : undefined;
+      const audioStreamIndex = parseAudioStreamIndex(audioStream);
       const startTimeSeconds = parseStartTime(startTime);
       const forceAdaptive = adaptive === '1';
       const receiverOptimized = Boolean(request.castPlayback);
@@ -536,6 +543,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
         throw ApiError.badRequest('HLS playback is disabled in server settings', 'HLS_DISABLED');
       }
       assertCastPlaybackAccess(request, mediaItemId, episodeId);
+      await assertAudioStreamAvailable(mediaItemId, episodeId, audioStreamIndex);
       receiverCors(reply);
       const baseKey = sessionBaseKey(mediaItemId, episodeId, audioStreamIndex);
       const key = sessionKey(
@@ -697,10 +705,7 @@ export const streamingRoutes: FastifyPluginAsync = async (
         startTime?: string;
         adaptive?: string;
       };
-      const audioStreamIndex =
-        audioStream !== undefined && Number.isInteger(Number(audioStream))
-          ? Number(audioStream)
-          : undefined;
+      const audioStreamIndex = parseAudioStreamIndex(audioStream);
       const startTimeSeconds = parseStartTime(startTime);
       const forceAdaptive = adaptive === '1';
       const receiverOptimized = Boolean(request.castPlayback);

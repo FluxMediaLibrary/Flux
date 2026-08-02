@@ -67,6 +67,8 @@ model Profile {
   userId    String
   name      String
   avatar    String?
+  preferredAudioLanguage String?
+  preferredAudioTitle    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

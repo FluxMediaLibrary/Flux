@@ -24,3 +24,10 @@ export const updateProfileSchema = z
 
 export type CreateProfileInput = z.infer<typeof createProfileSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+export const updateAudioPreferenceSchema = z.object({
+  language: z.string().trim().min(2).max(40).nullable(),
+  title: z.string().trim().min(1).max(120).nullable(),
+}).strict();
+
+export type UpdateAudioPreferenceInput = z.infer<typeof updateAudioPreferenceSchema>;

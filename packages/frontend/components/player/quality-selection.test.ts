@@ -14,11 +14,13 @@ function playbackInfo(sourceBitrate: number): PlaybackInfoDTO {
     videoCodec: 'h264',
     audioCodec: 'aac',
     durationSeconds: 7200,
+    selectedAudioStreamIndex: null,
     preferences: {
       autoplayEnabled: true,
       resumeBehavior: 'ASK',
       skipIntroEnabled: true,
       preferredAudioLanguage: null,
+      preferredAudioTitle: null,
       preferredSubtitleLanguage: null,
       subtitlesMode: 'FOREIGN_ONLY',
     },

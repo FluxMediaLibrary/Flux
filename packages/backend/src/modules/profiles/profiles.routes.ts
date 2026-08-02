@@ -8,13 +8,14 @@
  */
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { ApiError } from '../../lib/errors.js';
-import { createProfileSchema, updateProfileSchema } from './profiles.schema.js';
+import { createProfileSchema, updateAudioPreferenceSchema, updateProfileSchema } from './profiles.schema.js';
 import {
   listProfiles,
   createProfile,
   updateProfile,
   deleteProfile,
   activateProfile,
+  updateAudioPreference,
 } from './profiles.service.js';
 
 export const profileRoutes: FastifyPluginAsync = async (
@@ -59,6 +60,16 @@ export const profileRoutes: FastifyPluginAsync = async (
       const { id } = request.params;
       if (!id) throw ApiError.badRequest('Profile id is required');
       const result = await activateProfile(account.id, account.role, id);
+      return reply.send(result);
+    },
+  );
+
+  app.patch(
+    '/me/audio-preference',
+    { preHandler: [app.requireProfile] },
+    async (request, reply) => {
+      const input = updateAudioPreferenceSchema.parse(request.body);
+      const result = await updateAudioPreference(request.activeProfileId!, input);
       return reply.send(result);
     },
   );

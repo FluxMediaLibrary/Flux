@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useMediaRemote, useMediaState } from '@vidstack/react';
 import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
+import { audioStreamLabel } from './audio-selection';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -13,7 +14,7 @@ interface SettingsPanelProps {
   currentPositionSeconds: number;
   audioStreams: MediaStreamDTO[];
   selectedAudioStreamIndex: number | null;
-  onAudioStreamChange: (streamIndex: number | null) => void;
+  onAudioStreamChange: (streamIndex: number, positionSeconds?: number) => void;
   playbackMethod: 'direct' | 'hls';
 }
 
@@ -29,17 +30,6 @@ function sameId(a: unknown, b: unknown) {
       'id' in b &&
       a.id === b.id,
   );
-}
-
-function streamLabel(stream: MediaStreamDTO, fallback: string) {
-  const language = stream.language?.toUpperCase();
-  const parts = [
-    stream.title,
-    language,
-    stream.codec?.toUpperCase(),
-    stream.channels ? `${stream.channels}ch` : null,
-  ].filter(Boolean);
-  return parts.join(' · ') || fallback;
 }
 
 export function SettingsPanel({
@@ -151,17 +141,6 @@ export function SettingsPanel({
       {audioStreams.length > 1 ? (
         <section className="fx-settings-section">
           <div className="fx-settings-label">Audio</div>
-          <button
-            className={selectedAudioStreamIndex === null ? 'fx-settings-item sel' : 'fx-settings-item'}
-            type="button"
-            role="menuitemradio"
-            aria-checked={selectedAudioStreamIndex === null}
-            onClick={() => runAndClose(() => onAudioStreamChange(null))}
-          >
-            <span>Default</span>
-            <span className="fx-settings-sub">Source default</span>
-            {selectedAudioStreamIndex === null && <span className="fx-settings-check">Selected</span>}
-          </button>
           {audioStreams.map((stream, index) => {
             const selected = selectedAudioStreamIndex === stream.index;
             return (
@@ -171,9 +150,9 @@ export function SettingsPanel({
                 type="button"
                 role="menuitemradio"
                 aria-checked={selected}
-                onClick={() => runAndClose(() => onAudioStreamChange(stream.index))}
+                onClick={() => runAndClose(() => onAudioStreamChange(stream.index, currentPositionSeconds))}
               >
-                <span>{streamLabel(stream, `Track ${index + 1}`)}</span>
+                <span>{audioStreamLabel(stream, `Track ${index + 1}`)}</span>
                 {(stream.isDefault || stream.isForced) && (
                   <span className="fx-settings-sub">
                     {stream.isDefault ? 'Default' : 'Forced'}

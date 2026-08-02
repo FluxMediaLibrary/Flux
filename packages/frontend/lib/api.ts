@@ -10,6 +10,7 @@ import type {
   AdminPlaybackSessionDTO,
   AdminSignalDTO,
   AdminUserDTO,
+  AudioPreferenceDTO,
   AdminLibraryHealthDTO,
   AdminMediaDeleteResultDTO,
   AdminLibraryRepairResultDTO,
@@ -58,6 +59,7 @@ import type {
   RequestDTO,
   SaveProgressRequest,
   SignupRequest,
+  UpdateAudioPreferenceRequest,
   UpdateProfileRequest,
   TmdbGenreDTO,
   TmdbPersonResult,
@@ -266,6 +268,12 @@ export const api = {
       `/api/profiles/${encodeURIComponent(profileId)}`,
       { method: 'PATCH', body, token: baseToken ?? getBaseToken() },
     );
+  },
+  updateAudioPreference(body: UpdateAudioPreferenceRequest) {
+    return request<AudioPreferenceDTO>('/api/profiles/me/audio-preference', {
+      method: 'PATCH',
+      body,
+    });
   },
   deleteProfile(profileId: string, baseToken?: string | null) {
     return request<void>(`/api/profiles/${encodeURIComponent(profileId)}`, {

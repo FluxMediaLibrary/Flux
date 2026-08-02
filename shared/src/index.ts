@@ -59,6 +59,8 @@ export interface ProfileDTO {
   id: string;
   name: string;
   avatar: string | null;
+  preferredAudioLanguage: string | null;
+  preferredAudioTitle: string | null;
   createdAt: string;
 }
 
@@ -117,6 +119,16 @@ export interface CreateProfileRequest {
 export interface UpdateProfileRequest {
   name?: string;
   avatar?: string | null;
+}
+
+export interface UpdateAudioPreferenceRequest {
+  language: string | null;
+  title: string | null;
+}
+
+export interface AudioPreferenceDTO {
+  preferredAudioLanguage: string | null;
+  preferredAudioTitle: string | null;
 }
 
 // ─── Premade avatars ──────────────────────────────────────────────────────────
@@ -479,11 +491,13 @@ export interface PlaybackInfoDTO {
   videoCodec: string | null;
   audioCodec: string | null;
   durationSeconds: number | null;
+  selectedAudioStreamIndex: number | null;
   preferences: {
     autoplayEnabled: boolean;
     resumeBehavior: 'ASK' | 'ALWAYS' | 'RESTART';
     skipIntroEnabled: boolean;
     preferredAudioLanguage: string | null;
+    preferredAudioTitle: string | null;
     preferredSubtitleLanguage: string | null;
     subtitlesMode: 'OFF' | 'FOREIGN_ONLY' | 'ALWAYS';
   };
