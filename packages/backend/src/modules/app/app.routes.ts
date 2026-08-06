@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../../config.js';
 import { ApiError } from '../../lib/errors.js';
+import { getAppReleases } from './releases.service.js';
 
 interface AndroidReleaseManifest {
   versionCode: number;
@@ -31,6 +32,12 @@ function readManifest(): AndroidReleaseManifest {
 }
 
 export const appRoutes: FastifyPluginAsync = async (app) => {
+  /**
+   * Latest desktop/Android releases resolved from GitHub `pc-v*` /
+   * `android-v*` tags, with direct asset download URLs.
+   */
+  app.get('/releases', async () => getAppReleases());
+
   app.get('/android/latest', async () => readManifest());
   app.get('/android/download/:file', async (request, reply) => {
     const { file } = request.params as { file: string };

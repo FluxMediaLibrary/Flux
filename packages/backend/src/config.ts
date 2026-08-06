@@ -41,6 +41,16 @@ const envSchema = z.object({
   ),
   CAST_SESSION_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(7200),
   ANDROID_RELEASE_ROOT: z.string().min(1).default('/data/releases/android'),
+  /**
+   * GitHub repository used by the /api/app/releases endpoint to resolve the
+   * latest `pc-v*` (desktop) and `android-v*` releases. An optional token
+   * raises the API rate limit; it is only sent to api.github.com and never
+   * returned or logged.
+   */
+  GITHUB_RELEASES_OWNER: z.string().min(1).default('FluxMediaLibrary'),
+  GITHUB_RELEASES_REPO: z.string().min(1).default('Flux'),
+  GITHUB_TOKEN: z.string().optional(),
+  APP_RELEASES_CACHE_MS: z.coerce.number().int().min(0).default(300_000),
   FLUX_SERVER_ID: z.string().uuid().optional(),
   FLUX_SERVER_NAME: z.string().trim().min(1).max(80).default('Flux'),
   FLUX_SERVER_VERSION: z.string().regex(/^\d+\.\d+\.\d+$/).default('0.1.0'),

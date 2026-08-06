@@ -217,6 +217,48 @@ export function getAvatarPreset(id: string | null | undefined): AvatarPreset | u
   return AVATAR_PRESETS.find((a) => a.id === id);
 }
 
+// --- App downloads / GitHub releases ---------------------------------------
+
+export type AppPlatform = 'desktop' | 'android';
+export type ReleaseTargetPlatform = 'windows' | 'macos' | 'linux' | 'android';
+export type ReleaseFormat =
+  | 'exe'
+  | 'dmg'
+  | 'zip'
+  | 'appimage'
+  | 'deb'
+  | 'rpm'
+  | 'apk';
+export type ReleaseArch = 'x64' | 'arm64' | 'universal';
+
+export interface AppReleaseAssetDTO {
+  name: string;
+  /** Direct browser_download_url of the GitHub release asset. */
+  url: string;
+  size: number;
+  platform: ReleaseTargetPlatform;
+  format: ReleaseFormat;
+  arch: ReleaseArch;
+}
+
+export interface AppReleaseDTO {
+  platform: AppPlatform;
+  /** Version string without the tag prefix, e.g. "0.1.2" or "1.1.7". */
+  version: string;
+  /** Full release tag, e.g. "pc-v0.1.2" or "android-v1.1.7". */
+  tag: string;
+  publishedAt: string;
+  /** GitHub release page URL. */
+  releaseUrl: string;
+  assets: AppReleaseAssetDTO[];
+}
+
+export interface AppReleasesDTO {
+  desktop: AppReleaseDTO | null;
+  android: AppReleaseDTO | null;
+  fetchedAt: string;
+}
+
 export interface InviteDTO {
   id: string;
   code: string;

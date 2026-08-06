@@ -12,6 +12,7 @@ import type {
   AdminUserDTO,
   AudioPreferenceDTO,
   AdminLibraryHealthDTO,
+  AppReleasesDTO,
   AdminMediaDeleteResultDTO,
   AdminLibraryRepairResultDTO,
   AdminMediaAnalyzeResultDTO,
@@ -720,6 +721,11 @@ export const api = {
       method: 'POST',
       body,
     });
+  },
+
+  // App downloads (GitHub releases)
+  appReleases() {
+    return request<AppReleasesDTO>('/api/app/releases', { anonymous: true });
   },
 };
 

@@ -73,7 +73,7 @@ export function Navbar() {
       router.push('/admin/settings#updates');
       return;
     }
-    window.location.href = '/flux.apk';
+    router.push('/downloads');
   };
 
   return (
@@ -118,6 +118,14 @@ export function Navbar() {
               <IconShield />
             </button>
           )}
+          <button
+            className="nav-ic"
+            aria-label="Downloads"
+            title="Get the apps"
+            onClick={() => router.push('/downloads')}
+          >
+            <IconDownload />
+          </button>
           <button className="nav-ic" aria-label="Search" onClick={() => setSearchOpen(true)}>
             <IconSearch />
           </button>
@@ -142,13 +150,14 @@ export function Navbar() {
             {adminAccess && (
               <button onClick={() => { setMenu(null); router.push('/admin/overview'); }}>Admin</button>
             )}
+            <button onClick={() => { setMenu(null); router.push('/downloads'); }}>Downloads</button>
           </div>
         )}
 
         {menu === 'profile' && (
           <div className="nav-menu" role="menu">
             <button onClick={handleUpdates}>
-              {nativeApp ? 'Check for updates' : isAdmin ? 'Updates' : 'Download Android app'}
+              {nativeApp ? 'Check for updates' : isAdmin ? 'Updates' : 'Download apps'}
             </button>
             {nativeApp === 'desktop' && (
               <button onClick={() => { setMenu(null); void window.FluxDesktop?.changeServer(); }}>
@@ -177,3 +186,4 @@ const IconPlus = () => (<svg viewBox="0 0 24 24" {...ico}><path d="M12 5v14M5 12
 const IconUsers = () => (<svg viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3.2" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M17 5.2a3.2 3.2 0 0 1 0 5.6" /><path d="M18.5 14.2A6.5 6.5 0 0 1 21.5 20" /></svg>);
 const IconSearch = () => (<svg viewBox="0 0 24 24" {...ico}><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>);
 const IconShield = () => (<svg viewBox="0 0 24 24" {...ico}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>);
+const IconDownload = () => (<svg viewBox="0 0 24 24" {...ico}><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M4 21h16" /></svg>);

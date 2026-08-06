@@ -44,6 +44,9 @@ export class ApiError extends Error {
   static internal(message = 'Internal server error', code = 'INTERNAL') {
     return new ApiError(500, code, message);
   }
+  static badGateway(message: string, code = 'BAD_GATEWAY') {
+    return new ApiError(502, code, message);
+  }
 }
 
 /** Register the Fastify error handler that emits the ApiError DTO shape. */

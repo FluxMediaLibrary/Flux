@@ -84,6 +84,9 @@ export default function LoginPage() {
       <p className="auth-alt">
         Have an invite? <Link href="/signup">Create an account</Link>
       </p>
+      <p className="auth-alt">
+        Want the native app? <Link href="/downloads">Get the apps</Link>
+      </p>
     </div>
   );
 }

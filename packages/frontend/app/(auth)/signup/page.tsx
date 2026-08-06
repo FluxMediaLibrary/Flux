@@ -105,6 +105,9 @@ function SignupForm() {
       <p className="auth-alt">
         Already have an account? <Link href="/login">Sign in</Link>
       </p>
+      <p className="auth-alt">
+        Want the native app? <Link href="/downloads">Get the apps</Link>
+      </p>
     </div>
   );
 }
