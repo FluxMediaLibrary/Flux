@@ -20,13 +20,6 @@ interface PlatformMeta {
   icon: ComponentType;
 }
 
-const PLATFORMS: PlatformMeta[] = [
-  { id: 'android', label: 'Android', icon: IconAndroid },
-  { id: 'windows', label: 'PC', icon: IconWindows },
-  { id: 'macos', label: 'Mac', icon: IconApple },
-  { id: 'linux', label: 'Linux', icon: IconLinux },
-];
-
 export default function DownloadsPage() {
   const [releases, setReleases] = useState<AppReleasesDTO | null>(null);
   const [arch, setArch] = useState<ReleaseArch>('x64');
@@ -234,6 +227,13 @@ const IconAndroid = () => (
     <path d="M17.523 9.328 19.865 5.71a.706.706 0 0 0-.184-.98.703.703 0 0 0-.98.185l-2.36 3.643a11.743 11.743 0 0 0-8.682 0L5.299 4.914a.704.704 0 0 0-1.164.795l2.342 3.62A9.893 9.893 0 0 0 2.06 17.09h19.88a9.893 9.893 0 0 0-4.417-7.762zM7.189 14.565a1.177 1.177 0 1 1 0-2.354 1.177 1.177 0 0 1 0 2.354zm9.622 0a1.177 1.177 0 1 1 0-2.354 1.177 1.177 0 0 1 0 2.354z" />
   </svg>
 );
+
+const PLATFORMS: PlatformMeta[] = [
+  { id: 'android', label: 'Android', icon: IconAndroid },
+  { id: 'windows', label: 'PC', icon: IconWindows },
+  { id: 'macos', label: 'Mac', icon: IconApple },
+  { id: 'linux', label: 'Linux', icon: IconLinux },
+];
 
 const IconDownload = () => (
   <svg
