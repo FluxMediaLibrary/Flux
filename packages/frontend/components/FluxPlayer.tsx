@@ -414,6 +414,16 @@ function FluxMediaPlayer({
   const configuredSegments = source.info?.preferences.skipIntroEnabled === false
     ? segments?.filter((segment) => segment.type !== 'INTRO')
     : segments;
+  const reportProgressWithPlaybackIntent = useCallback((
+    positionSeconds: number,
+    durationSeconds: number,
+    _playerPaused: boolean,
+  ) => {
+    // The media element can briefly report itself paused while it buffers or
+    // swaps sources. Presence should only say Paused after an explicit pause
+    // request from the viewer.
+    onProgress?.(positionSeconds, durationSeconds, pausedByUserRef.current);
+  }, [onProgress]);
 
   return (
     <MediaPlayer
@@ -445,11 +455,6 @@ function FluxMediaPlayer({
           paused: true,
           started: playbackStartedRef.current || lastPlaybackStateRef.current.started,
         };
-        if (playbackReady || playbackStartedRef.current || lastPlaybackStateRef.current.started) {
-          playRequestedRef.current = false;
-          pausedByUserRef.current = true;
-          lastPausedAtRef.current = Date.now();
-        }
       }}
       onError={handlePlayerError}
     >
@@ -461,7 +466,7 @@ function FluxMediaPlayer({
         subtitle={subtitle}
         startPositionSeconds={configuredStartPosition}
         onBack={onBack}
-        onProgress={onProgress}
+        onProgress={reportProgressWithPlaybackIntent}
         onNearEnd={onNearEnd}
         nextEpisode={nextEpisode}
         nextEpisodeMarkers={nextEpisodeMarkers}
@@ -509,11 +514,6 @@ function FluxMediaPlayer({
           lastPlaybackStateRef.current = state;
           if (!state.started) return;
           playbackStartedRef.current = true;
-          if (state.paused) {
-            playRequestedRef.current = false;
-            pausedByUserRef.current = true;
-            lastPausedAtRef.current = Date.now();
-          }
         }}
       />
     </MediaPlayer>

@@ -118,7 +118,8 @@ export default function WatchPage() {
 
   useEffect(() => {
     if (!item || !target) return;
-    publishDesktopPresence(startPosition, durationSeconds, true);
+    // Loading the player or changing episodes is not a viewer pause.
+    publishDesktopPresence(startPosition, durationSeconds, false);
     return clearDesktopPlaybackPresence;
   }, [durationSeconds, item, publishDesktopPresence, startPosition, target]);
 
