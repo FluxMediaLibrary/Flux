@@ -14,12 +14,12 @@
     "@flux/shared": "*",
     "@vidstack/react": "^1.15.6",
     "hls.js": "^1.5.20",
-    "next": "^16.3.0-preview.10",
+    "next": "^16.3.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@next/eslint-plugin-next": "^16.3.0-preview.10",
+    "@next/eslint-plugin-next": "^16.3.5",
     "@types/node": "^20.19.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
