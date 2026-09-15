@@ -15,6 +15,7 @@ import type {
 } from '@flux/shared';
 import { api, FluxApiError } from '@/lib/api';
 import { ConfirmDialog, PageHeader } from '@/components/admin/AdminUI';
+import { LibraryScanPanel } from '@/components/admin/LibraryScanPanel';
 
 const TMDB_POSTER = 'https://image.tmdb.org/t/p/w92';
 
@@ -442,6 +443,7 @@ export default function AdminLibraryPage() {
           </button>
         </>
       } />
+      <LibraryScanPanel onLibraryChanged={() => void load()} />
 
       {error && <div className="form-error">{error}</div>}
       {notice && <div className="admin-notice">{notice}</div>}

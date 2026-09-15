@@ -42,6 +42,8 @@ import type {
   TmdbKeyTestResultDTO,
   StorageOverviewDTO,
   StoragePlacementPlanDTO,
+  LibraryScanReportDTO,
+  ResolveLibraryScanFileRequest,
   UpdateSettingsBundleRequest,
   SettingsTestResultDTO,
   DownloadClientDTO,
@@ -574,6 +576,17 @@ export const api = {
   },
   queueUsenetRelease(profileId: string, body: QueueUsenetReleaseRequest) {
     return request<QueuedUsenetReleaseDTO>(`/api/settings/quality-profiles/${encodeURIComponent(profileId)}/queue-usenet-release`, { method: 'POST', body });
+  },
+
+  // Library import scan (admin)
+  getLibraryScan() {
+    return request<LibraryScanReportDTO>('/api/admin/library/scan');
+  },
+  startLibraryScan() {
+    return request<LibraryScanReportDTO>('/api/admin/library/scan', { method: 'POST' });
+  },
+  resolveLibraryScanFile(body: ResolveLibraryScanFileRequest) {
+    return request<{ mediaItemId: string; episodeId: string | null }>('/api/admin/library/scan/resolve', { body });
   },
 
   // Admin dashboard

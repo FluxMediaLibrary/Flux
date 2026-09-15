@@ -46,6 +46,7 @@ import {
 } from '../media-segments/intro-jobs.service.js';
 import { prisma } from '../../lib/db.js';
 import { describePlacement, getStorageOverview } from '../../lib/storage.js';
+import { getLibraryScanReport, resolveLibraryScanFile, startLibraryScan } from '../library/library-scan.service.js';
 
 const updateUserSchema = z.object({
   role: z.enum(['ADMIN', 'MEMBER']).optional(),
@@ -57,6 +58,13 @@ const updateUserSchema = z.object({
 const storagePlanSchema = z.object({
   bytes: z.coerce.number().int().min(0).max(1e15).default(10 * 1024 ** 3),
 });
+const resolveScanFileSchema = z.object({
+  filePath: z.string().trim().min(1).max(4000),
+  mediaType: z.enum(['MOVIE', 'SHOW']),
+  tmdbId: z.number().int().positive(),
+  season: z.number().int().min(0).max(500).nullable().optional(),
+  episode: z.number().int().min(0).max(5000).nullable().optional(),
+}).strict();
 const playbackMarkersSchema = z.object({
   episodeId: z.string().trim().min(1).max(128).optional(),
   markers: z.array(z.object({
@@ -210,6 +218,22 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     await removeTorrentById(id, shouldDelete);
     await writeAuditEvent({ actorId: request.account!.id, action: shouldDelete ? 'DOWNLOAD_FILES_DELETED' : 'DOWNLOAD_REMOVED', targetType: 'TORRENT', targetId: id });
     return reply.status(204).send();
+  });
+
+  app.get('/library/scan', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async () => getLibraryScanReport());
+  app.post('/library/scan', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request, reply) => {
+    const result = await startLibraryScan();
+    if (result.started) {
+      await writeAuditEvent({ actorId: request.account!.id, action: 'LIBRARY_SCAN_STARTED', targetType: 'LIBRARY', targetId: 'scan' });
+      return reply.status(202).send(result.report);
+    }
+    return reply.status(200).send(result.report);
+  });
+  app.post('/library/scan/resolve', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const body = resolveScanFileSchema.parse(request.body);
+    const result = await resolveLibraryScanFile(body);
+    await writeAuditEvent({ actorId: request.account!.id, action: 'LIBRARY_SCAN_FILE_RESOLVED', targetType: 'MEDIA_ITEM', targetId: result.mediaItemId, details: { filePath: body.filePath, tmdbId: body.tmdbId } });
+    return result;
   });
 
   app.get('/library', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async () => {

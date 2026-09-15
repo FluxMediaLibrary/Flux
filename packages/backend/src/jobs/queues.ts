@@ -1,6 +1,5 @@
 /**
  * BullMQ queues. Producers add jobs here; workers (worker.ts) consume them.
- * Actual job payload/processing logic is implemented in later phases.
  */
 import { randomUUID } from 'node:crypto';
 import { Job, Queue } from 'bullmq';
@@ -9,24 +8,21 @@ import { bullConnection } from '../lib/redis.js';
 
 export const QUEUE_NAMES = {
   torrentPostprocess: 'torrent-postprocess',
-  transcode: 'transcode',
   introDetection: 'intro-detection',
+  libraryScan: 'library-scan',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 
-// ─── Job payload shapes (stubs — refined in later phases) ─────────────────────
+// ─── Job payload shapes ───────────────────────────────────────────────────────
 
 export interface TorrentPostprocessJob {
   torrentId: string;
   infoHash: string;
 }
 
-/** TODO(phase 6): fields for an on-demand HLS transcode session. */
-export interface TranscodeJob {
-  mediaItemId?: string;
-  episodeId?: string;
-  sessionId: string;
+export interface LibraryScanJob {
+  requestedAt: string;
 }
 
 export interface IntroDetectionJob {
@@ -48,9 +44,9 @@ export const torrentPostprocessQueue = new Queue<TorrentPostprocessJob>(
   { connection: bullConnection, defaultJobOptions },
 );
 
-export const transcodeQueue = new Queue<TranscodeJob>(QUEUE_NAMES.transcode, {
+export const libraryScanQueue = new Queue<LibraryScanJob>(QUEUE_NAMES.libraryScan, {
   connection: bullConnection,
-  defaultJobOptions,
+  defaultJobOptions: { ...defaultJobOptions, attempts: 1 },
 });
 
 export const introDetectionQueue = new Queue<IntroDetectionJob>(

@@ -1256,6 +1256,59 @@ export interface AdminLibraryItemDTO {
   acquisitionTargets: AdminLibraryAcquisitionTargetDTO[];
 }
 
+// ─── Library import scan ──────────────────────────────────────────────────────
+
+export type LibraryScanStatus = 'IDLE' | 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+
+export interface LibraryScanCandidateDTO {
+  tmdbId: number;
+  title: string;
+  year: number | null;
+  posterPath: string | null;
+}
+
+export interface LibraryScanUnmatchedDTO {
+  filePath: string;
+  kind: MediaType;
+  guessTitle: string;
+  guessYear: number | null;
+  season: number | null;
+  episode: number | null;
+  sizeBytes: number;
+  candidates: LibraryScanCandidateDTO[];
+}
+
+export interface LibraryScanErrorDTO {
+  filePath: string;
+  message: string;
+}
+
+export interface LibraryScanReportDTO {
+  status: LibraryScanStatus;
+  startedAt: string | null;
+  finishedAt: string | null;
+  roots: string[];
+  progress: {
+    filesSeen: number;
+    filesSkipped: number;
+    filesMatched: number;
+    filesUnmatched: number;
+    errors: number;
+    stage: string;
+  };
+  created: { movies: number; shows: number; episodes: number };
+  unmatched: LibraryScanUnmatchedDTO[];
+  errors: LibraryScanErrorDTO[];
+}
+
+export interface ResolveLibraryScanFileRequest {
+  filePath: string;
+  mediaType: MediaType;
+  tmdbId: number;
+  season?: number | null;
+  episode?: number | null;
+}
+
 export interface AdminLibraryHealthDTO {
   summary: {
     items: number;

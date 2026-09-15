@@ -1,19 +1,19 @@
 /**
- * BullMQ workers. Wiring only — the real processors are implemented in later
- * phases (torrent post-processing in phase 5, transcoding in phase 6).
- *
- * Each worker gets its own blocking Redis connection (BullMQ requirement).
+ * BullMQ workers. Each worker gets its own blocking Redis connection (BullMQ
+ * requirement). HLS transcoding is not a queue job — it is spawned on demand
+ * by the streaming routes because a session must start within a second.
  */
 import { Worker, type Job } from 'bullmq';
 import { bullConnection } from '../lib/redis.js';
 import {
   QUEUE_NAMES,
   type IntroDetectionJob,
+  type LibraryScanJob,
   type TorrentPostprocessJob,
-  type TranscodeJob,
 } from './queues.js';
 import { processTorrentPostprocess } from '../modules/torrents/postprocess.js';
 import { runIntroDetectionForSeason } from '../modules/media-segments/intro-detection/intro-detection.service.js';
+import { runLibraryScan } from '../modules/library/library-scan.service.js';
 
 let workers: Worker[] = [];
 
@@ -21,11 +21,6 @@ async function processTorrentPostprocessJob(
   job: Job<TorrentPostprocessJob>,
 ): Promise<void> {
   await processTorrentPostprocess(job);
-}
-
-async function processTranscode(job: Job<TranscodeJob>): Promise<void> {
-  // TODO(phase 6): spawn FFmpeg to produce HLS segments for the session.
-  job.log(`transcode stub for session ${job.data.sessionId}`);
 }
 
 async function processIntroDetection(
@@ -42,10 +37,10 @@ export function startWorkers(): Worker[] {
     { connection: bullConnection, concurrency: 1 },
   );
 
-  const transcodeWorker = new Worker<TranscodeJob>(
-    QUEUE_NAMES.transcode,
-    processTranscode,
-    { connection: bullConnection, concurrency: 2 },
+  const libraryScanWorker = new Worker<LibraryScanJob>(
+    QUEUE_NAMES.libraryScan,
+    runLibraryScan,
+    { connection: bullConnection, concurrency: 1 },
   );
 
   const introDetectionWorker = new Worker<IntroDetectionJob>(
@@ -55,7 +50,7 @@ export function startWorkers(): Worker[] {
     { connection: bullConnection, concurrency: 1 },
   );
 
-  workers = [torrentWorker, transcodeWorker, introDetectionWorker];
+  workers = [torrentWorker, libraryScanWorker, introDetectionWorker];
   return workers;
 }
 

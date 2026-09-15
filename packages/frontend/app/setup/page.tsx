@@ -82,6 +82,9 @@ export default function SetupPage() {
   const [importBehavior, setImportBehavior] = useState<'COPY' | 'MOVE'>('COPY');
   const [automatedDownloads, setAutomatedDownloads] = useState(false);
 
+  // Review step
+  const [scanOnFinish, setScanOnFinish] = useState(true);
+
   const stepIndex = STEPS.findIndex((entry) => entry.id === step);
   const isAdmin = auth.status === 'authenticated' && auth.isAdmin;
 
@@ -250,9 +253,14 @@ export default function SetupPage() {
     setError(null);
     try {
       await api.completeSetup();
+      if (scanOnFinish) {
+        // Best effort: the admin library page shows progress and any files
+        // that need a manual match.
+        await api.startLibraryScan().catch(() => undefined);
+      }
       const profile = auth.profiles[0];
       if (profile && !auth.activeProfileId) await auth.activateProfile(profile.id);
-      router.replace('/admin/overview');
+      router.replace(scanOnFinish ? '/admin/library' : '/admin/overview');
     } catch (err) {
       setError(errorMessage(err, 'Setup could not be completed.'));
       setBusy(false);
@@ -516,6 +524,10 @@ export default function SetupPage() {
                 <dt>Metadata</dt><dd>{snapshot?.settings.integrations.tmdbApiKeyConfigured ? 'TMDb connected' : 'TMDb not configured'}</dd>
                 <dt>Downloads</dt><dd>{importBehavior === 'COPY' ? 'Copy into library' : 'Move into library'}{automatedDownloads ? ' · automated' : ''}</dd>
               </dl>
+              <label className="setup-toggle">
+                <input type="checkbox" checked={scanOnFinish} onChange={(event) => setScanOnFinish(event.target.checked)} />
+                <span>Index media already in the media folders (<code>movies/</code> and <code>tv/</code>) and fetch its metadata</span>
+              </label>
               <div className="setup-actions">
                 <button className="btn btn-ghost" type="button" onClick={back} disabled={busy}>Back</button>
                 <button className="btn btn-primary" type="button" onClick={() => void finish()} disabled={busy}>{busy ? 'Finishing…' : 'Finish and open Flux'}</button>
