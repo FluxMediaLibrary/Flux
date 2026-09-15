@@ -65,3 +65,5 @@ twa/
 # Android APKs in packages/frontend/public and releases/android are intentional
 # self-hosted release artifacts and remain tracked.
 .env.vps
+
+
