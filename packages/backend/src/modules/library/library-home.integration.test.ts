@@ -15,10 +15,16 @@ test('home isolates a failed discovery query while preserving successful rows', 
 
   const originalProgressFindMany = prisma.watchProgress.findMany;
   const originalMediaFindMany = prisma.mediaItem.findMany;
+  const originalQueryRaw = prisma.$queryRaw;
   prisma.watchProgress.findMany = (async () => []) as typeof prisma.watchProgress.findMany;
-  prisma.mediaItem.findMany = (async (args: { where?: { genres?: unknown; year?: unknown } }) => {
-    if (args.where?.genres) throw new Error('simulated discovery failure');
-    if (args.where?.year) return [];
+  // New releases still go through findMany (year filter); the recently-added
+  // and discovery pools use the light raw projection.
+  prisma.mediaItem.findMany = (async () => []) as typeof prisma.mediaItem.findMany;
+  let rawCalls = 0;
+  prisma.$queryRaw = (async () => {
+    rawCalls += 1;
+    // First call: recently added (LIMIT 20). Second: discovery pool (cardinality filter).
+    if (rawCalls === 2) throw new Error('simulated discovery failure');
     return [{
       id: 'movie-1',
       tmdbId: 1,
@@ -29,15 +35,17 @@ test('home isolates a failed discovery query while preserving successful rows', 
       posterPath: null,
       backdropPath: null,
       genres: [],
-      metadata: null,
       filePath: '/media/movie.mp4',
       addedAt: new Date('2026-01-01T00:00:00.000Z'),
-      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-    }] as never[];
-  }) as typeof prisma.mediaItem.findMany;
+      runtimeMinutes: null,
+      contentRating: null,
+      rating: null,
+    }];
+  }) as typeof prisma.$queryRaw;
   t.after(() => {
     prisma.watchProgress.findMany = originalProgressFindMany;
     prisma.mediaItem.findMany = originalMediaFindMany;
+    prisma.$queryRaw = originalQueryRaw;
   });
 
   const home = await getHomepage('profile-1');

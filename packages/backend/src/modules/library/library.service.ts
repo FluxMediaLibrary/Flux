@@ -5,6 +5,7 @@
  * internally to keep route handlers thin.
  */
 import { prisma } from '../../lib/db.js';
+import { findMediaItemsLite, liteToDTO, type MediaItemLite } from '../../lib/media-lite.js';
 import { ApiError } from '../../lib/errors.js';
 import type {
   HomeRowsDTO,
@@ -36,7 +37,7 @@ function metadataString(metadata: unknown, key: string): string | null {
 }
 
 function uniqueItems(
-  items: MediaItem[],
+  items: (MediaItem | MediaItemLite)[],
   limit: number,
   excludeIds = new Set<string>(),
 ): MediaItemDTO[] {
@@ -45,7 +46,7 @@ function uniqueItems(
   for (const item of items) {
     if (seen.has(item.id)) continue;
     seen.add(item.id);
-    result.push(mapMediaItemToDTO(item));
+    result.push('metadata' in item ? mapMediaItemToDTO(item) : liteToDTO(item));
     if (result.length >= limit) break;
   }
   return result;
@@ -138,13 +139,15 @@ export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
       orderBy: { updatedAt: 'desc' },
       take: 10,
     }),
-    prisma.mediaItem.findMany({ orderBy: { addedAt: 'desc' }, take: 20 }),
+    findMediaItemsLite({ orderBy: 'addedAt', take: 20 }),
     prisma.mediaItem.findMany({
       where: { year: { not: null } },
       orderBy: [{ year: 'desc' }, { addedAt: 'desc' }],
       take: 24,
     }),
-    prisma.mediaItem.findMany({ where: { genres: { isEmpty: false } } }),
+    // The discovery pool is every titled item; keep it light — the full TMDb
+    // payload is never needed for a poster row.
+    findMediaItemsLite({ withGenresOnly: true }),
   ]);
 
   const errors: HomeRowErrorDTO[] = [];
@@ -183,7 +186,7 @@ export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
 
   const recentRows = recentResult.status === 'fulfilled' ? recentResult.value : [];
   if (recentResult.status === 'rejected') addError('recently-added', 'Recently Added');
-  const recentlyAdded: MediaItemDTO[] = recentRows.map(mapMediaItemToDTO);
+  const recentlyAdded: MediaItemDTO[] = recentRows.map(liteToDTO);
   const newReleaseRows = releasesResult.status === 'fulfilled' ? releasesResult.value : [];
   if (releasesResult.status === 'rejected') addError('new-releases', 'New Releases');
   const newReleases = uniqueItems(newReleaseRows, 16);
@@ -197,12 +200,8 @@ export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
 
   const topRated = uniqueItems(
     [...allItems]
-      .filter((item) => metadataNumber(item.metadata, 'vote_average') !== null)
-      .sort(
-        (a, b) =>
-          (metadataNumber(b.metadata, 'vote_average') ?? 0) -
-          (metadataNumber(a.metadata, 'vote_average') ?? 0),
-      ),
+      .filter((item) => item.rating !== null)
+      .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)),
     16,
   );
 
@@ -226,7 +225,7 @@ export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
   );
   const randomPicks = uniqueItems(shuffleItems(allItems), 16);
 
-  const genreMap = new Map<string, MediaItem[]>();
+  const genreMap = new Map<string, MediaItemLite[]>();
   for (const item of allItems) {
     for (const genre of item.genres) {
       const bucket = genreMap.get(genre);
@@ -239,7 +238,7 @@ export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
   }
 
   // Sort genres by item count desc, take top 6, up to 10 items per genre.
-  const genreEntries: [string, MediaItem[]][] = [];
+  const genreEntries: [string, MediaItemLite[]][] = [];
   genreMap.forEach((items, genre) => {
     genreEntries.push([genre, items]);
   });
@@ -249,7 +248,7 @@ export async function getHomepage(profileId: string): Promise<HomeRowsDTO> {
     .slice(0, 6)
     .map(([genre, items]) => ({
       genre,
-      items: items.slice(0, 10).map(mapMediaItemToDTO),
+      items: items.slice(0, 10).map(liteToDTO),
     }));
 
   return {
@@ -273,15 +272,24 @@ export async function listLibrary(
   profileId: string,
   type?: MediaType,
 ): Promise<LibraryItemDTO[]> {
-  const items = await prisma.mediaItem.findMany({
-    where: type ? { type } : undefined,
-    include: { episodes: { select: { id: true, filePath: true } } },
-    orderBy: { title: 'asc' },
-  });
+  const items = await findMediaItemsLite({ type, orderBy: 'title' });
   if (items.length === 0) return [];
 
   const mediaIds = items.map((i) => i.id);
-  const episodeIds = items.flatMap((i) => i.episodes.map((e) => e.id));
+  const showIds = items.filter((i) => i.type === 'SHOW').map((i) => i.id);
+  const episodes = showIds.length
+    ? await prisma.episode.findMany({
+        where: { mediaItemId: { in: showIds } },
+        select: { id: true, mediaItemId: true, filePath: true },
+      })
+    : [];
+  const episodesByShow = new Map<string, { id: string; filePath: string | null }[]>();
+  for (const episode of episodes) {
+    const list = episodesByShow.get(episode.mediaItemId) ?? [];
+    list.push(episode);
+    episodesByShow.set(episode.mediaItemId, list);
+  }
+  const episodeIds = episodes.map((e) => e.id);
 
   // Completed movie progress + completed episode progress for this profile.
   const [movieDone, episodeDone] = await Promise.all([
@@ -301,7 +309,7 @@ export async function listLibrary(
   const completedEpisodes = new Set(episodeDone.map((p) => p.episodeId));
 
   return items.map((item) => {
-    const base = mapMediaItemToDTO(item);
+    const base = liteToDTO(item);
 
     if (item.type === 'MOVIE') {
       return {
@@ -313,7 +321,7 @@ export async function listLibrary(
       };
     }
 
-    const availableEps = item.episodes.filter((e) => e.filePath != null);
+    const availableEps = (episodesByShow.get(item.id) ?? []).filter((e) => e.filePath != null);
     const episodeCount = availableEps.length;
     const unplayed = availableEps.filter(
       (e) => !completedEpisodes.has(e.id),

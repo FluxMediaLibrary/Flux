@@ -228,6 +228,8 @@ model MediaItem {
 
   @@unique([tmdbId, type])
   @@index([type])
+  @@index([addedAt])
+  @@index([title])
   @@map("media_items")
 }
 
