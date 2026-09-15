@@ -50,8 +50,8 @@ const COLUMNS = Prisma.sql`
   "id", "tmdbId", "type", "title", "year", "overview", "posterPath", "backdropPath",
   "genres", "filePath", "addedAt",
   NULLIF(metadata->>'runtime', '')::int AS "runtimeMinutes",
-  NULLIF(metadata->>'certification', '') AS "contentRating",
-  NULLIF(metadata->>'vote_average', '')::float AS "rating"
+  COALESCE(NULLIF(metadata->>'ageRating', ''), NULLIF(metadata->>'certification', '')) AS "contentRating",
+  COALESCE(NULLIF(metadata->>'voteAverage', ''), NULLIF(metadata->>'vote_average', ''))::float AS "rating"
 `;
 
 function toNumber(value: number | string | null): number | null {

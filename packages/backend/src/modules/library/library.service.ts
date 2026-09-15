@@ -73,9 +73,11 @@ export function mapMediaItemToDTO(row: MediaItem): MediaItemDTO {
     posterPath: row.posterPath,
     backdropPath: row.backdropPath,
     genres: row.genres,
+    // The cached payload is our TmdbDetail (camelCase); older rows may hold
+    // the raw TMDb shape, so accept both.
     runtimeMinutes: metadataNumber(row.metadata, 'runtime'),
-    contentRating: metadataString(row.metadata, 'certification'),
-    rating: metadataNumber(row.metadata, 'vote_average'),
+    contentRating: metadataString(row.metadata, 'ageRating') ?? metadataString(row.metadata, 'certification'),
+    rating: metadataNumber(row.metadata, 'voteAverage') ?? metadataNumber(row.metadata, 'vote_average'),
     addedAt: row.addedAt.toISOString(),
   };
 }

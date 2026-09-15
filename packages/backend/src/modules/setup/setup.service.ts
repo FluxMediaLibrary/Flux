@@ -12,6 +12,7 @@
  * users table is empty and is checked inside a serializable transaction so a
  * race cannot produce two "first" admins.
  */
+import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 import { Prisma } from '@prisma/client';
 import type {
@@ -111,9 +112,9 @@ export async function getSetupSnapshot(): Promise<SetupSnapshotDTO> {
         : torrent.message ?? 'Connection failed',
     },
     environment: {
-      mediaRoots: config.MEDIA_ROOTS,
-      downloadRoot: config.DOWNLOAD_ROOT,
-      transcodeRoot: config.TRANSCODE_ROOT,
+      mediaRoots: config.MEDIA_ROOTS.map((root) => path.resolve(root)),
+      downloadRoot: path.resolve(config.DOWNLOAD_ROOT),
+      transcodeRoot: path.resolve(config.TRANSCODE_ROOT),
       frontendOrigin: config.FRONTEND_ORIGIN,
       publicApiBaseUrl: config.PUBLIC_API_BASE_URL ?? null,
     },

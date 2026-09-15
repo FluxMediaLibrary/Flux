@@ -18,6 +18,15 @@ test('matches on exact normalised title + year', () => {
   assert.equal(pickConfidentMatch(results, 'heat', 1986), 2);
 });
 
+test('same title and year: takes the top-ranked (most popular) entry', () => {
+  const results = [
+    { tmdbId: 329865, title: 'Arrival', year: 2016 },
+    { tmdbId: 683330, title: 'Arrival', year: 1986 },
+    { tmdbId: 999999, title: 'Arrival', year: 2016 },
+  ];
+  assert.equal(pickConfidentMatch(results, 'Arrival', 2016), 329865);
+});
+
 test('refuses ambiguous titles when no year is available', () => {
   const results = [
     { tmdbId: 1, title: 'Heat', year: 1995 },

@@ -164,9 +164,10 @@ export async function getSettingsBundle(): Promise<SettingsBundleDTO> {
       reservedFreeSpaceGb: row.minimumFreeSpaceGb,
       placementStrategy: row.storagePlacementStrategy as SettingsBundleDTO['storage']['placementStrategy'],
       preferredMediaRoot: row.preferredMediaRoot,
-      mediaRoots: config.MEDIA_ROOTS,
-      downloadRoot: config.DOWNLOAD_ROOT,
-      transcodeRoot: config.TRANSCODE_ROOT,
+      // Resolved so they compare equal to the stored preferred root.
+      mediaRoots: config.MEDIA_ROOTS.map((root) => path.resolve(root)),
+      downloadRoot: path.resolve(config.DOWNLOAD_ROOT),
+      transcodeRoot: path.resolve(config.TRANSCODE_ROOT),
     },
     playback: {
       directPlayEnabled: row.directPlayEnabled, directStreamEnabled: row.directStreamEnabled,

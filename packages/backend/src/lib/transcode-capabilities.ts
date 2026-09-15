@@ -75,7 +75,9 @@ async function detect(): Promise<Capabilities> {
   const detected: HardwareEncoderDTO[] = ENCODERS.map((entry) => {
     const built = available.has(entry.encoder);
     const platformOk = entry.id !== 'VIDEOTOOLBOX' || process.platform === 'darwin';
-    const missingDevice = entry.devices.length > 0 && !entry.devices.some((device) => fs.existsSync(device));
+    // Device nodes only exist on Linux; on Windows/macOS hosts the driver is
+    // reachable whenever FFmpeg was built with the encoder.
+    const missingDevice = process.platform === 'linux' && entry.devices.length > 0 && !entry.devices.some((device) => fs.existsSync(device));
     let reason: string | null = null;
     if (!encoders.ok) reason = 'FFmpeg could not be executed';
     else if (!built) reason = `FFmpeg build has no ${entry.encoder} encoder`;
