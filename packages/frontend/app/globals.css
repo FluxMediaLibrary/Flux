@@ -6181,3 +6181,7 @@ html { scroll-behavior: smooth; }
   .setup-actions { flex-wrap: wrap; }
   .setup-actions .btn { flex: 1 1 auto; }
 }
+
+/* Request lifecycle on title pages */
+.tmdb-request-state { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tmdb-request-reason { display: block; width: 100%; color: var(--danger); font-size: 0.82rem; }

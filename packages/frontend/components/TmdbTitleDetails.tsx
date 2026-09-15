@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import type { MediaType, RequestStatus, TmdbDetail } from '@flux/shared';
+import type { MediaType, RequestDTO, TmdbDetail } from '@flux/shared';
 import { api, FluxApiError } from '@/lib/api';
+import { requestCancellable, requestStageLabel, requestStagePillClass } from '@/lib/request-stage';
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w342';
 const BACKDROP_BASE = 'https://image.tmdb.org/t/p/w1280';
@@ -12,11 +13,12 @@ const PROFILE_BASE = 'https://image.tmdb.org/t/p/w185';
 interface TmdbTitleDetailsProps {
   tmdbId: number;
   mediaType: MediaType;
-  requestStatus?: RequestStatus | null;
+  request?: RequestDTO | null;
   requesting?: boolean;
   variant?: 'modal' | 'page';
   onClose?: () => void;
   onRequest?: (detail: TmdbDetail) => void;
+  onCancelRequest?: (request: RequestDTO) => void;
 }
 
 function formatRuntime(minutes: number | null): string | null {
@@ -27,43 +29,15 @@ function formatRuntime(minutes: number | null): string | null {
   return `${hours}h ${mins}m`;
 }
 
-function statusLabel(status: RequestStatus): string {
-  switch (status) {
-    case 'PENDING':
-      return 'Pending';
-    case 'APPROVED':
-      return 'Approved';
-    case 'DOWNLOADING':
-      return 'Downloading';
-    case 'FULFILLED':
-      return 'In Library';
-    case 'REJECTED':
-      return 'Rejected';
-  }
-}
-
-function statusPillClass(status: RequestStatus): string {
-  switch (status) {
-    case 'FULFILLED':
-    case 'APPROVED':
-      return 'pill ok';
-    case 'REJECTED':
-      return 'pill err';
-    case 'DOWNLOADING':
-      return 'pill active';
-    default:
-      return 'pill';
-  }
-}
-
 export function TmdbTitleDetails({
   tmdbId,
   mediaType,
-  requestStatus = null,
+  request = null,
   requesting = false,
   variant = 'modal',
   onClose,
   onRequest,
+  onCancelRequest,
 }: TmdbTitleDetailsProps) {
   const [detail, setDetail] = useState<TmdbDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -183,8 +157,22 @@ export function TmdbTitleDetails({
                       <Link href={`/library/${detail.mediaItemId}`} className="btn btn-primary" onClick={onClose}>
                         ▶ Play
                       </Link>
-                    ) : requestStatus && requestStatus !== 'REJECTED' ? (
-                      <span className={statusPillClass(requestStatus)}>{statusLabel(requestStatus)}</span>
+                    ) : request && request.stage === 'AVAILABLE' && request.mediaItemId ? (
+                      <Link href={`/library/${request.mediaItemId}`} className="btn btn-primary" onClick={onClose}>
+                        ▶ Play
+                      </Link>
+                    ) : request && request.stage !== 'REJECTED' ? (
+                      <span className="tmdb-request-state">
+                        <span className={requestStagePillClass(request.stage)}>{requestStageLabel(request)}</span>
+                        {request.stage === 'FAILED' && request.failureReason && (
+                          <small className="tmdb-request-reason">{request.failureReason}</small>
+                        )}
+                        {onCancelRequest && requestCancellable(request) && (
+                          <button className="btn btn-ghost btn-sm" type="button" onClick={() => onCancelRequest(request)} disabled={requesting}>
+                            Cancel request
+                          </button>
+                        )}
+                      </span>
                     ) : onRequest ? (
                       <button className="btn btn-primary" type="button" onClick={() => onRequest(detail)} disabled={requesting}>
                         {requesting ? 'Requesting...' : '+ Request'}

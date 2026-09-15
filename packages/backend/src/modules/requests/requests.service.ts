@@ -1,6 +1,7 @@
 import type {
   AdminRequestFulfillmentSyncResultDTO,
   RequestDTO,
+  RequestStage,
   RequestStatus,
   MediaType,
 } from '@flux/shared';
@@ -28,8 +29,42 @@ type RequestMetadata = {
 
 // ─── DTO mappers ─────────────────────────────────────────────────────────────
 
-/** Map a plain Prisma Request row to the member-facing RequestDTO. */
-export function mapRequestToDTO(row: Request): RequestDTO {
+/**
+ * Collapse the stored request status and the linked acquisition job into the
+ * single lifecycle members see. A failed torrent surfaces as FAILED with its
+ * reason even while the request row still says APPROVED/DOWNLOADING, so users
+ * are never left staring at "Downloading" for a job that died.
+ */
+export function deriveRequestStage(
+  status: RequestStatus,
+  torrent: Pick<Torrent, 'status' | 'progress' | 'errorMessage'> | null | undefined,
+): { stage: RequestStage; progress: number | null; failureReason: string | null } {
+  if (status === 'FULFILLED') return { stage: 'AVAILABLE', progress: null, failureReason: null };
+  if (status === 'REJECTED') return { stage: 'REJECTED', progress: null, failureReason: null };
+  if (torrent) {
+    switch (torrent.status) {
+      case 'ERROR':
+        return { stage: 'FAILED', progress: torrent.progress, failureReason: torrent.errorMessage ?? 'The download failed.' };
+      case 'DOWNLOADING':
+        return { stage: 'DOWNLOADING', progress: torrent.progress, failureReason: null };
+      case 'PROCESSING':
+        return { stage: 'PROCESSING', progress: null, failureReason: null };
+      case 'SEEDING':
+      case 'STOPPED':
+        // Import finished but fulfilment has not been recorded yet.
+        return { stage: 'PROCESSING', progress: null, failureReason: null };
+      default:
+        break;
+    }
+  }
+  if (status === 'DOWNLOADING') return { stage: 'DOWNLOADING', progress: torrent?.progress ?? null, failureReason: null };
+  if (status === 'APPROVED') return { stage: 'APPROVED', progress: null, failureReason: null };
+  return { stage: 'REQUESTED', progress: null, failureReason: null };
+}
+
+/** Map a Prisma Request row (optionally with its torrent) to the member-facing RequestDTO. */
+export function mapRequestToDTO(row: Request & { torrent?: Torrent | null }, mediaItemId: string | null = null): RequestDTO {
+  const lifecycle = deriveRequestStage(row.status as RequestStatus, row.torrent);
   return {
     id: row.id,
     tmdbId: row.tmdbId,
@@ -38,9 +73,21 @@ export function mapRequestToDTO(row: Request): RequestDTO {
     season: row.season,
     episode: row.episode,
     status: row.status as RequestStatus,
+    ...lifecycle,
+    mediaItemId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/** Resolve local library ids for a batch of requests (one query). */
+async function mediaItemIdsFor(rows: { tmdbId: number; mediaType: string }[]): Promise<Map<string, string>> {
+  if (rows.length === 0) return new Map();
+  const items = await prisma.mediaItem.findMany({
+    where: { OR: rows.map((row) => ({ tmdbId: row.tmdbId, type: row.mediaType as MediaType })) },
+    select: { id: true, tmdbId: true, type: true },
+  });
+  return new Map(items.map((item) => [requestKey(item.tmdbId, item.type as MediaType), item.id]));
 }
 
 /**
@@ -49,18 +96,8 @@ export function mapRequestToDTO(row: Request): RequestDTO {
  * is included — if present, `requestedBy` is populated; otherwise it is
  * left undefined.
  */
-export function mapRequestToAdminDTO(row: RequestWithProfile): RequestDTO {
-  const dto: RequestDTO = {
-    id: row.id,
-    tmdbId: row.tmdbId,
-    mediaType: row.mediaType as MediaType,
-    title: row.title,
-    season: row.season,
-    episode: row.episode,
-    status: row.status as RequestStatus,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
+export function mapRequestToAdminDTO(row: RequestWithProfile, mediaItemId: string | null = null): RequestDTO {
+  const dto: RequestDTO = mapRequestToDTO(row, mediaItemId);
 
   if (row.profile) {
     dto.requestedBy = {
@@ -144,7 +181,8 @@ async function getAdminRequestDTO(id: string): Promise<RequestDTO> {
   if (!row) {
     throw ApiError.notFound(`Request ${id} not found`);
   }
-  const dto = mapRequestToAdminDTO(row);
+  const mediaIds = await mediaItemIdsFor([row]);
+  const dto = mapRequestToAdminDTO(row, mediaIds.get(requestKey(row.tmdbId, row.mediaType as MediaType)) ?? null);
   const metadata = await getRequestMetadata(dto.tmdbId, dto.mediaType);
   return applyMetadata(dto, metadata);
 }
@@ -215,7 +253,8 @@ export async function createRequest(
     orderBy: { createdAt: 'desc' },
   });
   if (existing) {
-    return mapRequestToDTO(existing);
+    const mediaIds = await mediaItemIdsFor([existing]);
+    return mapRequestToDTO(existing, mediaIds.get(requestKey(existing.tmdbId, existing.mediaType as MediaType)) ?? null);
   }
 
   const fulfilled = await hasPlayableLibraryItem(data.tmdbId, data.mediaType, target);
@@ -235,7 +274,8 @@ export async function createRequest(
     void notifyNewRequest(row.id);
   }
 
-  return mapRequestToDTO(row);
+  const mediaIds = fulfilled ? await mediaItemIdsFor([row]) : new Map<string, string>();
+  return mapRequestToDTO(row, mediaIds.get(requestKey(row.tmdbId, row.mediaType as MediaType)) ?? null);
 }
 
 /** List requests belonging to a specific profile (member view). */
@@ -243,9 +283,31 @@ export async function listMyRequests(profileId: string): Promise<RequestDTO[]> {
   const rows = await prisma.request.findMany({
     where: { profileId },
     orderBy: { createdAt: 'desc' },
+    include: { torrent: true },
   });
+  const mediaIds = await mediaItemIdsFor(rows);
+  const dtos = rows.map((row) => mapRequestToDTO(row, mediaIds.get(requestKey(row.tmdbId, row.mediaType as MediaType)) ?? null));
+  // Artwork for the member's own rows (home rail, title pages). Cached in the
+  // TMDb layer, so repeated loads are cheap.
+  const metadataEntries = await Promise.all(
+    Array.from(new Map(dtos.map((dto) => [requestKey(dto.tmdbId, dto.mediaType), dto])).values())
+      .map(async (dto) => [requestKey(dto.tmdbId, dto.mediaType), await getRequestMetadata(dto.tmdbId, dto.mediaType)] as const),
+  );
+  const metadataByKey = new Map(metadataEntries);
+  return dtos.map((dto) => applyMetadata(dto, metadataByKey.get(requestKey(dto.tmdbId, dto.mediaType))));
+}
 
-  return rows.map(mapRequestToDTO);
+/**
+ * A member may withdraw their own request while nothing has been acquired
+ * for it yet. Once a download is running the admin owns the job.
+ */
+export async function cancelOwnRequest(profileId: string, id: string): Promise<void> {
+  const row = await prisma.request.findUnique({ where: { id }, select: { profileId: true, status: true, torrentId: true } });
+  if (!row || row.profileId !== profileId) throw ApiError.notFound('Request not found');
+  if (row.status !== 'PENDING' && !(row.status === 'APPROVED' && !row.torrentId)) {
+    throw ApiError.conflict('This request is already being fulfilled and can no longer be cancelled', 'REQUEST_IN_PROGRESS');
+  }
+  await prisma.request.delete({ where: { id } });
 }
 
 /** List every request in the system (admin view) with requester info. */
@@ -264,7 +326,8 @@ export async function listAllRequests(): Promise<RequestDTO[]> {
     orderBy: { createdAt: 'desc' },
   });
 
-  const dtos = rows.map(mapRequestToAdminDTO);
+  const mediaIds = await mediaItemIdsFor(rows);
+  const dtos = rows.map((row) => mapRequestToAdminDTO(row, mediaIds.get(requestKey(row.tmdbId, row.mediaType as MediaType)) ?? null));
   const metadataEntries = await Promise.all(
     Array.from(new Map(dtos.map((dto) => [requestKey(dto.tmdbId, dto.mediaType), dto])).values())
       .map(async (dto) => [
@@ -313,12 +376,12 @@ export async function rejectRequest(id: string): Promise<RequestDTO> {
 
 /** Get a single request by id. */
 export async function getRequest(id: string): Promise<RequestDTO> {
-  const row = await prisma.request.findUnique({ where: { id } });
+  const row = await prisma.request.findUnique({ where: { id }, include: { torrent: true } });
   if (!row) {
     throw ApiError.notFound(`Request ${id} not found`);
   }
-
-  return mapRequestToDTO(row);
+  const mediaIds = await mediaItemIdsFor([row]);
+  return mapRequestToDTO(row, mediaIds.get(requestKey(row.tmdbId, row.mediaType as MediaType)) ?? null);
 }
 
 export async function syncFulfilledRequests(): Promise<AdminRequestFulfillmentSyncResultDTO> {

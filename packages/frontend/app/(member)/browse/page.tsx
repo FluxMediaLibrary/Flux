@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
+import { requestStageLabel, requestStagePillClass } from '@/lib/request-stage';
 import { useAmbient } from '@/components/AmbientBackdrop';
 import type {
   TmdbSearchResult,
   TmdbGenreDTO,
   MediaType,
-  RequestStatus,
+  RequestDTO,
 } from '@flux/shared';
 
 const BACKDROP_BASE = 'https://image.tmdb.org/t/p/w1280';
@@ -23,35 +24,6 @@ function requestKey(tmdbId: number, mediaType: MediaType): string {
 
 function titleDetailHref(tmdbId: number, mediaType: MediaType): string {
   return `/browse/${mediaType === 'SHOW' ? 'tv' : 'movie'}/${tmdbId}`;
-}
-
-function statusLabel(status: RequestStatus): string {
-  switch (status) {
-    case 'PENDING':
-      return 'Pending';
-    case 'APPROVED':
-      return 'Approved';
-    case 'DOWNLOADING':
-      return 'Downloading';
-    case 'FULFILLED':
-      return 'In Library';
-    case 'REJECTED':
-      return 'Rejected';
-  }
-}
-
-function statusPillClass(status: RequestStatus): string {
-  switch (status) {
-    case 'FULFILLED':
-    case 'APPROVED':
-      return 'pill ok';
-    case 'REJECTED':
-      return 'pill err';
-    case 'DOWNLOADING':
-      return 'pill active';
-    default:
-      return 'pill';
-  }
 }
 
 export default function BrowsePage() {
@@ -72,7 +44,7 @@ export default function BrowsePage() {
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
 
-  const [requests, setRequests] = useState<Map<string, RequestStatus>>(new Map());
+  const [requests, setRequests] = useState<Map<string, RequestDTO>>(new Map());
   const [requestingIds, setRequestingIds] = useState<Set<string>>(new Set());
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -83,8 +55,8 @@ export default function BrowsePage() {
     api
       .listMyRequests()
       .then((reqs) => {
-        const map = new Map<string, RequestStatus>();
-        for (const request of reqs) map.set(requestKey(request.tmdbId, request.mediaType), request.status);
+        const map = new Map<string, RequestDTO>();
+        for (const request of reqs) map.set(requestKey(request.tmdbId, request.mediaType), request);
         setRequests(map);
       })
       .catch(() => {
@@ -205,12 +177,12 @@ export default function BrowsePage() {
     const key = requestKey(item.tmdbId, item.mediaType);
     setRequestingIds((prev) => new Set(prev).add(key));
     try {
-      await api.createRequest({
+      const created = await api.createRequest({
         tmdbId: item.tmdbId,
         mediaType: item.mediaType,
         title: item.title,
       });
-      setRequests((prev) => new Map(prev).set(key, 'PENDING'));
+      setRequests((prev) => new Map(prev).set(key, created));
     } catch {
       /* Keep enabled so the user can retry. */
     } finally {
@@ -442,7 +414,7 @@ function HeroAction({
   detailsHref,
 }: {
   item: TmdbSearchResult;
-  status: RequestStatus | null;
+  status: RequestDTO | null;
   requesting: boolean;
   onRequest: () => void;
   detailsHref: string;
@@ -457,7 +429,7 @@ function HeroAction({
   if (status) {
     return (
       <>
-        <span className={statusPillClass(status)}>{statusLabel(status)}</span>
+        <span className={requestStagePillClass(status.stage)}>{requestStageLabel(status)}</span>
         <Link className="btn btn-ghost" href={detailsHref}>
           Details
         </Link>
@@ -484,7 +456,7 @@ function MediaCard({
   onDetails,
 }: {
   item: TmdbSearchResult;
-  status: RequestStatus | null;
+  status: RequestDTO | null;
   requesting: boolean;
   onRequest: () => void;
   onDetails: () => void;
@@ -514,8 +486,8 @@ function MediaCard({
         {item.voteAverage !== null && <span className="media-rating">Rating {item.voteAverage.toFixed(1)}</span>}
         {inLibrary ? (
           <span className="media-badge">In Library</span>
-        ) : status && status !== 'REJECTED' ? (
-          <span className="media-badge req">{statusLabel(status)}</span>
+        ) : status && status.stage !== 'REJECTED' ? (
+          <span className="media-badge req">{requestStageLabel(status)}</span>
         ) : null}
       </div>
       <div className="media-caption">
@@ -534,7 +506,7 @@ function MediaCard({
               Play
             </Link>
           ) : status ? (
-            <span className={statusPillClass(status)}>{statusLabel(status)}</span>
+            <span className={requestStagePillClass(status.stage)}>{requestStageLabel(status)}</span>
           ) : (
             <button
               className="btn btn-sm"

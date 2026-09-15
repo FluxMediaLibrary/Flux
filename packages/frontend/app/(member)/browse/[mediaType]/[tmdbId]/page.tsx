@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { notFound, useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { MediaType, RequestStatus, TmdbDetail } from '@flux/shared';
+import type { MediaType, RequestDTO, TmdbDetail } from '@flux/shared';
 import { TmdbTitleDetails } from '@/components/TmdbTitleDetails';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -24,7 +24,7 @@ export default function BrowseTitleDetailsPage() {
   const { activeProfile } = useAuth();
   const mediaType = routeMediaType(params.mediaType);
   const tmdbId = Number(Array.isArray(params.tmdbId) ? params.tmdbId[0] : params.tmdbId);
-  const [requests, setRequests] = useState<Map<string, RequestStatus>>(new Map());
+  const [requests, setRequests] = useState<Map<string, RequestDTO>>(new Map());
   const [requesting, setRequesting] = useState(false);
 
   if (!mediaType || !Number.isInteger(tmdbId) || tmdbId <= 0) {
@@ -38,9 +38,9 @@ export default function BrowseTitleDetailsPage() {
     const controller = new AbortController();
     api.listMyRequests(controller.signal).then(
       (reqs) => {
-        const map = new Map<string, RequestStatus>();
+        const map = new Map<string, RequestDTO>();
         for (const request of reqs) {
-          map.set(requestKey(request.tmdbId, request.mediaType), request.status);
+          map.set(requestKey(request.tmdbId, request.mediaType), request);
         }
         setRequests(map);
       },
@@ -57,7 +57,21 @@ export default function BrowseTitleDetailsPage() {
         mediaType: detail.mediaType,
         title: detail.title,
       });
-      setRequests((prev) => new Map(prev).set(requestKey(request.tmdbId, request.mediaType), request.status));
+      setRequests((prev) => new Map(prev).set(requestKey(request.tmdbId, request.mediaType), request));
+    } finally {
+      setRequesting(false);
+    }
+  }, []);
+
+  const handleCancel = useCallback(async (request: RequestDTO) => {
+    setRequesting(true);
+    try {
+      await api.cancelRequest(request.id);
+      setRequests((prev) => {
+        const next = new Map(prev);
+        next.delete(requestKey(request.tmdbId, request.mediaType));
+        return next;
+      });
     } finally {
       setRequesting(false);
     }
@@ -72,9 +86,10 @@ export default function BrowseTitleDetailsPage() {
         tmdbId={tmdbId}
         mediaType={mediaType}
         variant="page"
-        requestStatus={requests.get(key) ?? null}
+        request={requests.get(key) ?? null}
         requesting={requesting}
         onRequest={(detail) => void handleRequest(detail)}
+        onCancelRequest={(request) => void handleCancel(request)}
       />
     </div>
   );

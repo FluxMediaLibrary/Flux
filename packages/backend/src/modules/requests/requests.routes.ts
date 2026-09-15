@@ -4,6 +4,7 @@
  * Routes:
  *   POST   /api/requests             — create (requireProfile)
  *   GET    /api/requests             — list own (requireProfile)
+ *   DELETE /api/requests/:id         — cancel own pending request (requireProfile)
  *   GET    /api/requests/admin       — list all (requireAdmin)
  *   POST   /api/requests/:id/approve — approve (requireAdmin)
  *   POST   /api/requests/:id/reject  — reject  (requireAdmin)
@@ -11,6 +12,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { createRequestSchema } from './requests.schema.js';
 import {
+  cancelOwnRequest,
   createRequest,
   listMyRequests,
   listAllRequests,
@@ -37,6 +39,12 @@ export const requestRoutes: FastifyPluginAsync = async (
 
   app.get('/', { preHandler: [app.requireProfile] }, async (request) => {
     return listMyRequests(request.activeProfileId!);
+  });
+
+  app.delete('/:id', { preHandler: [app.requireProfile] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    await cancelOwnRequest(request.activeProfileId!, id);
+    return reply.status(204).send();
   });
 
   // ── Admin routes (requireAdmin) — registered before parameterised routes ──

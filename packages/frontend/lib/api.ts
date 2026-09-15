@@ -579,6 +579,10 @@ export const api = {
     return request<QueuedUsenetReleaseDTO>(`/api/settings/quality-profiles/${encodeURIComponent(profileId)}/queue-usenet-release`, { method: 'POST', body });
   },
 
+  cancelRequest(id: string) {
+    return request<void>(`/api/requests/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
   // Library import scan (admin)
   getLibraryScan() {
     return request<LibraryScanReportDTO>('/api/admin/library/scan');

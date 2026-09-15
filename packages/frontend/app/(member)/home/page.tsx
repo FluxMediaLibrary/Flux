@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { useAmbient } from '@/components/AmbientBackdrop';
-import type { HomeRowsDTO, MediaItemDTO } from '@flux/shared';
+import type { HomeRowsDTO, MediaItemDTO, RequestDTO } from '@flux/shared';
+import { requestStageLabel, requestStagePillClass } from '@/lib/request-stage';
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w342';
 const BACKDROP_BASE = 'https://image.tmdb.org/t/p/w1280';
@@ -102,27 +103,44 @@ function MediaRail({ title, items }: { title: string; items: MediaItemDTO[] }) {
   );
 }
 
-/**
- * /home now redirects to /library — the library is the app's landing surface.
- * The original home experience (featured hero + rails) is preserved below as
- * {@link LegacyHomePage} so it can be re-wired if we want it back.
- */
-export default function HomePage() {
-  return <LegacyHomePage />;
-}
-
-function RedirectedHomePage() {
+/** Rail of the profile's in-flight requests so users can see progress without visiting Browse. */
+function RequestsRail({ requests }: { requests: RequestDTO[] }) {
+  const active = requests.filter((request) => request.stage !== 'AVAILABLE' && request.stage !== 'REJECTED');
+  if (active.length === 0) return null;
   return (
-    <div className="centered-viewport">
-      <div className="spinner" aria-hidden />
-      <p className="muted">Redirecting…</p>
-    </div>
+    <Rail title="Your Requests">
+      {active.map((request) => (
+        <Link
+          key={request.id}
+          href={`/browse/${request.mediaType === 'SHOW' ? 'tv' : 'movie'}/${request.tmdbId}`}
+          className="poster-card"
+        >
+          <div className="poster-img-wrap">
+            {request.posterPath ? (
+              <img src={`${POSTER_BASE}${request.posterPath}`} alt={request.title} className="poster-img" loading="lazy" />
+            ) : (
+              <div className="poster-img poster-img--placeholder" />
+            )}
+            {request.stage === 'DOWNLOADING' && request.progress != null && (
+              <div className="progress-bar-wrap">
+                <div className="progress-bar-fill" style={{ width: `${Math.min(100, Math.round(request.progress * 100))}%` }} />
+              </div>
+            )}
+          </div>
+          <p className="poster-title">{request.title}</p>
+          <p className="poster-sub">
+            <span className={requestStagePillClass(request.stage)}>{requestStageLabel(request)}</span>
+          </p>
+        </Link>
+      ))}
+    </Rail>
   );
 }
 
-function LegacyHomePage() {
+export default function HomePage() {
   const { activeProfile } = useAuth();
   const [data, setData] = useState<HomeRowsDTO | null>(null);
+  const [requests, setRequests] = useState<RequestDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,16 +148,21 @@ function LegacyHomePage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.homepage();
+      const [result, mine] = await Promise.all([
+        api.homepage(),
+        // Requests are decoration on this page; never let them block the rails.
+        api.listMyRequests().catch(() => [] as RequestDTO[]),
+      ]);
       setData(result);
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to load homepage');
+      setRequests(mine);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load homepage');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchHome(); }, [fetchHome]);
+  useEffect(() => { void fetchHome(); }, [fetchHome]);
 
   // Ambient backdrop — must run before any early return (hook order).
   const featuredBackdrop =
@@ -308,6 +331,7 @@ function LegacyHomePage() {
         </Rail>
       )}
 
+      <RequestsRail requests={requests} />
       <MediaRail title="Recently Added" items={recentlyAdded} />
       <MediaRail title="New Releases" items={newReleases} />
       <MediaRail title="Top Rated" items={topRated} />

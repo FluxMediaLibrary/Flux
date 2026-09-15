@@ -650,11 +650,32 @@ export interface CreateCastSessionRequest {
 
 // ─── Requests (per-profile) ───────────────────────────────────────────────────
 
+/**
+ * User-facing lifecycle of a request, derived on the server from the request
+ * status and the acquisition job linked to it. `status` remains the stored
+ * admin state; `stage` is what members should see.
+ */
+export type RequestStage =
+  | 'REQUESTED'
+  | 'APPROVED'
+  | 'DOWNLOADING'
+  | 'PROCESSING'
+  | 'AVAILABLE'
+  | 'FAILED'
+  | 'REJECTED';
+
 export interface RequestDTO {
   id: string;
   tmdbId: number;
   mediaType: MediaType;
   title: string;
+  stage: RequestStage;
+  /** Download progress 0..1 while DOWNLOADING, else null. */
+  progress: number | null;
+  /** Why the acquisition failed, when stage is FAILED. */
+  failureReason: string | null;
+  /** Local library item to play once AVAILABLE. */
+  mediaItemId: string | null;
   year?: number | null;
   posterPath?: string | null;
   backdropPath?: string | null;
