@@ -6,6 +6,9 @@
  */
 import { prisma } from '../../lib/db.js';
 import { deliverDiscord, deliverEmail } from './notifications.delivery.js';
+import { getLogger } from '../../lib/logger.js';
+
+const log = getLogger('notifications');
 
 // ─── Public API ────────────────────────────────────────────────────────────────
 
@@ -22,7 +25,7 @@ export async function notifyNewRequest(requestId: string): Promise<void> {
     });
 
     if (!request) {
-      console.warn(
+      log.warn(
         `[Notifications] notifyNewRequest: request ${requestId} not found`,
       );
       return;
@@ -56,7 +59,7 @@ export async function notifyNewRequest(requestId: string): Promise<void> {
   } catch {
     // Do not log transport errors: some clients include secret-bearing URLs or
     // authentication details in their error metadata.
-    console.error('[Notifications] notifyNewRequest delivery failed');
+    log.error('[Notifications] notifyNewRequest delivery failed');
   }
 }
 
@@ -72,7 +75,7 @@ export async function notifyRequestFulfilled(requestId: string): Promise<void> {
     });
 
     if (!request) {
-      console.warn(
+      log.warn(
         `[Notifications] notifyRequestFulfilled: request ${requestId} not found`,
       );
       return;
@@ -104,7 +107,7 @@ export async function notifyRequestFulfilled(requestId: string): Promise<void> {
       });
     }
   } catch {
-    console.error('[Notifications] notifyRequestFulfilled delivery failed');
+    log.error('[Notifications] notifyRequestFulfilled delivery failed');
   }
 }
 

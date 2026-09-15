@@ -31,6 +31,9 @@ import type {
   StorageRootDTO,
 } from '@flux/shared';
 import type { TorrentStatus, RequestStatus } from '@flux/shared';
+import { getLogger } from '../../lib/logger.js';
+
+const log = getLogger('library');
 
 const ADMIN_HEALTH_METADATA_REFRESH_LIMIT = 6;
 
@@ -261,7 +264,7 @@ async function refreshIncompleteShowMetadata(): Promise<void> {
         },
       });
     } catch (err) {
-      console.error(`[Admin] Failed to refresh TMDb metadata for show ${item.id}:`, err);
+      log.error(`[Admin] Failed to refresh TMDb metadata for show ${item.id}:`, err);
     }
   }
 }
@@ -980,7 +983,7 @@ export async function syncMissingShowEpisodes(): Promise<AdminBulkEpisodeSyncRes
       result.updated += synced.updated;
     } catch (err) {
       result.failed += 1;
-      console.error(`[Admin] Episode sync failed for ${show.id}:`, err);
+      log.error(`[Admin] Episode sync failed for ${show.id}:`, err);
     }
   }
 
@@ -1035,7 +1038,7 @@ export async function analyzeLibraryItem(
       analyzed += 1;
     } catch (err) {
       failed += 1;
-      console.error(`[Admin] Media analysis failed for ${resolved}:`, err);
+      log.error(`[Admin] Media analysis failed for ${resolved}:`, err);
     }
   };
 

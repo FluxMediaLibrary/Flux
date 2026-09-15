@@ -11,6 +11,9 @@ import { writeFile, mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import parseTorrent from 'parse-torrent';
 import { getActiveTransmissionConfig } from '../modules/settings/settings.service.js';
+import { getLogger } from './logger.js';
+
+const log = getLogger('torrents');
 
 let _sessionId: string | null = null;
 
@@ -228,7 +231,7 @@ export async function addTorrent(
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, buffer);
 
-  console.log(
+  log.info(
     `[Transmission] ${result['torrent-duplicate'] ? 'Reused' : 'Added'} torrent: ${added.name} (${added.hashString})`,
   );
   return {
@@ -388,7 +391,7 @@ export async function resumeTorrents(): Promise<number> {
       }
       resumed++;
     } catch (err) {
-      console.error(`[Transmission] Failed to resume torrent ${file}:`, err);
+      log.error(`[Transmission] Failed to resume torrent ${file}:`, err);
     }
   }
 

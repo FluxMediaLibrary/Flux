@@ -35,6 +35,9 @@ import { torrentPostprocessQueue } from '../../jobs/queues.js';
 import { torrentFilePath } from '../../lib/media-paths.js';
 import { getSeasonEpisodes as getTmdbSeasonEpisodes } from '../tmdb/tmdb.service.js';
 import { checkDownloadAdmission } from '../../lib/storage.js';
+import { getLogger } from '../../lib/logger.js';
+
+const log = getLogger('torrents');
 
 // Track torrents already enqueued for postprocessing (prevents duplicates)
 const postprocessEnqueued = new Set<string>();
@@ -79,7 +82,7 @@ async function enqueuePostprocessIfDone(row: Torrent, live: TorrentLiveStats): P
     return false;
   }
   postprocessEnqueued.add(row.id);
-  console.log(`[Torrent] Done! Triggering postprocess for ${row.name} (${row.infoHash})`);
+  log.info(`[Torrent] Done! Triggering postprocess for ${row.name} (${row.infoHash})`);
   try {
     await torrentPostprocessQueue.add('torrent-postprocess', {
       torrentId: row.id,
@@ -103,7 +106,7 @@ async function enqueuePostprocessIfDone(row: Torrent, live: TorrentLiveStats): P
     // Enqueue failed (e.g. a Redis blip). Drop the dedupe marker so the next
     // sweep can retry instead of stranding the torrent forever.
     postprocessEnqueued.delete(row.id);
-    console.error('[Torrent] Failed to enqueue postprocess:', err);
+    log.error('[Torrent] Failed to enqueue postprocess:', err);
     return false;
   }
 }

@@ -38,6 +38,9 @@ import {
   unregisterTranscodeSession,
 } from '../../lib/transcode-registry.js';
 import type { TranscodeSessionDTO } from '@flux/shared';
+import { getLogger } from '../../lib/logger.js';
+
+const log = getLogger('transcode');
 
 // ── In-memory session tracking ──────────────────────────────────────────────
 // Maps a (mediaItemId, episodeId) pair → sessionDir so segment routes know
@@ -203,13 +206,13 @@ function spawnTrackedTranscode(args: string[], sessionKeyForProgress: string): T
     state.exited = true;
     state.failure = error.message;
     markTranscodeExited(sessionKeyForProgress, state.failure);
-    console.error('[Transcode] FFmpeg spawn error:', error);
+    log.error('[Transcode] FFmpeg spawn error:', error);
   });
   proc.on('exit', (code, signal) => {
     state.exited = true;
     if (code !== 0 && signal !== 'SIGKILL' && signal !== 'SIGTERM') {
       state.failure = `FFmpeg exited code=${code} signal=${signal ?? ''}`;
-      console.error(`${state.failure}\n${state.stderrTail}`);
+      log.error(`${state.failure}\n${state.stderrTail}`);
     }
     markTranscodeExited(sessionKeyForProgress, state.failure);
   });
@@ -323,7 +326,7 @@ async function spawnTranscode(
       maxBitrateMbps ? maxBitrateMbps * 1000 : null,
       hardwareAcceleration,
     );
-    console.log(
+    log.info(
       `[Transcode] Cast single-rendition video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} ` +
       `${probe.width}x${probe.height}`,
     );
@@ -341,7 +344,7 @@ async function spawnTranscode(
       maxBitrateMbps ? maxBitrateMbps * 1000 : null,
       hardwareAcceleration,
     );
-    console.log(
+    log.info(
       `[Transcode] adaptive forced=${forceAdaptive} video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} ` +
       `${probe.width}x${probe.height} -> multi-quality transcode`,
     );
@@ -358,7 +361,7 @@ async function spawnTranscode(
     hardwareAcceleration,
   );
   const remux = args.includes('copy') && !needsTranscode;
-  console.log(
+  log.info(
     `[Transcode] single video=${probe.videoCodec ?? '?'} audio=${probe.audioCodec ?? '?'} → ${remux ? 'remux/partial-copy' : 'transcode'}`,
   );
   return {

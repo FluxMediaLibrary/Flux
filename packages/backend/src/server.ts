@@ -3,9 +3,10 @@
  * Registers CORS, auth plugin, error handler, health check, and mounts all
  * module routes under /api. Seeds the bootstrap ADMIN account on first boot.
  */
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
-import { config, isProduction } from './config.js';
+import { config } from './config.js';
+import { rootLogger } from './lib/logger.js';
 import { prisma } from './lib/db.js';
 import { registerErrorHandler } from './lib/errors.js';
 import { hashPassword } from './modules/auth/auth.service.js';
@@ -31,12 +32,9 @@ import { rokuClientRoutes, rokuRoutes } from './modules/roku/roku.routes.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: isProduction
-      ? { level: 'info' }
-      : {
-          level: 'debug',
-          transport: { target: 'pino-pretty', options: { colorize: true } },
-        },
+    // Share the application logger so request logs and background work use
+    // one format, one level and the same category tagging.
+    loggerInstance: rootLogger.child({ category: 'http' }) as unknown as FastifyBaseLogger,
     // Trust the reverse proxy (single-VPS deployment behind the frontend/proxy).
     trustProxy: true,
     bodyLimit: 2 * 1024 * 1024, // 2 MiB JSON limit (torrent uploads handled later)

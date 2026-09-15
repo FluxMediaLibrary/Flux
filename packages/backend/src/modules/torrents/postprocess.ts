@@ -26,6 +26,9 @@ import type { Job } from 'bullmq';
 // Transmission engine
 import { getTorrentFiles, removeTorrent } from '../../lib/webtorrent.js';
 import { getServerSettings } from '../settings/settings.service.js';
+import { getLogger } from '../../lib/logger.js';
+
+const log = getLogger('downloads');
 
 interface FileMappingEntry {
   path: string;
@@ -93,7 +96,7 @@ async function analyzeMediaAssets(
   if (mediaInfo?.durationSec && mediaInfo.durationSec > 0) {
     const generated = await ensureTrickplay(filePath, mediaInfo.durationSec);
     if (generated) {
-      console.log(`[Trickplay] Generated assets for ${path.basename(filePath)}`);
+      log.info(`[Trickplay] Generated assets for ${path.basename(filePath)}`);
     }
   }
 }
@@ -345,7 +348,7 @@ export async function processTorrentPostprocess(
       const importedSeasons = [...new Set(placedEpisodeMappings.map((mapping) => mapping.season))];
       for (const season of importedSeasons) {
         enqueueIntroDetection(mediaItemId, season).catch((err) => {
-          console.error(`[PostProcess] Intro detection enqueue failed for ${mediaItemId} S${season}:`, err);
+          log.error(`[PostProcess] Intro detection enqueue failed for ${mediaItemId} S${season}:`, err);
         });
       }
     }
@@ -355,7 +358,7 @@ export async function processTorrentPostprocess(
     // future playback decisions are instant instead of a fresh ffprobe spawn.
     if (torrent.category === 'MOVIE' && moviePlacementFile) {
       analyzeMediaAssets(moviePlacementFile, { mediaItemId }).catch((err) => {
-        console.error(`[PostProcess] Media analysis failed for movie ${mediaItemId}:`, err);
+        log.error(`[PostProcess] Media analysis failed for movie ${mediaItemId}:`, err);
       });
     } else {
       // For shows: analyze each episode file we just placed
@@ -373,7 +376,7 @@ export async function processTorrentPostprocess(
           });
           if (ep?.filePath) {
             analyzeMediaAssets(ep.filePath, { episodeId: ep.id }).catch((err) => {
-              console.error(`[PostProcess] Media analysis failed for episode ${ep.id}:`, err);
+              log.error(`[PostProcess] Media analysis failed for episode ${ep.id}:`, err);
             });
           }
         }

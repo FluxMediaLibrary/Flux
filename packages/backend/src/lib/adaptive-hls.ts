@@ -7,6 +7,9 @@
  */
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { getLogger } from './logger.js';
+
+const log = getLogger('transcode');
 
 export interface QualityTier {
   label: string;       // "4K", "1080p", etc.
@@ -294,7 +297,7 @@ export function spawnAdaptiveTranscode(
     sourceFile, sessionDir, sourceCodec, audioCodec, sourceWidth, sourceHeight,
     videoStreamIndex, audioStreamIndex, startTimeSeconds,
   );
-  console.log(
+  log.info(
     `[AdaptiveTranscode] source=${path.basename(sourceFile)} ` +
     `video=${sourceCodec ?? '?'} audio=${audioCodec ?? '?'} ` +
     `${sourceWidth ?? '?'}x${sourceHeight ?? '?'}`,
@@ -306,11 +309,11 @@ export function spawnAdaptiveTranscode(
     stderrTail = (stderrTail + c.toString()).slice(-4000);
   });
   proc.on('error', (err) => {
-    console.error('[AdaptiveTranscode] FFmpeg spawn error:', err);
+    log.error('[AdaptiveTranscode] FFmpeg spawn error:', err);
   });
   proc.on('exit', (code, signal) => {
     if (code !== 0 && code !== 255 && signal !== 'SIGKILL' && signal !== 'SIGTERM') {
-      console.error(
+      log.error(
         `[AdaptiveTranscode] FFmpeg exited code=${code} signal=${signal ?? ''}\n${stderrTail}`,
       );
     }

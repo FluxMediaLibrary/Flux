@@ -9,6 +9,9 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { mkdir, writeFile, stat } from 'node:fs/promises';
+import { getLogger } from './logger.js';
+
+const log = getLogger('playback');
 
 /** How often to sample a frame (seconds). */
 const INTERVAL_SEC = 10;
@@ -99,7 +102,7 @@ export async function generateTrickplay(
     proc.on('error', () => resolve(null));
     proc.on('exit', async (code) => {
       if (code !== 0) {
-        console.error(`[Trickplay] ffmpeg failed: ${stderr.slice(-500)}`);
+        log.error(`[Trickplay] ffmpeg failed: ${stderr.slice(-500)}`);
         resolve(null);
         return;
       }

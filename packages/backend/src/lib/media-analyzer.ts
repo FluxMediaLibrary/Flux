@@ -6,6 +6,9 @@ import { prisma } from './db.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { getLogger } from './logger.js';
+
+const log = getLogger('metadata');
 
 interface FfprobeStream {
   index: number;
@@ -105,7 +108,7 @@ export async function analyzeAndStoreMedia(
   // Verify file exists first
   const stat = await fs.stat(filePath).catch(() => null);
   if (!stat) {
-    console.warn(`[MediaAnalyzer] File not found: ${filePath}`);
+    log.warn(`[MediaAnalyzer] File not found: ${filePath}`);
     return;
   }
 
@@ -113,7 +116,7 @@ export async function analyzeAndStoreMedia(
   try {
     probe = await runFfprobe(filePath);
   } catch (err) {
-    console.error(`[MediaAnalyzer] ffprobe failed for ${filePath}:`, err);
+    log.error(`[MediaAnalyzer] ffprobe failed for ${filePath}:`, err);
     // Create a minimal MediaInfo record so we don't keep retrying
     await prisma.mediaInfo.upsert({
       where: mediaItemId ? { mediaItemId } : { episodeId: episodeId! },
@@ -192,7 +195,7 @@ export async function analyzeAndStoreMedia(
     });
   }
 
-  console.log(
+  log.info(
     `[MediaAnalyzer] Stored analysis for ${path.basename(filePath)}: ` +
     `${videoStreams.length}v/${audioStreams.length}a/${subtitleStreams.length}s, ${container}, ${Math.round(durationSec)}s`,
   );

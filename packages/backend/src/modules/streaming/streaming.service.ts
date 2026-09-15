@@ -17,6 +17,9 @@ import type { MediaStreamDTO, PlaybackInfoDTO } from '@flux/shared';
 import type { MediaStream } from '@prisma/client';
 import { mapMediaSegmentToDTO } from '../media-segments/media-segments.service.js';
 import { getServerSettings } from '../settings/settings.service.js';
+import { getLogger } from '../../lib/logger.js';
+
+const log = getLogger('transcode');
 
 /** Map a file extension to its MIME type for direct-play streaming. */
 function mimeTypeFromExt(ext: string): string {
@@ -551,67 +554,4 @@ export async function getMediaFilePath(
   const mimeType = mimeTypeFromExt(path.extname(filePath));
 
   return { filePath, mimeType, size };
-}
-
-/**
- * Create a unique transcode session directory and return its paths.
- *
- * Resolves the source file (to make sure it exists) then creates a UUID-named
- * output directory under TRANSCODE_ROOT.
- */
-export async function getHlsPath(
-  mediaItemId: string,
-  episodeId?: string,
-): Promise<HlsPaths> {
-  // Verify the source file actually exists.
-  await getMediaFilePath(mediaItemId, episodeId);
-
-  const sessionDir = safeJoin(config.TRANSCODE_ROOT, randomUUID());
-  await fs.mkdir(sessionDir, { recursive: true });
-
-  return {
-    manifestPath: path.join(sessionDir, 'index.m3u8'),
-    sessionDir,
-  };
-}
-
-/**
- * Spawn an FFmpeg process to transcode `sourceFile` → HLS segments.
- *
- * HLS parameters:
- *   - video: libx264, veryfast preset, CRF 23
- *   - audio: AAC 128 kbps
- *   - 4-second segments, no playlist cap (live-style growing playlist)
- *
- * The process runs in the background; errors are logged to console but never
- * reject the returned Promise — this is fire-and-forget from the route's
- * perspective.
- */
-export function startTranscode(sourceFile: string, sessionDir: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const args = [
-      '-i', sourceFile,
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
-      '-c:a', 'aac', '-b:a', '128k',
-      '-f', 'hls', '-hls_time', '4', '-hls_list_size', '0',
-      '-hls_segment_filename', path.join(sessionDir, 'segment_%05d.ts'),
-      path.join(sessionDir, 'index.m3u8'),
-    ];
-
-    const proc = spawn('ffmpeg', args, { stdio: 'ignore' });
-
-    proc.on('error', (err) => {
-      console.error('[Transcode] FFmpeg spawn error:', err);
-      reject(err);
-    });
-
-    proc.on('exit', (code) => {
-      if (code !== 0) {
-        console.error(`[Transcode] FFmpeg exited with code ${code}`);
-        reject(new Error(`FFmpeg exited with code ${code}`));
-      } else {
-        resolve();
-      }
-    });
-  });
 }

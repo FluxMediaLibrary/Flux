@@ -17,6 +17,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { config } from '../../../config.js';
 import { getFpcalcLengthSeconds } from './fingerprint-window.js';
+import { getLogger } from '../../../lib/logger.js';
+
+const log = getLogger('metadata');
 
 export interface EpisodeFingerprint {
   episodeId: string;
@@ -80,7 +83,7 @@ export async function fingerprintEpisodeAudio(
   const workDir = path.join(os.tmpdir(), `flux-intro-${randomUUID()}`);
   const wavPath = path.join(workDir, 'audio.wav');
   const reportFailure = async (message: string) => {
-    console.warn(`[IntroDetection] ${message}`);
+    log.warn(`[IntroDetection] ${message}`);
     try {
       await onDiagnostic?.(message);
     } catch {

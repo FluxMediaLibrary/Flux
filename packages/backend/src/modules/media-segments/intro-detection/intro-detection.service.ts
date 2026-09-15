@@ -16,6 +16,9 @@ import type {
   AdminIntroScanProgressDTO,
   AdminIntroScanResultDTO,
 } from '@flux/shared';
+import { getLogger } from '../../../lib/logger.js';
+
+const introLog = getLogger('metadata');
 
 export interface IntroDetectionJobData {
   mediaItemId: string;
@@ -75,7 +78,7 @@ export async function runIntroDetectionForSeason(
   const log = async (message: string) => {
     const line = `[IntroDetection] ${message}`;
     if (job.log) await job.log(line);
-    else console.log(line);
+    else introLog.info(line);
   };
   const updateProgress = async (
     stage: AdminIntroScanProgressDTO['stage'],
