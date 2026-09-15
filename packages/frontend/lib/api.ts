@@ -44,6 +44,7 @@ import type {
   StoragePlacementPlanDTO,
   LibraryScanReportDTO,
   ResolveLibraryScanFileRequest,
+  TranscodeDiagnosticsDTO,
   UpdateSettingsBundleRequest,
   SettingsTestResultDTO,
   DownloadClientDTO,
@@ -615,6 +616,15 @@ export const api = {
   },
   getAdminPlayback() {
     return request<AdminPlaybackSessionDTO[]>('/api/admin/playback');
+  },
+  getTranscodeDiagnostics() {
+    return request<TranscodeDiagnosticsDTO>('/api/admin/transcodes');
+  },
+  detectTranscodeCapabilities() {
+    return request<TranscodeDiagnosticsDTO>('/api/admin/transcodes/detect', { method: 'POST' });
+  },
+  stopTranscodeSession(id: string) {
+    return request<{ ok: true }>(`/api/admin/transcodes/${encodeURIComponent(id)}/stop`, { method: 'POST' });
   },
   getAdminActivity(limit = 50) {
     return request<AdminActivityEventDTO[]>(`/api/admin/activity?limit=${encodeURIComponent(String(limit))}`);

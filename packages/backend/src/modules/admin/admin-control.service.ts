@@ -1,8 +1,11 @@
 import fs from 'node:fs/promises';
-import { ADMIN_PERMISSIONS, type AdminActivityEventDTO, type AdminOverviewDTO, type AdminPermission, type AdminPlaybackSessionDTO, type AdminSignalDTO, type AdminUserDTO, type UpdateAdminUserRequest } from '@flux/shared';
+import { ADMIN_PERMISSIONS, type AdminActivityEventDTO, type AdminOverviewDTO, type AdminPermission, type AdminPlaybackSessionDTO, type AdminSignalDTO, type AdminUserDTO, type TranscodeDiagnosticsDTO, type UpdateAdminUserRequest } from '@flux/shared';
 import { Prisma } from '@prisma/client';
 import { config } from '../../config.js';
 import { prisma } from '../../lib/db.js';
+import { getServerSettings } from '../settings/settings.service.js';
+import { describeHardwareAcceleration } from '../../lib/transcode-capabilities.js';
+import { listTranscodeSessions } from '../../lib/transcode-registry.js';
 import { ApiError } from '../../lib/errors.js';
 import { resolveFilePath } from '../../lib/media-paths.js';
 import { getAdminInfo } from './admin.service.js';
@@ -294,3 +297,40 @@ export async function updateAdminUser(actorId: string, userId: string, input: Up
   const users = await listAdminUsers();
   return users.find((user) => user.id === userId)!;
 }
+
+// ── Transcode diagnostics ───────────────────────────────────────────────────
+
+export async function getTranscodeDiagnostics(): Promise<TranscodeDiagnosticsDTO> {
+  const settings = await getServerSettings();
+  const sessions = listTranscodeSessions();
+  const acceleration = await describeHardwareAcceleration(settings.hardwareAcceleration as TranscodeDiagnosticsDTO['acceleration']['requested']);
+
+  const mediaIds = [...new Set(sessions.map((session) => session.mediaItemId))];
+  const episodeIds = [...new Set(sessions.map((session) => session.episodeId).filter((id): id is string => Boolean(id)))];
+  const profileIds = [...new Set(sessions.map((session) => session.profileId).filter((id): id is string => Boolean(id)))];
+  const [items, episodes, profiles] = await Promise.all([
+    mediaIds.length ? prisma.mediaItem.findMany({ where: { id: { in: mediaIds } }, select: { id: true, title: true } }) : [],
+    episodeIds.length ? prisma.episode.findMany({ where: { id: { in: episodeIds } }, select: { id: true, season: true, episode: true, title: true } }) : [],
+    profileIds.length ? prisma.profile.findMany({ where: { id: { in: profileIds } }, select: { id: true, name: true } }) : [],
+  ]);
+  const titleById = new Map(items.map((item) => [item.id, item.title]));
+  const episodeById = new Map(episodes.map((episode) => [episode.id, episode]));
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile.name]));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    acceleration,
+    sessions: sessions.map((session) => {
+      const episode = session.episodeId ? episodeById.get(session.episodeId) : undefined;
+      return {
+        ...session,
+        title: titleById.get(session.mediaItemId) ?? 'Unknown media',
+        subtitle: episode
+          ? `S${String(episode.season).padStart(2, '0')} E${String(episode.episode).padStart(2, '0')}${episode.title ? ` · ${episode.title}` : ''}`
+          : null,
+        profileName: session.profileId ? profileById.get(session.profileId) ?? null : null,
+      };
+    }),
+  };
+}
+

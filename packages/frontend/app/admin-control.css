@@ -620,3 +620,18 @@
 .library-scan-errors li { display: grid; gap: 2px; }
 .library-scan-errors li span { color: var(--danger); }
 @media (max-width: 640px) { .library-scan-row-head { grid-template-columns: 1fr auto; } .library-scan-row-kind { display: none; } }
+
+/* Transcode diagnostics */
+.transcode-accel { display: grid; gap: 12px; padding: 16px; }
+.transcode-accel-summary { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+.transcode-accel-summary > div { display: grid; gap: 2px; }
+.transcode-accel-summary span { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim); }
+.transcode-accel-summary strong { font-size: 1rem; }
+.transcode-accel-actions { margin-left: auto; display: flex; gap: 8px; }
+.transcode-encoders { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.transcode-encoders li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,.03); }
+.transcode-encoders li span { display: grid; gap: 2px; }
+.transcode-encoders small { color: var(--text-dim); font-size: 0.78rem; }
+.control-wrap { white-space: normal; max-width: 320px; }
+.admin-notice.warn { border-color: rgba(245,158,11,.35); background: rgba(245,158,11,.1); color: var(--warn); }
+.admin-notice.error { border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.1); color: var(--danger); }

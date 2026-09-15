@@ -1439,6 +1439,58 @@ export interface AdminPlaybackSessionDTO {
   state: 'ACTIVE' | 'RECENT';
 }
 
+export interface HardwareEncoderDTO {
+  id: 'NVENC' | 'QSV' | 'VAAPI' | 'VIDEOTOOLBOX';
+  label: string;
+  encoder: string;
+  encoderPresent: boolean;
+  devicePresent: boolean;
+  usable: boolean;
+  reason: string | null;
+}
+
+export interface HardwareAccelerationDTO {
+  ffmpegAvailable: boolean;
+  ffmpegVersion: string | null;
+  detectedAt: string;
+  requested: PlaybackSettingsDTO['hardwareAcceleration'];
+  effective: Exclude<PlaybackSettingsDTO['hardwareAcceleration'], 'AUTO'>;
+  fallbackReason: string | null;
+  encoders: HardwareEncoderDTO[];
+}
+
+/** One live FFmpeg HLS session as seen by the admin diagnostics. */
+export interface TranscodeSessionDTO {
+  id: string;
+  mediaItemId: string;
+  episodeId: string | null;
+  profileId: string | null;
+  mode: 'remux' | 'transcode' | 'adaptive' | 'cast';
+  reason: string;
+  source: { videoCodec: string | null; audioCodec: string | null; width: number | null; height: number | null };
+  target: { videoCodec: string; audioCodec: string; hardwareAcceleration: string; encoder: string };
+  startTimeSeconds: number;
+  startedAt: string;
+  lastAccessAt: string;
+  idleSeconds: number;
+  /** Encoding speed relative to real time (1.0 = real time). */
+  speed: number | null;
+  outTimeSeconds: number | null;
+  bitrateKbps: number | null;
+  state: 'ENCODING' | 'FINISHED' | 'FAILED';
+  failure: string | null;
+  /** Filled in by the admin route from the database. */
+  title?: string;
+  subtitle?: string | null;
+  profileName?: string | null;
+}
+
+export interface TranscodeDiagnosticsDTO {
+  generatedAt: string;
+  acceleration: HardwareAccelerationDTO;
+  sessions: TranscodeSessionDTO[];
+}
+
 export interface AdminOverviewDTO {
   generatedAt: string;
   signal: AdminSignalDTO;

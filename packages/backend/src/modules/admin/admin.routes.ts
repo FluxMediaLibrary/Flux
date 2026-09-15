@@ -24,6 +24,7 @@ import {
 import {
   getAdminActivity,
   getAdminOverview,
+  getTranscodeDiagnostics,
   getAdminPlayback,
   getAdminSignal,
   listAdminUsers,
@@ -46,6 +47,8 @@ import {
 } from '../media-segments/intro-jobs.service.js';
 import { prisma } from '../../lib/db.js';
 import { describePlacement, getStorageOverview } from '../../lib/storage.js';
+import { getTranscodeCapabilities } from '../../lib/transcode-capabilities.js';
+import { stopTranscodeSession } from '../../lib/transcode-registry.js';
 import { getLibraryScanReport, resolveLibraryScanFile, startLibraryScan } from '../library/library-scan.service.js';
 
 const updateUserSchema = z.object({
@@ -157,6 +160,20 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     const result = await pruneTranscodeCache(body.maxAgeSeconds);
     await writeAuditEvent({ actorId: request.account!.id, action: 'TRANSCODE_CACHE_PRUNED', targetType: 'STORAGE', targetLabel: result.root, details: result });
     return result;
+  });
+
+  app.get('/transcodes', { preHandler: [app.requirePermission('VIEW_SYSTEM')] }, async () => getTranscodeDiagnostics());
+  app.post('/transcodes/detect', { preHandler: [app.requirePermission('CHANGE_SETTINGS')] }, async (request) => {
+    await getTranscodeCapabilities({ refresh: true });
+    const result = await getTranscodeDiagnostics();
+    await writeAuditEvent({ actorId: request.account!.id, action: 'TRANSCODE_CAPABILITIES_REFRESHED', targetType: 'SETTINGS', targetId: 'transcoding', details: { effective: result.acceleration.effective } });
+    return result;
+  });
+  app.post<{ Params: { id: string } }>('/transcodes/:id/stop', { preHandler: [app.requirePermission('VIEW_SYSTEM')] }, async (request) => {
+    const id = decodeURIComponent(request.params.id);
+    if (!stopTranscodeSession(id)) throw ApiError.notFound('Transcode session not found', 'TRANSCODE_NOT_FOUND');
+    await writeAuditEvent({ actorId: request.account!.id, action: 'TRANSCODE_SESSION_STOPPED', targetType: 'PLAYBACK', targetId: id });
+    return { ok: true };
   });
 
   app.get('/playback', { preHandler: [app.requirePermission('VIEW_SYSTEM')] }, async () => {
