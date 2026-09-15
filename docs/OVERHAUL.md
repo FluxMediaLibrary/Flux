@@ -178,9 +178,72 @@ _(appended per stage below)_
 - Backend tests: 39 passing (6 new storage placement tests, existing-data
   tests updated for `missingBytes`).
 
-**Open**
+### Stage 5 — library import scan
 
-- Library import scan (index files already on disk) — next.
-- Frontend `.next/dev/types` stale file: delete `.next/dev/types` or run
-  `next dev` once; not a source problem.
+- `modules/library/library-scan.service.ts` + pure matcher
+  `library-scan-match.ts` (unit-tested). Singleton BullMQ job, Redis-persisted
+  report, unmatched files resolvable from the admin Library page
+  (`LibraryScanPanel`). Setup wizard can start it on finish. Removed the
+  never-implemented transcode queue stub.
+
+### Stage 6 — security dependencies
+
+- next 16.3.5, fastify 5.12.4 (+fast-uri ≥3.1.6), nodemailer 9.1.1, sharp
+  0.35.4, nanoid/js-yaml/xmldom/baseline-browser-mapping/brace-expansion via
+  overrides + audit fix. `npm audit` clean; full Next build verified.
+
+### Stage 7 — transcoding diagnostics and verified hardware acceleration
+
+- `lib/transcode-capabilities.ts` parses `ffmpeg -encoders` + device nodes;
+  AUTO chooses only verified encoders; explicit choices that are unusable fall
+  back to software with the reason logged and shown.
+- `lib/transcode-registry.ts` mirrors every HLS session (decision + reason,
+  codecs, encoder, `-progress` speed/bitrate/position). `GET /api/admin/transcodes`,
+  `POST …/detect`, `POST …/:id/stop`; admin Playback page shows them. Browser and
+  Cast HLS paths share `startHlsSession` (Cast now honours playback settings).
+
+### Stage 8 — request lifecycle
+
+- `RequestDTO.stage/progress/failureReason/mediaItemId` derived on the server
+  (`deriveRequestStage`, tested); shared `requestStageLabel` in `@flux/shared`;
+  member cancel `DELETE /api/requests/:id`; home "Your Requests" rail.
+
+### Stage 9 — Roku revival
+
+- Source restored to `apps/roku/src` (1.1.0) with two client bugs fixed
+  (season list array-vs-object, duplicate `shows` route key); packaging script.
+- Device link (`modules/devices`) with hashed codes/refresh tokens, rate limits,
+  device-scoped JWTs revoked on demand; `/link` page + Settings → Clients.
+- `modules/roku` projects existing services into TV shapes and records
+  `PlaybackSession` rows; WebVTT subtitle extraction route for TV/Cast.
+
+### Stage 10 — deployment, casting, performance, logging
+
+- Compose: `FLUX_MEDIA_PATH` host path (named volume kept as default), optional
+  TMDb/admin, real health checks; `setup.sh` no longer demands TMDb/admin up
+  front; backend preflight fails fast with actionable messages.
+- Android: network callback re-syncs Cast state, `onStart/onResume` re-attach,
+  WebView timers stay alive while casting; web shows a reconnecting banner.
+- `lib/media-lite.ts`: list surfaces no longer load the full TMDb JSON per row;
+  indexes on `media_items(addedAt)`/`(title)`.
+- `lib/logger.ts`: one categorised pino root shared with Fastify; console.*
+  removed from the backend.
+
+## Remaining work (not done in this pass)
+
+- **Web UI redesign (Phase 9/24/25):** no wholesale visual redesign was
+  attempted because it cannot be verified without a running stack; the member
+  UI already follows the Jellyfin-style direction. Candidates: consolidate the
+  6k-line `globals.css` into component-scoped files, replace `<img>` with a
+  sized image helper, keyboard/focus audit of the player and search overlay.
+- **Library grid pagination/virtualisation:** payload is now light but still
+  the whole library; add server paging + virtual grid for >5k items.
+- **Roku on-device test:** the channel was validated against the API contract
+  by reading every screen; it has not been sideloaded in this pass.
+- **Android release:** `MainActivity` compiles (`gradle :app:compileDebugJavaWithJavac`);
+  a signed release has not been produced (needs the keystore workflow).
+- **Fresh-install / upgrade validation (Phase 30):** migrations are additive and
+  idempotent; an end-to-end run against Docker was not executed here.
+- **Admin sessions "terminate":** `PlaybackSession` rows exist for Roku; web
+  heartbeats are still `WatchProgress` only.
 
