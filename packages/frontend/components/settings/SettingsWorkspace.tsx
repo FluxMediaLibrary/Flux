@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import type {
+  LinkedDeviceDTO,
   DownloadClientDTO,
   DownloadClientType,
   QualityProfileDTO,
@@ -15,7 +16,7 @@ import type {
 import { api, FluxApiError } from '@/lib/api';
 import { LoadingState, PageError, PageHeader } from '@/components/admin/AdminUI';
 
-type Tab = 'general' | 'storage' | 'downloads' | 'download-clients' | 'quality-profiles' | 'playback' | 'notifications' | 'integrations';
+type Tab = 'general' | 'storage' | 'downloads' | 'download-clients' | 'quality-profiles' | 'playback' | 'clients' | 'notifications' | 'integrations';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: 'General' },
   { id: 'storage', label: 'Storage' },
@@ -23,6 +24,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'download-clients', label: 'Download Clients' },
   { id: 'quality-profiles', label: 'Quality Profiles' },
   { id: 'playback', label: 'Playback' },
+  { id: 'clients', label: 'Clients' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'integrations', label: 'Integrations' },
 ];
@@ -113,6 +115,7 @@ export function SettingsWorkspace() {
     if (activeTab === 'quality-profiles') return Boolean(profileEditor && !same(profileEditor, profileBaseline));
     if (activeTab === 'notifications') return !same(draft.notifications, original.notifications) || Boolean(discordSecret || smtpSecret);
     if (activeTab === 'integrations') return Boolean(tmdbSecret);
+    if (activeTab === 'clients') return false;
     return !same(draft[activeTab], original[activeTab]);
   }, [activeTab, clientBaseline, clientEditor, discordSecret, draft, original, profileBaseline, profileEditor, smtpSecret, tmdbSecret]);
 
@@ -154,7 +157,7 @@ export function SettingsWorkspace() {
       setDraft((current) => current ? { ...current, notifications: original.notifications } : current);
       setDiscordSecret(''); setSmtpSecret('');
     } else if (activeTab === 'integrations') setTmdbSecret('');
-    else setDraft((current) => current ? { ...current, [activeTab]: original[activeTab] } : current);
+    else if (activeTab !== 'clients') setDraft((current) => current ? { ...current, [activeTab]: original[activeTab] } : current);
     setError(null); setNotice(null);
   }
 
@@ -293,16 +296,17 @@ export function SettingsWorkspace() {
       {notice && <div className="settings-banner success" role="status">{notice}</div>}
       {sectionDirty && <div className="settings-unsaved"><span /> Unsaved changes</div>}
 
-      {activeTab === 'general' && <GeneralTab value={draft.general} update={(values) => updateSection('general', values)} errors={validation} androidInfo={androidInfo} androidAutomaticUpdates={androidAutomaticUpdates} setAndroidAutomaticUpdates={setNativeAutomaticUpdates} />}
+      {activeTab === 'general' && <GeneralTab value={draft.general} update={(values) => updateSection('general', values)} errors={validation} />}
       {activeTab === 'storage' && <StorageTab value={draft.storage} update={(values) => updateSection('storage', values)} errors={validation} />}
       {activeTab === 'downloads' && <DownloadsTab value={draft.downloads} clients={clients} profiles={profiles} update={(values) => updateSection('downloads', values)} errors={validation} />}
       {activeTab === 'download-clients' && <ClientsTab clients={clients} editor={clientEditor} setEditor={setClientEditor} edit={editClient} remove={removeClient} test={testClient} errors={clientEditor ? validateClient(clientEditor) : {}} busy={saving || testing} />}
       {activeTab === 'quality-profiles' && <ProfilesTab profiles={profiles} editor={profileEditor} setEditor={setProfileEditor} edit={editProfile} remove={removeProfile} errors={profileEditor ? validateProfile(profileEditor) : {}} testProfileId={testProfileId} setTestProfileId={setTestProfileId} releaseTitle={releaseTitle} setReleaseTitle={setReleaseTitle} releaseSize={releaseSize} setReleaseSize={setReleaseSize} runTest={runReleaseTest} result={releaseResult} busy={saving || testing} />}
+      {activeTab === 'clients' && <DevicesTab androidInfo={androidInfo} androidAutomaticUpdates={androidAutomaticUpdates} setAndroidAutomaticUpdates={setNativeAutomaticUpdates} />}
       {activeTab === 'playback' && <PlaybackTab value={draft.playback} update={(values) => updateSection('playback', values)} errors={validation} />}
       {activeTab === 'notifications' && <NotificationsTab value={draft.notifications} update={(values) => updateSection('notifications', values)} discordSecret={discordSecret} setDiscordSecret={setDiscordSecret} smtpSecret={smtpSecret} setSmtpSecret={setSmtpSecret} test={runNotificationTest} busy={testing} errors={validation} />}
       {activeTab === 'integrations' && <IntegrationsTab value={draft.integrations} secret={tmdbSecret} setSecret={setTmdbSecret} clear={clearTmdbKey} busy={saving} errors={validation} />}
 
-      {(activeTab !== 'download-clients' && activeTab !== 'quality-profiles') && <SaveBar dirty={sectionDirty} saving={saving} invalid={hasValidationErrors} save={saveCurrent} cancel={cancelCurrent} />}
+      {(activeTab !== 'download-clients' && activeTab !== 'quality-profiles' && activeTab !== 'clients') && <SaveBar dirty={sectionDirty} saving={saving} invalid={hasValidationErrors} save={saveCurrent} cancel={cancelCurrent} />}
       {activeTab === 'download-clients' && clientEditor && <SaveBar dirty={sectionDirty} saving={saving} invalid={Object.keys(validateClient(clientEditor)).length > 0} save={saveClient} cancel={cancelCurrent} />}
       {activeTab === 'quality-profiles' && profileEditor && <SaveBar dirty={sectionDirty} saving={saving} invalid={Object.keys(validateProfile(profileEditor)).length > 0} save={saveProfile} cancel={cancelCurrent} />}
     </div>
@@ -322,8 +326,41 @@ function SaveBar({ dirty, saving, invalid, save, cancel }: { dirty: boolean; sav
   return <div className="settings-savebar"><span>{dirty ? 'Review and save your changes.' : 'No unsaved changes.'}</span><div><button className="control-button" disabled={!dirty || saving} onClick={cancel}>Cancel</button><button className="control-button primary" disabled={!dirty || saving || invalid} onClick={save}>{saving ? 'Saving…' : 'Save changes'}</button></div></div>;
 }
 
-function GeneralTab({ value, update, errors, androidInfo, androidAutomaticUpdates, setAndroidAutomaticUpdates }: { value: SettingsBundleDTO['general']; update: (value: Partial<SettingsBundleDTO['general']>) => void; errors: Record<string, string>; androidInfo: AndroidAppInfo | null; androidAutomaticUpdates: boolean; setAndroidAutomaticUpdates: (enabled: boolean) => void }) {
-  return <div className="settings-stack"><Section title="Server identity" description="Shown to web, mobile, and connected clients."><div className="settings-grid"><Field label="Server name" error={errors.serverName}><input className="control-input" value={value.serverName} onChange={(event) => update({ serverName: event.target.value })} /></Field><Field label="Language" error={errors.language}><input className="control-input" value={value.language} onChange={(event) => update({ language: event.target.value })} placeholder="en" /></Field><Field label="Time zone" error={errors.timezone} hint="IANA name, for example America/Chicago"><input className="control-input" value={value.timezone} onChange={(event) => update({ timezone: event.target.value })} /></Field></div></Section><Section title="Public addresses" description="Used for invite links, client branding, and remote playback handoff."><div className="settings-grid"><Field label="Frontend URL" error={errors.frontendUrl}><input className="control-input" type="url" value={value.frontendUrl} onChange={(event) => update({ frontendUrl: event.target.value })} /></Field><Field label="Public API URL" error={errors.apiUrl} hint="Optional; incoming request origin is used when empty."><input className="control-input" type="url" value={value.apiUrl ?? ''} onChange={(event) => update({ apiUrl: event.target.value || null })} /></Field></div></Section><Section title="Invite defaults" description="Applied when an administrator creates an invite without choosing an expiry."><Field label="Default expiry (hours)" error={errors.defaultInviteExpiryHours}><input className="control-input" type="number" min="1" max="8760" value={value.defaultInviteExpiryHours} onChange={(event) => update({ defaultInviteExpiryHours: Number(event.target.value) })} /></Field></Section>{androidInfo && <Section title="Android app updates" description="Native app update controls preserved from the existing Settings page."><div className="settings-meta-grid"><div><span>Installed version</span><strong>{androidInfo.versionName ?? 'Unknown'}{typeof androidInfo.versionCode === 'number' ? ` (${androidInfo.versionCode})` : ''}</strong></div>{androidInfo.updateServer && <div><span>Update server</span><strong>{androidInfo.updateServer}</strong></div>}</div><Toggle label="Check for updates automatically" checked={androidAutomaticUpdates} onChange={setAndroidAutomaticUpdates} /><div className="settings-row-actions"><button className="control-button primary" type="button" onClick={() => window.FluxNative?.checkForUpdates?.()}>Check for updates</button><button className="control-button" type="button" onClick={() => window.FluxNative?.clearUpdateDownloads?.()}>Clear downloaded files</button></div></Section>}</div>;
+function GeneralTab({ value, update, errors }: { value: SettingsBundleDTO['general']; update: (value: Partial<SettingsBundleDTO['general']>) => void; errors: Record<string, string> }) {
+  return <div className="settings-stack"><Section title="Server identity" description="Shown to web, mobile, and connected clients."><div className="settings-grid"><Field label="Server name" error={errors.serverName}><input className="control-input" value={value.serverName} onChange={(event) => update({ serverName: event.target.value })} /></Field><Field label="Language" error={errors.language}><input className="control-input" value={value.language} onChange={(event) => update({ language: event.target.value })} placeholder="en" /></Field><Field label="Time zone" error={errors.timezone} hint="IANA name, for example America/Chicago"><input className="control-input" value={value.timezone} onChange={(event) => update({ timezone: event.target.value })} /></Field></div></Section><Section title="Public addresses" description="Used for invite links, client branding, and remote playback handoff."><div className="settings-grid"><Field label="Frontend URL" error={errors.frontendUrl}><input className="control-input" type="url" value={value.frontendUrl} onChange={(event) => update({ frontendUrl: event.target.value })} /></Field><Field label="Public API URL" error={errors.apiUrl} hint="Optional; incoming request origin is used when empty."><input className="control-input" type="url" value={value.apiUrl ?? ''} onChange={(event) => update({ apiUrl: event.target.value || null })} /></Field></div></Section><Section title="Invite defaults" description="Applied when an administrator creates an invite without choosing an expiry."><Field label="Default expiry (hours)" error={errors.defaultInviteExpiryHours}><input className="control-input" type="number" min="1" max="8760" value={value.defaultInviteExpiryHours} onChange={(event) => update({ defaultInviteExpiryHours: Number(event.target.value) })} /></Field></Section></div>;
+}
+
+function DevicesTab({ androidInfo, androidAutomaticUpdates, setAndroidAutomaticUpdates }: { androidInfo: AndroidAppInfo | null; androidAutomaticUpdates: boolean; setAndroidAutomaticUpdates: (enabled: boolean) => void }) {
+  const [devices, setDevices] = useState<LinkedDeviceDTO[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try { setDevices(await api.listLinkedDevices(true)); setError(null); }
+    catch (err) { setError(message(err, 'Linked devices could not be loaded.')); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  async function revoke(device: LinkedDeviceDTO) {
+    if (!window.confirm(`Remove ${device.deviceName} (${device.accountEmail})? It will need to be linked again.`)) return;
+    try { await api.revokeLinkedDevice(device.id); await load(); }
+    catch (err) { setError(message(err, 'The device could not be removed.')); }
+  }
+  return <div className="settings-stack">
+    <Section title="Linked TVs" description="Roku and other TV clients that were approved through Link a TV. Removing one signs it out immediately.">
+      {error && <small className="field-error">{error}</small>}
+      {devices === null ? <p className="dim">Loading…</p> : devices.length === 0 ? <p className="dim">No TVs are linked yet. Users link one from the account menu → Link a TV.</p> : (
+        <div className="settings-device-list">
+          {devices.map((device) => <div key={device.id} className="settings-device-row">
+            <div><strong>{device.deviceName}</strong><small>{device.platform === 'roku' ? 'Roku' : device.platform} · app {device.appVersion} · {device.accountEmail}</small><small>Last seen {new Date(device.lastSeenAt).toLocaleString()}</small></div>
+            <button className="control-button danger" type="button" onClick={() => void revoke(device)}>Remove</button>
+          </div>)}
+        </div>
+      )}
+      <div className="settings-row-actions"><button className="control-button" type="button" onClick={() => void load()}>Refresh</button><a className="control-button" href="/link">Open Link a TV</a></div>
+    </Section>
+    <Section title="Roku channel" description="Sideload the packaged channel from apps/roku/dist and point it at this server's public address. The server tells older channels when an update is required.">
+      <p className="dim">Build with <code>node apps/roku/package.mjs</code>; see <code>apps/roku/README.md</code>.</p>
+    </Section>
+    {androidInfo && <Section title="Android app updates" description="Native app update controls (shown only inside the Android app)."><div className="settings-meta-grid"><div><span>Installed version</span><strong>{androidInfo.versionName ?? 'Unknown'}{typeof androidInfo.versionCode === 'number' ? ` (${androidInfo.versionCode})` : ''}</strong></div>{androidInfo.updateServer && <div><span>Update server</span><strong>{androidInfo.updateServer}</strong></div>}</div><Toggle label="Check for updates automatically" checked={androidAutomaticUpdates} onChange={setAndroidAutomaticUpdates} /><div className="settings-row-actions"><button className="control-button primary" type="button" onClick={() => window.FluxNative?.checkForUpdates?.()}>Check for updates</button><button className="control-button" type="button" onClick={() => window.FluxNative?.clearUpdateDownloads?.()}>Clear downloaded files</button></div></Section>}
+  </div>;
 }
 
 function StorageTab({ value, update, errors }: { value: SettingsBundleDTO['storage']; update: (value: Partial<SettingsBundleDTO['storage']>) => void; errors: Record<string, string> }) {

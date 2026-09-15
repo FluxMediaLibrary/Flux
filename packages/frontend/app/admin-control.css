@@ -635,3 +635,9 @@
 .control-wrap { white-space: normal; max-width: 320px; }
 .admin-notice.warn { border-color: rgba(245,158,11,.35); background: rgba(245,158,11,.1); color: var(--warn); }
 .admin-notice.error { border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.1); color: var(--danger); }
+
+/* Settings → Clients */
+.settings-device-list { display: grid; gap: 8px; }
+.settings-device-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,.03); }
+.settings-device-row > div { display: grid; gap: 2px; min-width: 0; }
+.settings-device-row small { color: var(--text-dim); font-size: 0.78rem; }
