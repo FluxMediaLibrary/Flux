@@ -36,6 +36,12 @@ import type {
   MediaType,
   NotificationSettingsDTO,
   SettingsBundleDTO,
+  SetupSnapshotDTO,
+  SetupStatusDTO,
+  CreateInitialAdminRequest,
+  TmdbKeyTestResultDTO,
+  StorageOverviewDTO,
+  StoragePlacementPlanDTO,
   UpdateSettingsBundleRequest,
   SettingsTestResultDTO,
   DownloadClientDTO,
@@ -240,6 +246,23 @@ export const api = {
   },
   signup(body: SignupRequest) {
     return request<AuthResponse>('/api/auth/signup', { body, anonymous: true });
+  },
+
+  // First-run setup
+  getSetupStatus() {
+    return request<SetupStatusDTO>('/api/setup/status', { anonymous: true });
+  },
+  createInitialAdmin(body: CreateInitialAdminRequest) {
+    return request<AuthResponse>('/api/setup/admin', { body, anonymous: true });
+  },
+  getSetupSnapshot() {
+    return request<SetupSnapshotDTO>('/api/setup/snapshot');
+  },
+  testTmdbKey(apiKey: string | null) {
+    return request<TmdbKeyTestResultDTO>('/api/setup/test-tmdb', { body: { apiKey } });
+  },
+  completeSetup() {
+    return request<SetupStatusDTO>('/api/setup/complete', { method: 'POST' });
   },
 
   // Profiles
@@ -567,7 +590,10 @@ export const api = {
     return request<AdminInfoDTO>('/api/admin/system');
   },
   getAdminStorage() {
-    return request<AdminInfoDTO['storage']>('/api/admin/storage');
+    return request<StorageOverviewDTO>('/api/admin/storage');
+  },
+  getStoragePlacementPlan(bytes: number) {
+    return request<StoragePlacementPlanDTO>(`/api/admin/storage/plan?bytes=${Math.max(0, Math.round(bytes))}`);
   },
   pruneTranscodeCache(maxAgeSeconds?: number) {
     return request<AdminStorageCleanupResultDTO>('/api/admin/storage/transcode-cache/prune', {

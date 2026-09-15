@@ -3,7 +3,7 @@
  * Copies files into the media library and fulfills associated requests.
  */
 import { prisma } from '../../lib/db.js';
-import { moviePlacement, episodePlacement } from '../../lib/media-paths.js';
+import { moviePlacement, episodePlacement, selectMediaRoot } from '../../lib/media-paths.js';
 import { isVideoFile, fileExtension } from '../../lib/filename.js';
 import { analyzeAndStoreMedia } from '../../lib/media-analyzer.js';
 import { ensureTrickplay } from '../../lib/trickplay-generator.js';
@@ -16,8 +16,9 @@ import {
   getSeasonEpisodes as getTmdbSeasonEpisodes,
 } from '../tmdb/tmdb.service.js';
 import { notifyRequestFulfilled } from '../notifications/notify.js';
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdir, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
+import { containingMediaRoot } from '../../lib/storage.js';
 import type { MediaType } from '@flux/shared';
 import type { Prisma, RequestStatus } from '@prisma/client';
 import type { Job } from 'bullmq';
@@ -36,6 +37,48 @@ interface TorrentFile {
   name: string;
   path: string;
   length: number;
+}
+
+type ImportMode = 'COPY' | 'MOVE';
+
+/**
+ * Place `source` at `destination` without ever leaving a half-written file
+ * under the final name: data lands in a `.flux-partial` sibling and is renamed
+ * into place only once complete. MOVE tries a rename first (instant on the
+ * same filesystem) and falls back to copy + unlink across devices.
+ */
+async function importFile(source: string, destination: string, mode: ImportMode): Promise<void> {
+  await mkdir(path.dirname(destination), { recursive: true });
+  if (mode === 'MOVE') {
+    try {
+      await rename(source, destination);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'EXDEV' && code !== 'EPERM') throw err;
+    }
+  }
+  const partial = `${destination}.flux-partial`;
+  try {
+    await copyFile(source, partial);
+    await rename(partial, destination);
+  } catch (err) {
+    await unlink(partial).catch(() => undefined);
+    throw err;
+  }
+  if (mode === 'MOVE') {
+    await unlink(source).catch(() => undefined);
+  }
+}
+
+/** Root that already holds this show's episodes, so seasons stay together. */
+async function showAffinityRoot(tmdbId: number): Promise<string | null> {
+  const existing = await prisma.episode.findFirst({
+    where: { mediaItem: { tmdbId, type: 'SHOW' }, filePath: { not: null } },
+    select: { filePath: true },
+    orderBy: { addedAt: 'desc' },
+  });
+  return existing?.filePath ? containingMediaRoot(existing.filePath) : null;
 }
 
 async function analyzeMediaAssets(
@@ -95,6 +138,8 @@ export async function processTorrentPostprocess(
 
     let mediaItemId: string;
     const placedEpisodeMappings: FileMappingEntry[] = [];
+    let moviePlacementFile: string | null = null;
+    const importMode: ImportMode = (await getServerSettings()).completedImportBehavior === 'MOVE' ? 'MOVE' : 'COPY';
 
     if (torrent.category === 'MOVIE') {
       // ── MOVIE path ──
@@ -114,15 +159,18 @@ export async function processTorrentPostprocess(
         a.length > b.length ? a : b,
       );
 
-      const placement = await moviePlacement(
+      // Root is chosen once for this import so every derived path agrees.
+      const root = await selectMediaRoot({ requiredBytes: largestVideo.length });
+      const placement = moviePlacement(
+        root,
         tmdbDetail.title,
         tmdbDetail.year,
         fileExtension(largestVideo.name),
       );
+      moviePlacementFile = placement.file;
 
-      await mkdir(placement.dir, { recursive: true });
       const source = path.join(torrentData.downloadDir, largestVideo.path);
-      await copyFile(source, placement.file);
+      await importFile(source, placement.file, importMode);
 
       // Upsert MediaItem
       const mediaItem = await prisma.mediaItem.upsert({
@@ -197,6 +245,14 @@ export async function processTorrentPostprocess(
       mediaItemId = mediaItem.id;
 
       const files = torrentData.files as unknown as TorrentFile[];
+      const mappedBytes = fileMapping.reduce((sum, mapping) => {
+        const file = files.find((candidate) => candidate.path === mapping.path);
+        return sum + (file?.length ?? 0);
+      }, 0);
+      const showRoot = await selectMediaRoot({
+        requiredBytes: mappedBytes,
+        affinityRoot: await showAffinityRoot(torrent.matchedTmdbId!),
+      });
       const seasons = [...new Set(fileMapping.map((mapping) => mapping.season))];
       const episodeMetaBySeason = new Map(
         await Promise.all(
@@ -225,16 +281,16 @@ export async function processTorrentPostprocess(
           .get(mapping.season)
           ?.find((episode) => episode.episodeNumber === mapping.episode);
 
-        const placement = await episodePlacement(
+        const placement = episodePlacement(
+          showRoot,
           tmdbDetail.title,
           mapping.season,
           mapping.episode,
           fileExtension(matchedFile.name),
         );
 
-        await mkdir(placement.seasonDir, { recursive: true });
         const source = path.join(torrentData.downloadDir, matchedFile.path);
-        await copyFile(source, placement.file);
+        await importFile(source, placement.file, importMode);
 
         // Upsert Episode
         await prisma.episode.upsert({
@@ -265,8 +321,7 @@ export async function processTorrentPostprocess(
       }
     }
 
-    const downloadSettings = await getServerSettings();
-    const moveImport = downloadSettings.completedImportBehavior === 'MOVE';
+    const moveImport = importMode === 'MOVE';
     if (moveImport) {
       // Library copies are complete at this point. Removing local data affects
       // only the download client payload, never the managed library files.
@@ -298,12 +353,8 @@ export async function processTorrentPostprocess(
     // Trigger background media analysis (best-effort, non-blocking).
     // Runs ffprobe on each file and stores codec/stream info in the DB so
     // future playback decisions are instant instead of a fresh ffprobe spawn.
-    if (torrent.category === 'MOVIE') {
-      const files = torrentData.files as unknown as TorrentFile[];
-      const videoFiles = files.filter((f) => isVideoFile(f.name));
-      const largestVideo = videoFiles.reduce((a, b) => a.length > b.length ? a : b);
-      const placement = await moviePlacement(tmdbDetail.title, tmdbDetail.year, fileExtension(largestVideo.name));
-      analyzeMediaAssets(placement.file, { mediaItemId }).catch((err) => {
+    if (torrent.category === 'MOVIE' && moviePlacementFile) {
+      analyzeMediaAssets(moviePlacementFile, { mediaItemId }).catch((err) => {
         console.error(`[PostProcess] Media analysis failed for movie ${mediaItemId}:`, err);
       });
     } else {

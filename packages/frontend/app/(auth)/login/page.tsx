@@ -5,14 +5,21 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { FluxApiError } from '@/lib/api';
+import { useSetupGate } from '@/lib/setup-gate';
 
 export default function LoginPage() {
   const { status, activeProfileId, login } = useAuth();
+  const setup = useSetupGate();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Fresh install? There is no account to sign in with yet.
+  useEffect(() => {
+    if (setup === 'needs-setup') router.replace('/setup');
+  }, [setup, router]);
 
   // Already signed in? Skip the form.
   useEffect(() => {

@@ -15,9 +15,10 @@ import type {
 import { api, FluxApiError } from '@/lib/api';
 import { LoadingState, PageError, PageHeader } from '@/components/admin/AdminUI';
 
-type Tab = 'general' | 'downloads' | 'download-clients' | 'quality-profiles' | 'playback' | 'notifications' | 'integrations';
+type Tab = 'general' | 'storage' | 'downloads' | 'download-clients' | 'quality-profiles' | 'playback' | 'notifications' | 'integrations';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: 'General' },
+  { id: 'storage', label: 'Storage' },
   { id: 'downloads', label: 'Downloads' },
   { id: 'download-clients', label: 'Download Clients' },
   { id: 'quality-profiles', label: 'Quality Profiles' },
@@ -118,6 +119,7 @@ export function SettingsWorkspace() {
   const anyDirty = useMemo(() => {
     if (!draft || !original) return false;
     return !same(draft.general, original.general) || !same(draft.downloads, original.downloads)
+      || !same(draft.storage, original.storage)
       || !same(draft.playback, original.playback) || !same(draft.notifications, original.notifications)
       || Boolean(discordSecret || smtpSecret || tmdbSecret)
       || Boolean(clientEditor && !same(clientEditor, clientBaseline))
@@ -140,7 +142,7 @@ export function SettingsWorkspace() {
     window.history.pushState(null, '', `${pathname}?${params.toString()}`);
   }
 
-  function updateSection<K extends 'general' | 'downloads' | 'playback' | 'notifications'>(section: K, values: Partial<SettingsBundleDTO[K]>) {
+  function updateSection<K extends 'general' | 'storage' | 'downloads' | 'playback' | 'notifications'>(section: K, values: Partial<SettingsBundleDTO[K]>) {
     setDraft((current) => current ? { ...current, [section]: { ...current[section], ...values } } : current);
   }
 
@@ -165,6 +167,10 @@ export function SettingsWorkspace() {
     try {
       if (activeTab === 'general' || activeTab === 'downloads' || activeTab === 'playback') {
         const result = await api.updateSettings({ [activeTab]: draft[activeTab] });
+        setOriginal(result); setDraft(result);
+      } else if (activeTab === 'storage') {
+        const { reservedFreeSpaceGb, placementStrategy, preferredMediaRoot } = draft.storage;
+        const result = await api.updateSettings({ storage: { reservedFreeSpaceGb, placementStrategy, preferredMediaRoot } });
         setOriginal(result); setDraft(result);
       } else if (activeTab === 'notifications') {
         const body = {
@@ -288,6 +294,7 @@ export function SettingsWorkspace() {
       {sectionDirty && <div className="settings-unsaved"><span /> Unsaved changes</div>}
 
       {activeTab === 'general' && <GeneralTab value={draft.general} update={(values) => updateSection('general', values)} errors={validation} androidInfo={androidInfo} androidAutomaticUpdates={androidAutomaticUpdates} setAndroidAutomaticUpdates={setNativeAutomaticUpdates} />}
+      {activeTab === 'storage' && <StorageTab value={draft.storage} update={(values) => updateSection('storage', values)} errors={validation} />}
       {activeTab === 'downloads' && <DownloadsTab value={draft.downloads} clients={clients} profiles={profiles} update={(values) => updateSection('downloads', values)} errors={validation} />}
       {activeTab === 'download-clients' && <ClientsTab clients={clients} editor={clientEditor} setEditor={setClientEditor} edit={editClient} remove={removeClient} test={testClient} errors={clientEditor ? validateClient(clientEditor) : {}} busy={saving || testing} />}
       {activeTab === 'quality-profiles' && <ProfilesTab profiles={profiles} editor={profileEditor} setEditor={setProfileEditor} edit={editProfile} remove={removeProfile} errors={profileEditor ? validateProfile(profileEditor) : {}} testProfileId={testProfileId} setTestProfileId={setTestProfileId} releaseTitle={releaseTitle} setReleaseTitle={setReleaseTitle} releaseSize={releaseSize} setReleaseSize={setReleaseSize} runTest={runReleaseTest} result={releaseResult} busy={saving || testing} />}
@@ -319,8 +326,42 @@ function GeneralTab({ value, update, errors, androidInfo, androidAutomaticUpdate
   return <div className="settings-stack"><Section title="Server identity" description="Shown to web, mobile, and connected clients."><div className="settings-grid"><Field label="Server name" error={errors.serverName}><input className="control-input" value={value.serverName} onChange={(event) => update({ serverName: event.target.value })} /></Field><Field label="Language" error={errors.language}><input className="control-input" value={value.language} onChange={(event) => update({ language: event.target.value })} placeholder="en" /></Field><Field label="Time zone" error={errors.timezone} hint="IANA name, for example America/Chicago"><input className="control-input" value={value.timezone} onChange={(event) => update({ timezone: event.target.value })} /></Field></div></Section><Section title="Public addresses" description="Used for invite links, client branding, and remote playback handoff."><div className="settings-grid"><Field label="Frontend URL" error={errors.frontendUrl}><input className="control-input" type="url" value={value.frontendUrl} onChange={(event) => update({ frontendUrl: event.target.value })} /></Field><Field label="Public API URL" error={errors.apiUrl} hint="Optional; incoming request origin is used when empty."><input className="control-input" type="url" value={value.apiUrl ?? ''} onChange={(event) => update({ apiUrl: event.target.value || null })} /></Field></div></Section><Section title="Invite defaults" description="Applied when an administrator creates an invite without choosing an expiry."><Field label="Default expiry (hours)" error={errors.defaultInviteExpiryHours}><input className="control-input" type="number" min="1" max="8760" value={value.defaultInviteExpiryHours} onChange={(event) => update({ defaultInviteExpiryHours: Number(event.target.value) })} /></Field></Section>{androidInfo && <Section title="Android app updates" description="Native app update controls preserved from the existing Settings page."><div className="settings-meta-grid"><div><span>Installed version</span><strong>{androidInfo.versionName ?? 'Unknown'}{typeof androidInfo.versionCode === 'number' ? ` (${androidInfo.versionCode})` : ''}</strong></div>{androidInfo.updateServer && <div><span>Update server</span><strong>{androidInfo.updateServer}</strong></div>}</div><Toggle label="Check for updates automatically" checked={androidAutomaticUpdates} onChange={setAndroidAutomaticUpdates} /><div className="settings-row-actions"><button className="control-button primary" type="button" onClick={() => window.FluxNative?.checkForUpdates?.()}>Check for updates</button><button className="control-button" type="button" onClick={() => window.FluxNative?.clearUpdateDownloads?.()}>Clear downloaded files</button></div></Section>}</div>;
 }
 
+function StorageTab({ value, update, errors }: { value: SettingsBundleDTO['storage']; update: (value: Partial<SettingsBundleDTO['storage']>) => void; errors: Record<string, string> }) {
+  return <div className="settings-stack">
+    <Section title="Free-space reserve" description="The single threshold every subsystem honours: downloads are refused and imports are routed to another root rather than cutting into it.">
+      <Field label="Reserved free space (GB)" error={errors.reservedFreeSpaceGb} hint="Applied to each media root and to the download volume.">
+        <input className="control-input" type="number" min="0" step="1" value={value.reservedFreeSpaceGb} onChange={(event) => update({ reservedFreeSpaceGb: Number(event.target.value) })} />
+      </Field>
+    </Section>
+    <Section title="Placement" description="Where newly imported movies and episodes land when more than one media root is configured. A series always stays on the root that already holds it while that root has room.">
+      <div className="settings-grid">
+        <Field label="Strategy">
+          <select className="control-select" value={value.placementStrategy} onChange={(event) => update({ placementStrategy: event.target.value as SettingsBundleDTO['storage']['placementStrategy'], ...(event.target.value === 'MOST_FREE' ? { preferredMediaRoot: null } : {}) })}>
+            <option value="MOST_FREE">Most free space first</option>
+            <option value="PREFERRED_FIRST">Fill a preferred root, then spill over</option>
+          </select>
+        </Field>
+        {value.placementStrategy === 'PREFERRED_FIRST' && <Field label="Preferred media root" error={errors.preferredMediaRoot}>
+          <select className="control-select" value={value.preferredMediaRoot ?? ''} onChange={(event) => update({ preferredMediaRoot: event.target.value || null })}>
+            <option value="">Choose a root</option>
+            {value.mediaRoots.map((root) => <option key={root} value={root}>{root}</option>)}
+          </select>
+        </Field>}
+      </div>
+    </Section>
+    <Section title="Configured volumes" description="Paths come from the deployment environment (MEDIA_ROOTS, DOWNLOAD_ROOT, TRANSCODE_ROOT). Change them in the container configuration and restart Flux.">
+      <div className="settings-meta-grid">
+        {value.mediaRoots.map((root, index) => <div key={root}><span>Media root {value.mediaRoots.length > 1 ? index + 1 : ''}</span><strong><code>{root}</code></strong></div>)}
+        <div><span>Downloads</span><strong><code>{value.downloadRoot}</code></strong></div>
+        <div><span>Transcode cache</span><strong><code>{value.transcodeRoot}</code></strong></div>
+      </div>
+      <div className="settings-row-actions"><a className="control-button" href="/admin/storage">Open storage diagnostics</a></div>
+    </Section>
+  </div>;
+}
+
 function DownloadsTab({ value, clients, profiles, update, errors }: { value: SettingsBundleDTO['downloads']; clients: DownloadClientDTO[]; profiles: QualityProfileDTO[]; update: (value: Partial<SettingsBundleDTO['downloads']>) => void; errors: Record<string, string> }) {
-  return <div className="settings-stack"><Section title="Automation" description="Global policy for backend acquisition jobs. Manual torrent upload remains available regardless of this switch."><Toggle label="Enable automated downloads" checked={value.automatedDownloads} onChange={(automatedDownloads) => update({ automatedDownloads })} /><Toggle label="Automatic search" checked={value.automaticSearch} onChange={(automaticSearch) => update({ automaticSearch })} /><Toggle label="Automatic upgrades" checked={value.automaticUpgrades} onChange={(automaticUpgrades) => update({ automaticUpgrades })} /><Toggle label="Retry failed downloads" checked={value.retryFailedDownloads} onChange={(retryFailedDownloads) => update({ retryFailedDownloads })} /></Section><Section title="Selection defaults" description="Controls protocol preference and which configured client/profile wins by default."><div className="settings-grid"><Field label="Preferred protocol"><select className="control-select" value={value.preferredProtocol} onChange={(event) => update({ preferredProtocol: event.target.value as SettingsBundleDTO['downloads']['preferredProtocol'] })}><option value="TORRENT_ONLY">Torrent only</option><option value="USENET_ONLY">Usenet only</option><option value="PREFER_TORRENT">Prefer Torrent</option><option value="PREFER_USENET">Prefer Usenet</option><option value="EITHER">Either</option></select></Field><Field label="Default download client" error={errors.defaultDownloadClientId}><select className="control-select" value={value.defaultDownloadClientId ?? ''} onChange={(event) => update({ defaultDownloadClientId: event.target.value || null })}><option value="">None</option>{clients.filter((client) => client.enabled).map((client) => <option key={client.id} value={client.id}>{client.name} · {client.type}</option>)}</select></Field><Field label="Default quality profile" error={errors.defaultQualityProfileId}><select className="control-select" value={value.defaultQualityProfileId ?? ''} onChange={(event) => update({ defaultQualityProfileId: event.target.value || null })}><option value="">None</option>{profiles.filter((profile) => profile.enabled).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></Field></div></Section><Section title="Import and disk policy" description="Applied to completed jobs before media is admitted to the library."><div className="settings-grid"><Field label="Minimum free disk space (GB)" error={errors.minimumFreeSpaceGb}><input className="control-input" type="number" min="0" value={value.minimumFreeSpaceGb} onChange={(event) => update({ minimumFreeSpaceGb: Number(event.target.value) })} /></Field><Field label="Completed import behavior"><select className="control-select" value={value.completedImportBehavior} onChange={(event) => update({ completedImportBehavior: event.target.value as 'COPY' | 'MOVE' })}><option value="COPY">Copy into library</option><option value="MOVE">Move into library</option></select></Field></div></Section><Section title="Torrent lifecycle" description="Seeding limits are optional. Removal never deletes library copies."><div className="settings-grid"><Field label="Seed ratio" error={errors.torrentSeedRatio}><input className="control-input" type="number" min="0" step="0.1" placeholder="Unlimited" value={value.torrentSeedRatio ?? ''} onChange={(event) => update({ torrentSeedRatio: event.target.value ? Number(event.target.value) : null })} /></Field><Field label="Seed time (minutes)" error={errors.torrentSeedTimeMinutes}><input className="control-input" type="number" min="1" placeholder="Unlimited" value={value.torrentSeedTimeMinutes ?? ''} onChange={(event) => update({ torrentSeedTimeMinutes: event.target.value ? Number(event.target.value) : null })} /></Field></div><Toggle label="Remove torrent after seeding limits are met" checked={value.torrentRemoveAfterSeeding} onChange={(torrentRemoveAfterSeeding) => update({ torrentRemoveAfterSeeding })} /></Section><Section title="Usenet cleanup" description="Removes only jobs matching a configured Flux category, leaving unrelated client history untouched."><Toggle label="Remove completed Usenet jobs" checked={value.usenetRemoveCompleted} onChange={(usenetRemoveCompleted) => update({ usenetRemoveCompleted })} /><Toggle label="Remove failed Usenet jobs" checked={value.usenetRemoveFailed} onChange={(usenetRemoveFailed) => update({ usenetRemoveFailed })} /></Section></div>;
+  return <div className="settings-stack"><Section title="Automation" description="Global policy for backend acquisition jobs. Manual torrent upload remains available regardless of this switch."><Toggle label="Enable automated downloads" checked={value.automatedDownloads} onChange={(automatedDownloads) => update({ automatedDownloads })} /><Toggle label="Automatic search" checked={value.automaticSearch} onChange={(automaticSearch) => update({ automaticSearch })} /><Toggle label="Automatic upgrades" checked={value.automaticUpgrades} onChange={(automaticUpgrades) => update({ automaticUpgrades })} /><Toggle label="Retry failed downloads" checked={value.retryFailedDownloads} onChange={(retryFailedDownloads) => update({ retryFailedDownloads })} /></Section><Section title="Selection defaults" description="Controls protocol preference and which configured client/profile wins by default."><div className="settings-grid"><Field label="Preferred protocol"><select className="control-select" value={value.preferredProtocol} onChange={(event) => update({ preferredProtocol: event.target.value as SettingsBundleDTO['downloads']['preferredProtocol'] })}><option value="TORRENT_ONLY">Torrent only</option><option value="USENET_ONLY">Usenet only</option><option value="PREFER_TORRENT">Prefer Torrent</option><option value="PREFER_USENET">Prefer Usenet</option><option value="EITHER">Either</option></select></Field><Field label="Default download client" error={errors.defaultDownloadClientId}><select className="control-select" value={value.defaultDownloadClientId ?? ''} onChange={(event) => update({ defaultDownloadClientId: event.target.value || null })}><option value="">None</option>{clients.filter((client) => client.enabled).map((client) => <option key={client.id} value={client.id}>{client.name} · {client.type}</option>)}</select></Field><Field label="Default quality profile" error={errors.defaultQualityProfileId}><select className="control-select" value={value.defaultQualityProfileId ?? ''} onChange={(event) => update({ defaultQualityProfileId: event.target.value || null })}><option value="">None</option>{profiles.filter((profile) => profile.enabled).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></Field></div></Section><Section title="Import policy" description="Applied to completed jobs before media is admitted to the library. Free-space reserves live under the Storage tab."><div className="settings-grid"><Field label="Completed import behavior"><select className="control-select" value={value.completedImportBehavior} onChange={(event) => update({ completedImportBehavior: event.target.value as 'COPY' | 'MOVE' })}><option value="COPY">Copy into library</option><option value="MOVE">Move into library</option></select></Field></div></Section><Section title="Torrent lifecycle" description="Seeding limits are optional. Removal never deletes library copies."><div className="settings-grid"><Field label="Seed ratio" error={errors.torrentSeedRatio}><input className="control-input" type="number" min="0" step="0.1" placeholder="Unlimited" value={value.torrentSeedRatio ?? ''} onChange={(event) => update({ torrentSeedRatio: event.target.value ? Number(event.target.value) : null })} /></Field><Field label="Seed time (minutes)" error={errors.torrentSeedTimeMinutes}><input className="control-input" type="number" min="1" placeholder="Unlimited" value={value.torrentSeedTimeMinutes ?? ''} onChange={(event) => update({ torrentSeedTimeMinutes: event.target.value ? Number(event.target.value) : null })} /></Field></div><Toggle label="Remove torrent after seeding limits are met" checked={value.torrentRemoveAfterSeeding} onChange={(torrentRemoveAfterSeeding) => update({ torrentRemoveAfterSeeding })} /></Section><Section title="Usenet cleanup" description="Removes only jobs matching a configured Flux category, leaving unrelated client history untouched."><Toggle label="Remove completed Usenet jobs" checked={value.usenetRemoveCompleted} onChange={(usenetRemoveCompleted) => update({ usenetRemoveCompleted })} /><Toggle label="Remove failed Usenet jobs" checked={value.usenetRemoveFailed} onChange={(usenetRemoveFailed) => update({ usenetRemoveFailed })} /></Section></div>;
 }
 
 function ClientsTab({ clients, editor, setEditor, edit, remove, test, errors, busy }: { clients: DownloadClientDTO[]; editor: (SaveDownloadClientRequest & { id?: string }) | null; setEditor: React.Dispatch<React.SetStateAction<(SaveDownloadClientRequest & { id?: string }) | null>>; edit: (client?: DownloadClientDTO) => void; remove: (client: DownloadClientDTO) => void; test: (client: DownloadClientDTO) => void; errors: Record<string, string>; busy: boolean }) {
@@ -353,8 +394,9 @@ function validateTab(tab: Tab, settings: SettingsBundleDTO, extra: { discordSecr
     if (!settings.general.timezone.trim()) errors.timezone = 'Time zone is required.';
     if (!/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(settings.general.language)) errors.language = 'Use a language tag such as en or en-US.';
     if (settings.general.defaultInviteExpiryHours < 1) errors.defaultInviteExpiryHours = 'Expiry must be at least one hour.';
-  } else if (tab === 'downloads') {
-    if (settings.downloads.minimumFreeSpaceGb < 0) errors.minimumFreeSpaceGb = 'Free space cannot be negative.';
+  } else if (tab === 'storage') {
+    if (!Number.isFinite(settings.storage.reservedFreeSpaceGb) || settings.storage.reservedFreeSpaceGb < 0) errors.reservedFreeSpaceGb = 'Reserved space cannot be negative.';
+    if (settings.storage.placementStrategy === 'PREFERRED_FIRST' && !settings.storage.preferredMediaRoot) errors.preferredMediaRoot = 'Choose the media root to fill first.';
   } else if (tab === 'playback') {
     if (!settings.playback.directPlayEnabled && !settings.playback.directStreamEnabled && !settings.playback.transcodingEnabled) errors.playback = 'At least one playback method must remain enabled.';
   } else if (tab === 'notifications') {

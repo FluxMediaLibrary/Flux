@@ -821,7 +821,6 @@ export interface DownloadSettingsDTO {
   automaticSearch: boolean;
   automaticUpgrades: boolean;
   retryFailedDownloads: boolean;
-  minimumFreeSpaceGb: number;
   completedImportBehavior: 'COPY' | 'MOVE';
   torrentSeedRatio: number | null;
   torrentSeedTimeMinutes: number | null;
@@ -850,17 +849,77 @@ export interface IntegrationSettingsDTO {
   tmdbSource: 'DATABASE' | 'ENVIRONMENT';
 }
 
+/**
+ * How imported media is placed across media roots.
+ *  - MOST_FREE:       pick the eligible root with the most free space.
+ *  - PREFERRED_FIRST: fill `preferredMediaRoot` until it would drop below the
+ *                     reserve, then spill over to the eligible root with the
+ *                     most free space.
+ */
+export type StoragePlacementStrategy = 'MOST_FREE' | 'PREFERRED_FIRST';
+
+export interface StorageSettingsDTO {
+  /** Free space (GB) every volume must keep after a placement or download. */
+  reservedFreeSpaceGb: number;
+  placementStrategy: StoragePlacementStrategy;
+  preferredMediaRoot: string | null;
+  /** Deployment-level roots (from the container environment). Read-only here. */
+  mediaRoots: string[];
+  downloadRoot: string;
+  transcodeRoot: string;
+}
+
+export interface SetupStateDTO {
+  completed: boolean;
+  completedAt: string | null;
+}
+
+export interface SetupStatusDTO {
+  completed: boolean;
+  /** True while the users table is empty — the wizard must create an admin. */
+  needsAdmin: boolean;
+  serverName: string;
+  version: string;
+}
+
+export interface SetupSnapshotDTO {
+  settings: SettingsBundleDTO;
+  volumes: StorageVolumeDTO[];
+  downloadClient: { ok: boolean; message: string };
+  environment: {
+    mediaRoots: string[];
+    downloadRoot: string;
+    transcodeRoot: string;
+    frontendOrigin: string;
+    publicApiBaseUrl: string | null;
+  };
+}
+
+export interface CreateInitialAdminRequest {
+  email: string;
+  password: string;
+  profileName?: string;
+}
+
+export interface TmdbKeyTestResultDTO {
+  ok: boolean;
+  message: string;
+}
+
 export interface SettingsBundleDTO {
   general: GeneralSettingsDTO;
   downloads: DownloadSettingsDTO;
+  storage: StorageSettingsDTO;
   playback: PlaybackSettingsDTO;
   notifications: NotificationSettingsDTO;
   integrations: IntegrationSettingsDTO;
+  setup: SetupStateDTO;
 }
 
 export interface UpdateSettingsBundleRequest {
   general?: Partial<GeneralSettingsDTO>;
   downloads?: Partial<DownloadSettingsDTO>;
+  storage?: Partial<Pick<StorageSettingsDTO, 'reservedFreeSpaceGb' | 'placementStrategy' | 'preferredMediaRoot'>>;
   playback?: Partial<PlaybackSettingsDTO>;
   integrations?: { tmdbApiKey?: string | null };
 }
@@ -1072,6 +1131,59 @@ export interface StorageRootDTO {
   totalBytes: number | null;
   freeBytes: number | null;
   usedBytes: number | null;
+}
+
+export type StorageVolumeHealth = 'HEALTHY' | 'WARNING' | 'FULL' | 'READ_ONLY' | 'OFFLINE';
+
+/** One directory Flux writes to, as evaluated by the storage service. */
+export interface StorageVolumeDTO {
+  path: string;
+  role: 'media' | 'download' | 'transcode';
+  exists: boolean;
+  writable: boolean;
+  totalBytes: number | null;
+  freeBytes: number | null;
+  /** Bytes the policy keeps untouched on this volume. */
+  reservedBytes: number;
+  /** freeBytes − reservedBytes (≥ 0), or null when unknown. */
+  availableBytes: number | null;
+  percentUsed: number | null;
+  health: StorageVolumeHealth;
+  isPreferred: boolean;
+  /** Media roots only. */
+  movieCount: number | null;
+  episodeCount: number | null;
+  deviceId: string | null;
+}
+
+export interface StoragePlacementCandidateDTO {
+  root: string;
+  eligible: boolean;
+  reason: string;
+  freeBytes: number | null;
+  availableBytes: number | null;
+}
+
+/** Dry-run answer to "where would a file of N bytes be placed right now?" */
+export interface StoragePlacementPlanDTO {
+  requiredBytes: number;
+  selectedRoot: string | null;
+  strategy: StoragePlacementStrategy;
+  reservedBytes: number;
+  candidates: StoragePlacementCandidateDTO[];
+  error?: string;
+}
+
+export interface StorageOverviewDTO {
+  generatedAt: string;
+  policy: {
+    reservedFreeSpaceGb: number;
+    placementStrategy: StoragePlacementStrategy;
+    preferredMediaRoot: string | null;
+  };
+  volumes: StorageVolumeDTO[];
+  /** Placement plan for a representative 10 GB import, for at-a-glance diagnostics. */
+  samplePlacement: StoragePlacementPlanDTO;
 }
 
 export interface AdminLibraryEpisodeDTO {

@@ -181,7 +181,11 @@ async function tmdbFetch<T>(
   params: Record<string, string> = {},
 ): Promise<T> {
   const url = new URL(`${TMDB_BASE}${path}`);
-  url.searchParams.set('api_key', await getTmdbApiKey());
+  const apiKey = await getTmdbApiKey();
+  if (!apiKey) {
+    throw new ApiError(503, 'TMDB_NOT_CONFIGURED', 'TMDb is not configured. Add an API key in Settings → Integrations.');
+  }
+  url.searchParams.set('api_key', apiKey);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   const cacheKey = url.pathname + '?' + url.searchParams.toString();

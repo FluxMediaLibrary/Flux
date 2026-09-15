@@ -12,6 +12,10 @@ import { config } from '../config.js';
 const baseOptions: RedisOptions = {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
+  // Connect on first command rather than at import time so modules that only
+  // *might* touch Redis (settings bus, rate limiter) can be imported by unit
+  // tests without a live server keeping the event loop alive.
+  lazyConnect: true,
 };
 
 /** Shared ioredis connection for general commands (non-BullMQ use). */

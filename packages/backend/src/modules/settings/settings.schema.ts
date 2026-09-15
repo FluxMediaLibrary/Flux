@@ -19,13 +19,17 @@ export const updateSettingsSchema = z.object({
     automaticSearch: z.boolean().optional(),
     automaticUpgrades: z.boolean().optional(),
     retryFailedDownloads: z.boolean().optional(),
-    minimumFreeSpaceGb: z.number().int().min(0).max(1_000_000).optional(),
     completedImportBehavior: z.enum(['COPY', 'MOVE']).optional(),
     torrentSeedRatio: z.number().min(0).max(1000).nullable().optional(),
     torrentSeedTimeMinutes: nullablePositiveInt.optional(),
     torrentRemoveAfterSeeding: z.boolean().optional(),
     usenetRemoveCompleted: z.boolean().optional(),
     usenetRemoveFailed: z.boolean().optional(),
+  }).strict().optional(),
+  storage: z.object({
+    reservedFreeSpaceGb: z.number().int().min(0).max(1_000_000).optional(),
+    placementStrategy: z.enum(['MOST_FREE', 'PREFERRED_FIRST']).optional(),
+    preferredMediaRoot: z.string().trim().min(1).max(1000).nullable().optional(),
   }).strict().optional(),
   playback: z.object({
     directPlayEnabled: z.boolean().optional(),

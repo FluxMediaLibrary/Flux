@@ -9,18 +9,19 @@
  * malicious title/episode value can never escape MEDIA_ROOTS.
  *
  * Supports multiple media roots (MEDIA_ROOTS env var, comma-separated).
- * New files are placed on the root with the most free space above the
- * spillover threshold; lookups search all roots.
+ * Root selection is delegated to the storage service (lib/storage.ts), which
+ * applies the reserve/placement policy from ServerSettings; lookups search
+ * all roots.
  */
 
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { config } from '../config.js';
+import { MEDIA_ROOTS, planMediaPlacement, type PlacementOptions } from './storage.js';
 
-/** All resolved media root directories. */
-export const MEDIA_ROOTS = config.MEDIA_ROOTS.map((r) => path.resolve(r));
+export { MEDIA_ROOTS };
 
-/** Primary media root — fallback when spillover selection fails. */
+/** Primary media root — first configured root. */
 export const PRIMARY_MEDIA_ROOT = MEDIA_ROOTS[0]!;
 
 /**
@@ -53,36 +54,22 @@ export async function resolveFilePath(filePath: string): Promise<string | null> 
 }
 
 /**
- * Select the best media root for placing a new file.
- * Picks the writable root with the most free space above `minFreeBytes`.
- * If none meet the threshold, picks the writable root with the most free space.
+ * Select the media root for new content. Applies the ServerSettings storage
+ * policy (reserve, strategy, preferred root) and the size of the incoming
+ * content. Throws `StorageFullError` with a per-volume explanation when no
+ * root qualifies.
  */
-export async function selectMediaRoot(
-  minFreeBytes: number = config.MEDIA_SPILLOVER_THRESHOLD_BYTES,
-): Promise<string> {
-  let best = MEDIA_ROOTS[0]!;
-  let bestFree = 0;
-  let bestAboveThreshold: string | null = null;
-  let bestAboveThresholdFree = 0;
+export async function selectMediaRoot(options: PlacementOptions): Promise<string> {
+  return (await planMediaPlacement(options)).root;
+}
 
-  for (const root of MEDIA_ROOTS) {
-    try {
-      const stats = await fs.statfs(root);
-      const free = stats.bavail * stats.bsize;
-      if (free >= minFreeBytes && free > bestAboveThresholdFree) {
-        bestAboveThreshold = root;
-        bestAboveThresholdFree = free;
-      }
-      if (free > bestFree) {
-        bestFree = free;
-        best = root;
-      }
-    } catch {
-      // root unavailable, skip
-    }
+/** Ensure an explicitly supplied root is one of the configured media roots. */
+function assertMediaRoot(root: string): string {
+  const resolved = path.resolve(root);
+  if (!MEDIA_ROOTS.includes(resolved)) {
+    throw new Error(`Not a configured media root: ${root}`);
   }
-
-  return bestAboveThreshold ?? best;
+  return resolved;
 }
 
 /** Strip characters illegal on common filesystems; collapse whitespace. */
@@ -121,16 +108,17 @@ export interface MoviePlacement {
 }
 
 /**
- * Determine where a new movie file should be placed.
- * Selects the best media root based on available space, then builds the path.
+ * Build the library path for a movie under an already-selected media root.
+ * Callers pick the root once via `selectMediaRoot` so every path derived for
+ * the same import (copy target, analysis, trickplay) agrees.
  */
-export async function moviePlacement(
+export function moviePlacement(
+  root: string,
   title: string,
   year: number | null,
   ext: string,
-): Promise<MoviePlacement> {
-  const root = await selectMediaRoot();
-  const moviesRoot = path.posix.join(root, 'movies');
+): MoviePlacement {
+  const moviesRoot = path.posix.join(assertMediaRoot(root), 'movies');
   const label = year ? `${sanitizeSegment(title)} (${year})` : sanitizeSegment(title);
   const dir = safeJoin(moviesRoot, label);
   const file = safeJoin(dir, `${label}${ext}`);
@@ -143,18 +131,15 @@ export interface EpisodePlacement {
   file: string;
 }
 
-/**
- * Determine where a new episode file should be placed.
- * Selects the best media root based on available space, then builds the path.
- */
-export async function episodePlacement(
+/** Build the library path for an episode under an already-selected media root. */
+export function episodePlacement(
+  root: string,
   showTitle: string,
   season: number,
   episode: number,
   ext: string,
-): Promise<EpisodePlacement> {
-  const root = await selectMediaRoot();
-  const tvRoot = path.posix.join(root, 'tv');
+): EpisodePlacement {
+  const tvRoot = path.posix.join(assertMediaRoot(root), 'tv');
   const show = sanitizeSegment(showTitle);
   const showDir = safeJoin(tvRoot, show);
   const seasonDir = safeJoin(showDir, `Season ${pad2(season)}`);

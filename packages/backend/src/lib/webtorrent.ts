@@ -303,6 +303,8 @@ export interface ExistingDataCheck {
   totalFiles: number;
   /** True when every expected file is already present with the right size. */
   complete: boolean;
+  /** Bytes the torrent still has to write into the download root. */
+  missingBytes: number;
 }
 
 /**
@@ -329,20 +331,24 @@ export async function detectExistingData(
   const rawFiles = parsed.files ?? [];
 
   let filesOnDisk = 0;
+  let missingBytes = 0;
   for (const file of rawFiles) {
     let expected: string;
     try {
       expected = safeJoin(downloadRoot, file.path);
     } catch {
+      missingBytes += file.length;
       continue; // path escapes the download root — treat as missing
     }
     try {
       const entry = await stat(expected);
       if (entry.isFile() && entry.size === file.length) {
         filesOnDisk++;
+      } else {
+        missingBytes += Math.max(0, file.length - (entry.isFile() ? entry.size : 0));
       }
     } catch {
-      // file not present yet
+      missingBytes += file.length; // file not present yet
     }
   }
 
@@ -350,6 +356,7 @@ export async function detectExistingData(
     filesOnDisk,
     totalFiles: rawFiles.length,
     complete: rawFiles.length > 0 && filesOnDisk === rawFiles.length,
+    missingBytes,
   };
 }
 

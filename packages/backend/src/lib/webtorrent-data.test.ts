@@ -80,6 +80,7 @@ test('detectExistingData finds a complete single-file torrent', async () => {
       filesOnDisk: 1,
       totalFiles: 1,
       complete: true,
+      missingBytes: 0,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -96,6 +97,7 @@ test('detectExistingData ignores a file with the wrong size', async () => {
       filesOnDisk: 0,
       totalFiles: 1,
       complete: false,
+      missingBytes: 500,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -120,6 +122,7 @@ test('detectExistingData handles a multi-file torrent layout', async () => {
       filesOnDisk: 2,
       totalFiles: 2,
       complete: true,
+      missingBytes: 0,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -143,6 +146,7 @@ test('detectExistingData reports partial data as incomplete', async () => {
       filesOnDisk: 1,
       totalFiles: 2,
       complete: false,
+      missingBytes: 700,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -158,6 +162,7 @@ test('detectExistingData reports no data when the download root is empty', async
       filesOnDisk: 0,
       totalFiles: 1,
       complete: false,
+      missingBytes: 1000,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -176,6 +181,7 @@ test('detectExistingData never probes outside the download root', async () => {
       filesOnDisk: 0,
       totalFiles: 1,
       complete: false,
+      missingBytes: 10,
     });
   } finally {
     await rm(root, { recursive: true, force: true });

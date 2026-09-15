@@ -3,7 +3,7 @@
  * seeding stop, and removal. Admin-only at the route layer.
  */
 import { Buffer } from 'node:buffer';
-import { readFile, statfs } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import type {
   TorrentDTO,
   TorrentFileGuess,
@@ -34,7 +34,7 @@ import type { ConfirmTorrentInput } from './torrents.schema.js';
 import { torrentPostprocessQueue } from '../../jobs/queues.js';
 import { torrentFilePath } from '../../lib/media-paths.js';
 import { getSeasonEpisodes as getTmdbSeasonEpisodes } from '../tmdb/tmdb.service.js';
-import { config } from '../../config.js';
+import { checkDownloadAdmission } from '../../lib/storage.js';
 
 // Track torrents already enqueued for postprocessing (prevents duplicates)
 const postprocessEnqueued = new Set<string>();
@@ -57,24 +57,14 @@ async function scheduleTorrentRetry(id: string, error: unknown): Promise<void> {
   });
 }
 
-async function ensureMinimumFreeSpace(): Promise<void> {
-  const settings = await getServerSettings();
-  if (settings.minimumFreeSpaceGb <= 0) return;
-  try {
-    const disk = await statfs(config.DOWNLOAD_ROOT);
-    const freeBytes = Number(disk.bavail) * Number(disk.bsize);
-    const requiredBytes = settings.minimumFreeSpaceGb * 1024 ** 3;
-    if (freeBytes < requiredBytes) {
-      throw ApiError.badRequest(
-        `Download storage has less than the configured ${settings.minimumFreeSpaceGb} GB free`,
-        'DOWNLOAD_FREE_SPACE_LOW',
-      );
-    }
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    // Existing deployments may create the mounted download root lazily. The
-    // download client remains authoritative when the filesystem cannot be read.
-  }
+/**
+ * Refuse to start a download the download volume cannot hold while keeping
+ * the configured reserve. The message names the volume, the need and the
+ * reserve so the admin can act on it from the downloads page.
+ */
+async function ensureDownloadAdmission(missingBytes: number): Promise<void> {
+  const failure = await checkDownloadAdmission(missingBytes);
+  if (failure) throw ApiError.badRequest(failure, 'DOWNLOAD_FREE_SPACE_LOW');
 }
 
 /**
@@ -682,7 +672,7 @@ export async function retryTorrentDownload(id: string): Promise<TorrentDTO> {
   let added: AddTorrentResult;
   try {
     const dataCheck = await detectExistingData(buffer);
-    if (!dataCheck.complete) await ensureMinimumFreeSpace();
+    if (!dataCheck.complete) await ensureDownloadAdmission(dataCheck.missingBytes);
     added = await addTorrent(buffer, {
       verifyExisting: dataCheck.filesOnDisk > 0,
     });
@@ -814,7 +804,7 @@ export async function startDownloading(
   }
 
   const dataCheck = await detectExistingData(buffer);
-  if (!dataCheck.complete) await ensureMinimumFreeSpace();
+  if (!dataCheck.complete) await ensureDownloadAdmission(dataCheck.missingBytes);
   const added = await addTorrent(buffer, {
     verifyExisting: dataCheck.filesOnDisk > 0,
   });

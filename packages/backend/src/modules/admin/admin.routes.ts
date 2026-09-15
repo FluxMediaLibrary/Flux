@@ -45,6 +45,7 @@ import {
   validateIntroScanTargets,
 } from '../media-segments/intro-jobs.service.js';
 import { prisma } from '../../lib/db.js';
+import { describePlacement, getStorageOverview } from '../../lib/storage.js';
 
 const updateUserSchema = z.object({
   role: z.enum(['ADMIN', 'MEMBER']).optional(),
@@ -52,6 +53,9 @@ const updateUserSchema = z.object({
   disabled: z.boolean().optional(),
   requestLimit: z.number().int().positive().nullable().optional(),
   streamLimit: z.number().int().positive().nullable().optional(),
+});
+const storagePlanSchema = z.object({
+  bytes: z.coerce.number().int().min(0).max(1e15).default(10 * 1024 ** 3),
 });
 const playbackMarkersSchema = z.object({
   episodeId: z.string().trim().min(1).max(128).optional(),
@@ -132,8 +136,12 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   });
 
   app.get('/storage', { preHandler: [app.requirePermission('VIEW_SYSTEM')] }, async () => {
-    const info = await getAdminInfo();
-    return info.storage;
+    return getStorageOverview();
+  });
+
+  app.get('/storage/plan', { preHandler: [app.requirePermission('VIEW_SYSTEM')] }, async (request) => {
+    const query = storagePlanSchema.parse(request.query ?? {});
+    return describePlacement(query.bytes);
   });
 
   app.post('/storage/transcode-cache/prune', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {

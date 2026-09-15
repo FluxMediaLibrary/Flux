@@ -426,6 +426,16 @@ model ServerSettings {
 
   tmdbApiKey String?
 
+  /// Storage placement policy for imported media. `minimumFreeSpaceGb` above is
+  /// the reserved free space every volume must keep after a placement.
+  storagePlacementStrategy String  @default("MOST_FREE") // MOST_FREE | PREFERRED_FIRST
+  preferredMediaRoot       String?
+
+  /// First-run setup wizard state. Existing installs (users already present)
+  /// are marked complete automatically at boot.
+  setupCompleted   Boolean   @default(false)
+  setupCompletedAt DateTime?
+
   downloadClientsSeeded  Boolean @default(false)
   qualityProfilesSeeded  Boolean @default(false)
 

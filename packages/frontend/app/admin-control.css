@@ -572,3 +572,16 @@
   .control-input { min-width: 0; width: 100%; }
   .control-popover { right: 10px; top: 55px; }
 }
+
+/* Storage: policy action + placement check */
+.control-storage-breakdown-action { display: flex; align-items: center; }
+.control-storage-plan { display: grid; gap: 16px; }
+.control-storage-plan-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.control-storage-plan-form label { display: grid; gap: 6px; font-size: 0.85rem; color: var(--control-muted, var(--text-muted)); }
+.control-storage-plan-form input { width: 140px; }
+.control-storage-plan-result p { margin: 0 0 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.control-storage-plan-result ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.control-storage-plan-result li { display: grid; grid-template-columns: minmax(120px, max-content) 1fr; gap: 12px; font-size: 0.85rem; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,.03); }
+.control-storage-plan-result li.is-ineligible { color: var(--text-muted); }
+.control-storage-plan-result li.is-eligible code { color: var(--ok); }
+@media (max-width: 640px) { .control-storage-plan-result li { grid-template-columns: 1fr; } }

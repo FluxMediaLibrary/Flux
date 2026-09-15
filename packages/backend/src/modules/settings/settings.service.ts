@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { Prisma, DownloadClient, QualityProfile, ServerSettings } from '@prisma/client';
 import type {
   DownloadClientDTO,
@@ -11,6 +12,7 @@ import type {
 import { config } from '../../config.js';
 import { prisma } from '../../lib/db.js';
 import { ApiError } from '../../lib/errors.js';
+import { onSettingsChanged, publishSettingsChanged, type SettingsSection } from '../../lib/settings-events.js';
 import { getSettings as getNotificationSettings } from '../notifications/notifications.service.js';
 
 const DEFAULT_PROFILES: SaveQualityProfileRequest[] = [
@@ -73,8 +75,69 @@ function initialSettings() {
   };
 }
 
-export async function getServerSettings(): Promise<ServerSettings> {
-  return prisma.serverSettings.upsert({ where: { id: 'singleton' }, create: initialSettings(), update: {} });
+// ── Cached singleton ────────────────────────────────────────────────────────
+// The settings row is read on hot paths (every stream/segment request, every
+// poller tick). Reads go through a short-lived in-process cache that is
+// invalidated on every write in this process and, via the settings bus, on
+// writes from any other backend process. The TTL only exists as a safety net
+// when Redis pub/sub is unavailable.
+const SETTINGS_CACHE_TTL_MS = 30_000;
+let cachedSettings: { row: ServerSettings; loadedAt: number } | null = null;
+let inflight: Promise<ServerSettings> | null = null;
+
+onSettingsChanged(() => { cachedSettings = null; });
+
+export function invalidateSettingsCache(): void {
+  cachedSettings = null;
+}
+
+async function loadServerSettings(): Promise<ServerSettings> {
+  const existing = await prisma.serverSettings.findUnique({ where: { id: 'singleton' } });
+  if (existing) return existing;
+  // First read on a fresh database: create the row once. A concurrent creator
+  // wins the unique constraint and we simply re-read.
+  try {
+    return await prisma.serverSettings.create({ data: { id: 'singleton', ...initialSettings() } });
+  } catch {
+    const row = await prisma.serverSettings.findUnique({ where: { id: 'singleton' } });
+    if (!row) throw new Error('Server settings row could not be initialised');
+    return row;
+  }
+}
+
+/** Authoritative server settings. Cached; never stale for longer than one write. */
+export async function getServerSettings(options: { fresh?: boolean } = {}): Promise<ServerSettings> {
+  if (!options.fresh && cachedSettings && Date.now() - cachedSettings.loadedAt < SETTINGS_CACHE_TTL_MS) {
+    return cachedSettings.row;
+  }
+  if (!inflight) {
+    inflight = loadServerSettings()
+      .then((row) => {
+        cachedSettings = { row, loadedAt: Date.now() };
+        return row;
+      })
+      .finally(() => { inflight = null; });
+  }
+  return inflight;
+}
+
+/**
+ * Apply a partial update to the singleton, refresh the cache and notify every
+ * process. All writers in this module go through here so no consumer can
+ * observe a saved-but-not-applied value.
+ */
+export async function writeServerSettings(
+  data: Prisma.ServerSettingsUpdateInput,
+  sections: SettingsSection[],
+): Promise<ServerSettings> {
+  const row = await prisma.serverSettings.upsert({
+    where: { id: 'singleton' },
+    create: { id: 'singleton', ...initialSettings(), ...(data as Prisma.ServerSettingsCreateInput) },
+    update: data,
+  });
+  cachedSettings = { row, loadedAt: Date.now() };
+  await publishSettingsChanged(sections);
+  return row;
 }
 
 export async function getSettingsBundle(): Promise<SettingsBundleDTO> {
@@ -91,11 +154,19 @@ export async function getSettingsBundle(): Promise<SettingsBundleDTO> {
       preferredProtocol: row.preferredProtocol as SettingsBundleDTO['downloads']['preferredProtocol'],
       defaultDownloadClientId: row.defaultDownloadClientId, defaultQualityProfileId: row.defaultQualityProfileId,
       automaticSearch: row.automaticSearch, automaticUpgrades: row.automaticUpgrades,
-      retryFailedDownloads: row.retryFailedDownloads, minimumFreeSpaceGb: row.minimumFreeSpaceGb,
+      retryFailedDownloads: row.retryFailedDownloads,
       completedImportBehavior: row.completedImportBehavior as 'COPY' | 'MOVE',
       torrentSeedRatio: row.torrentSeedRatio, torrentSeedTimeMinutes: row.torrentSeedTimeMinutes,
       torrentRemoveAfterSeeding: row.torrentRemoveAfterSeeding,
       usenetRemoveCompleted: row.usenetRemoveCompleted, usenetRemoveFailed: row.usenetRemoveFailed,
+    },
+    storage: {
+      reservedFreeSpaceGb: row.minimumFreeSpaceGb,
+      placementStrategy: row.storagePlacementStrategy as SettingsBundleDTO['storage']['placementStrategy'],
+      preferredMediaRoot: row.preferredMediaRoot,
+      mediaRoots: config.MEDIA_ROOTS,
+      downloadRoot: config.DOWNLOAD_ROOT,
+      transcodeRoot: config.TRANSCODE_ROOT,
     },
     playback: {
       directPlayEnabled: row.directPlayEnabled, directStreamEnabled: row.directStreamEnabled,
@@ -113,6 +184,10 @@ export async function getSettingsBundle(): Promise<SettingsBundleDTO> {
     integrations: {
       tmdbApiKeyConfigured: Boolean(row.tmdbApiKey || config.TMDB_API_KEY),
       tmdbSource: row.tmdbApiKey ? 'DATABASE' : 'ENVIRONMENT',
+    },
+    setup: {
+      completed: row.setupCompleted,
+      completedAt: row.setupCompletedAt?.toISOString() ?? null,
     },
   };
 }
@@ -138,11 +213,29 @@ export async function updateSettings(input: UpdateSettingsBundleRequest): Promis
     const profile = await prisma.qualityProfile.findUnique({ where: { id: input.downloads.defaultQualityProfileId } });
     if (!profile?.enabled) throw ApiError.badRequest('The default quality profile must exist and be enabled', 'INVALID_DEFAULT_PROFILE');
   }
-  const data = { ...(input.general ?? {}), ...(input.downloads ?? {}), ...(input.playback ?? {}) } as Prisma.ServerSettingsUpdateInput;
+  if (input.storage?.preferredMediaRoot) {
+    const known = config.MEDIA_ROOTS.map((root) => path.resolve(root));
+    if (!known.includes(path.resolve(input.storage.preferredMediaRoot))) {
+      throw ApiError.badRequest('Preferred media root must be one of the configured media roots', 'INVALID_MEDIA_ROOT');
+    }
+  }
+  const storage = input.storage ?? {};
+  const data = {
+    ...(input.general ?? {}),
+    ...(input.downloads ?? {}),
+    ...(input.playback ?? {}),
+    ...(storage.reservedFreeSpaceGb !== undefined ? { minimumFreeSpaceGb: storage.reservedFreeSpaceGb } : {}),
+    ...(storage.placementStrategy !== undefined ? { storagePlacementStrategy: storage.placementStrategy } : {}),
+    ...(storage.preferredMediaRoot !== undefined
+      ? { preferredMediaRoot: storage.preferredMediaRoot ? path.resolve(storage.preferredMediaRoot) : null }
+      : {}),
+  } as Prisma.ServerSettingsUpdateInput;
   if (input.integrations && Object.prototype.hasOwnProperty.call(input.integrations, 'tmdbApiKey')) {
     data.tmdbApiKey = input.integrations.tmdbApiKey;
   }
-  await prisma.serverSettings.upsert({ where: { id: 'singleton' }, create: { ...initialSettings(), ...data } as Prisma.ServerSettingsCreateInput, update: data });
+  const sections = (['general', 'downloads', 'storage', 'playback', 'integrations'] as const)
+    .filter((section) => input[section] !== undefined);
+  await writeServerSettings(data, [...sections]);
   if (input.downloads && Object.prototype.hasOwnProperty.call(input.downloads, 'defaultDownloadClientId')) {
     await prisma.$transaction([
       prisma.downloadClient.updateMany({ data: { isDefault: false } }),
@@ -184,6 +277,7 @@ async function ensureLegacyTransmissionClient(): Promise<void> {
       where: { id: 'singleton' },
       data: { downloadClientsSeeded: true, ...(settings.defaultDownloadClientId ? {} : { defaultDownloadClientId: client.id }) },
     });
+    invalidateSettingsCache();
   });
 }
 
@@ -214,6 +308,7 @@ export async function saveDownloadClient(input: SaveDownloadClientRequest, id?: 
   } else if (existing?.isDefault || !row.enabled) {
     await prisma.serverSettings.updateMany({ where: { defaultDownloadClientId: row.id }, data: { defaultDownloadClientId: null } });
   }
+  await publishSettingsChanged(['downloads']);
   return clientDTO(row);
 }
 
@@ -224,6 +319,7 @@ export async function deleteDownloadClient(id: string): Promise<void> {
     prisma.downloadClient.delete({ where: { id } }),
     prisma.serverSettings.updateMany({ where: { defaultDownloadClientId: id }, data: { defaultDownloadClientId: null } }),
   ]);
+  await publishSettingsChanged(['downloads']);
 }
 
 function clientUrl(client: Pick<DownloadClient, 'host' | 'port' | 'useHttps'>): URL {
@@ -299,6 +395,7 @@ export async function ensureDefaultQualityProfiles(): Promise<void> {
       where: { id: 'singleton' },
       data: { qualityProfilesSeeded: true, ...(settings.defaultQualityProfileId || !first ? {} : { defaultQualityProfileId: first.id }) },
     });
+    invalidateSettingsCache();
   });
 }
 
@@ -327,6 +424,7 @@ export async function saveQualityProfile(input: SaveQualityProfileRequest, id?: 
   const row = id ? await prisma.qualityProfile.update({ where: { id }, data }) : await prisma.qualityProfile.create({ data });
   if (!row.enabled) {
     await prisma.serverSettings.updateMany({ where: { defaultQualityProfileId: row.id }, data: { defaultQualityProfileId: null } });
+    await publishSettingsChanged(['downloads']);
   }
   return qualityProfileDTO(row);
 }
@@ -338,6 +436,7 @@ export async function deleteQualityProfile(id: string): Promise<void> {
     prisma.qualityProfile.delete({ where: { id } }),
     prisma.serverSettings.updateMany({ where: { defaultQualityProfileId: id }, data: { defaultQualityProfileId: null } }),
   ]);
+  await publishSettingsChanged(['downloads']);
 }
 
 export async function getTmdbApiKey(): Promise<string> {

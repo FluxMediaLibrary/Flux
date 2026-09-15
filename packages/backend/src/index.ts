@@ -2,18 +2,26 @@
  * Backend entry point. Builds the Fastify server, seeds the bootstrap admin,
  * starts BullMQ workers, and listens. Handles graceful shutdown.
  */
-import { config } from './config.js';
+import { config, DEPRECATED_ENV_VARS } from './config.js';
 import { prisma } from './lib/db.js';
 import { redisConnection } from './lib/redis.js';
+import { startSettingsSubscriber } from './lib/settings-events.js';
 import { buildServer, seedBootstrapAdmin } from './server.js';
 import { startWorkers, stopWorkers } from './jobs/worker.js';
 import { startTorrentPoller, stopTorrentPoller } from './jobs/torrent-poller.js';
 import { checkTorrentClient } from './lib/webtorrent.js';
+import { reconcileSetupState } from './modules/setup/setup.service.js';
 
 async function main(): Promise<void> {
   const app = await buildServer();
 
+  for (const entry of DEPRECATED_ENV_VARS) {
+    app.log.warn(`${entry.name} is no longer used. Configure it in ${entry.replacement}.`);
+  }
+
+  const stopSettingsSubscriber = startSettingsSubscriber(app.log);
   await seedBootstrapAdmin(app);
+  await reconcileSetupState(app.log);
   startWorkers();
   startTorrentPoller(app.log);
 
@@ -43,6 +51,7 @@ async function main(): Promise<void> {
       stopTorrentPoller();
       await app.close();
       await stopWorkers();
+      await stopSettingsSubscriber();
       await redisConnection.quit();
       await prisma.$disconnect();
     } catch (err) {

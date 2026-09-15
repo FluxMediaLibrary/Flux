@@ -37,6 +37,7 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  AuthResponse,
   AccountDTO,
   CreateProfileRequest,
   LoginRequest,
@@ -67,6 +68,8 @@ export interface AuthState {
   isAdmin: boolean;
   login: (body: LoginRequest) => Promise<void>;
   signup: (body: SignupRequest) => Promise<void>;
+  /** Persist a session obtained elsewhere (e.g. first-run admin creation). */
+  applySession: (session: AuthResponse) => void;
   activateProfile: (profileId: string) => Promise<void>;
   addProfile: (body: CreateProfileRequest) => Promise<ProfileDTO>;
   editProfile: (
@@ -151,6 +154,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistAuth(res.token, res.account, res.profiles);
   }, []);
 
+  const applySession = useCallback((session: AuthResponse) => {
+    persistAuth(session.token, session.account, session.profiles);
+  }, []);
+
   const activateProfile = useCallback(async (profileId: string) => {
     const res = await api.activateProfile(profileId, getBaseToken());
     // The activation response carries a NEW token with activeProfileId — it
@@ -233,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin: role === 'ADMIN',
       login,
       signup,
+      applySession,
       activateProfile,
       addProfile,
       editProfile,
@@ -249,6 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role,
       login,
       signup,
+      applySession,
       activateProfile,
       addProfile,
       editProfile,

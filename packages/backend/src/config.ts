@@ -26,7 +26,8 @@ const envSchema = z.object({
     .min(16, 'JWT_SECRET must be at least 16 characters'),
   JWT_EXPIRES_IN: z.string().min(1).default('7d'),
 
-  TMDB_API_KEY: z.string().min(1, 'TMDB_API_KEY is required'),
+  /** Optional: the key can also be stored in Settings → Integrations (DB wins). */
+  TMDB_API_KEY: z.string().default(''),
 
   BACKEND_PORT: z.coerce.number().int().positive().default(4000),
   FRONTEND_ORIGIN: z.string().url().default('http://localhost:3000'),
@@ -62,10 +63,6 @@ const envSchema = z.object({
   }, z.array(z.string().min(1)).min(1)),
   DOWNLOAD_ROOT: z.string().min(1).default('/data/downloads'),
   TRANSCODE_ROOT: z.string().min(1).default('/data/transcode'),
-
-  /** When picking a media root for new files, skip roots with less than this
-   * many free bytes. Default 10 GB. */
-  MEDIA_SPILLOVER_THRESHOLD_BYTES: z.coerce.number().int().min(0).default(10_737_418_240),
 
   /** How often the background poller sweeps for finished torrents (ms). */
   TORRENT_POLL_INTERVAL_MS: z.coerce
@@ -118,5 +115,14 @@ function loadConfig(): AppConfig {
 }
 
 export const config = loadConfig();
+
+/**
+ * Environment variables that used to carry policy now owned by ServerSettings
+ * (editable in Settings → Storage). They are ignored; warn so operators
+ * remove them instead of assuming they still apply.
+ */
+export const DEPRECATED_ENV_VARS: { name: string; replacement: string }[] = [
+  { name: 'MEDIA_SPILLOVER_THRESHOLD_BYTES', replacement: 'Settings → Storage → Reserved free space' },
+].filter((entry) => process.env[entry.name] !== undefined && process.env[entry.name] !== '');
 
 export const isProduction = config.NODE_ENV === 'production';
