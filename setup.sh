@@ -152,10 +152,13 @@ write_env() {
   JWT_SECRET="$(prompt_secret "JWT secret (leave empty to generate)")"
   [[ -n "$JWT_SECRET" ]] || JWT_SECRET="$(generate_secret)"
 
-  TMDB_API_KEY="$(prompt "TMDb v3 API key")"
-  BOOTSTRAP_ADMIN_EMAIL="$(prompt "Initial admin email" "admin@example.com")"
-  BOOTSTRAP_ADMIN_PASSWORD="$(prompt_secret "Initial admin password")"
-  [[ -n "$BOOTSTRAP_ADMIN_PASSWORD" ]] || fail "Initial admin password is required."
+  TMDB_API_KEY="$(prompt "TMDb v3 API key (leave empty to enter it in the setup wizard)" "")"
+  BOOTSTRAP_ADMIN_EMAIL="$(prompt "Initial admin email (leave empty to create the admin in the browser)" "")"
+  BOOTSTRAP_ADMIN_PASSWORD=""
+  if [[ -n "$BOOTSTRAP_ADMIN_EMAIL" ]]; then
+    BOOTSTRAP_ADMIN_PASSWORD="$(prompt_secret "Initial admin password")"
+    [[ -n "$BOOTSTRAP_ADMIN_PASSWORD" ]] || fail "Initial admin password is required when an admin email is given."
+  fi
 
   TRANSMISSION_USER="$(prompt "Transmission username" "admin")"
   TRANSMISSION_PASS="$(prompt_secret "Transmission password (leave empty to generate)")"
@@ -164,13 +167,15 @@ write_env() {
   FLUX_IMAGE_TAG="$(prompt "Flux image tag" "latest")"
   FLUX_IMAGE_PREFIX="$(prompt "Flux image prefix" "ghcr.io/idkdeadxd/flux")"
 
-  local storage_root default_downloads default_extra
+  local storage_root default_media default_downloads default_extra
   storage_root="$(pwd)/storage"
+  default_media="$storage_root/media"
   default_downloads="$storage_root/downloads"
   default_extra="$storage_root/extra"
+  FLUX_MEDIA_PATH="$(prompt "Media library path (movies/ and tv/ are created inside it)" "$default_media")"
   FLUX_DOWNLOADS_PATH="$(prompt "Downloads storage path" "$default_downloads")"
-  FLUX_EXTRA_PATH="$(prompt "Extra media storage path" "$default_extra")"
-  mkdir -p "$FLUX_DOWNLOADS_PATH" "$FLUX_EXTRA_PATH" releases/android
+  FLUX_EXTRA_PATH="$(prompt "Second media drive path (optional, spill-over)" "$default_extra")"
+  mkdir -p "$FLUX_MEDIA_PATH/movies" "$FLUX_MEDIA_PATH/tv" "$FLUX_DOWNLOADS_PATH" "$FLUX_EXTRA_PATH" releases/android
 
   : >"$ENV_FILE"
   write_env_var POSTGRES_USER "flux"
@@ -205,6 +210,7 @@ write_env() {
   printf '\n' >>"$ENV_FILE"
   write_env_var FLUX_IMAGE_PREFIX "$FLUX_IMAGE_PREFIX"
   write_env_var FLUX_IMAGE_TAG "$FLUX_IMAGE_TAG"
+  write_env_var FLUX_MEDIA_PATH "$FLUX_MEDIA_PATH"
   write_env_var FLUX_DOWNLOADS_PATH "$FLUX_DOWNLOADS_PATH"
   write_env_var FLUX_EXTRA_PATH "$FLUX_EXTRA_PATH"
   printf '\n' >>"$ENV_FILE"
@@ -226,6 +232,8 @@ main() {
   docker_compose -f "$COMPOSE_FILE" up -d
 
   info "Setup complete"
+  printf 'Open %s in a browser to finish setup: create the administrator, connect TMDb and check storage.
+' "$PUBLIC_ORIGIN"
   printf 'Flux should be reachable at: %s\n' "$PUBLIC_ORIGIN"
   printf 'Show service status with: docker compose -f %s ps\n' "$COMPOSE_FILE"
   printf 'Show backend logs with: docker compose -f %s logs -f backend\n' "$COMPOSE_FILE"

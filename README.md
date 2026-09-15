@@ -157,11 +157,11 @@ Edit `.env` and fill in the required values:
 
 | Variable | Purpose |
 |---|---|
-| `TMDB_API_KEY` | TMDb v3 API key |
 | `JWT_SECRET` | Long random string (`openssl rand -hex 48`) |
 | `POSTGRES_PASSWORD` | Strong database password |
-| `BOOTSTRAP_ADMIN_EMAIL` | Initial admin email |
-| `BOOTSTRAP_ADMIN_PASSWORD` | Initial admin password |
+| `FLUX_MEDIA_PATH` | Host folder for the library (`movies/` and `tv/` live inside it) |
+| `TMDB_API_KEY` | Optional — can be entered in the first-run wizard instead |
+| `BOOTSTRAP_ADMIN_EMAIL` / `_PASSWORD` | Optional — leave empty to create the administrator in the browser |
 | `FRONTEND_ORIGIN` | Public frontend URL (e.g. `https://flux.example.com`) |
 | `PUBLIC_API_BASE_URL` | Public backend URL for stream/cast URLs. Use the same public origin when nginx routes `/api` to the backend, or a backend-specific URL for split-domain installs. |
 
@@ -259,12 +259,19 @@ location /api/ {
 }
 ```
 
-### 7. First Login
+### 7. First Run
 
-Navigate to your frontend URL, sign in with the bootstrap admin credentials, then:
+Open the frontend URL. A fresh install lands in the setup wizard: create the
+administrator, name the server, review storage (reserved free space and how
+media spills over to a second drive), connect TMDb, choose how completed
+downloads are imported, and optionally index media already in the folders.
+Existing installs skip the wizard automatically.
+
+Afterwards:
 
 1. Create profiles via `/profiles`
 2. Generate invite codes via `/admin/invites`
+3. Link a Roku from the account menu → **Link a TV** (see `apps/roku/README.md`)
 
 ## Services
 
