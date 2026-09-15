@@ -26,9 +26,9 @@ export interface CastPlaybackClaims extends JwtClaims {
 }
 
 /** Sign a JWT for an account, optionally carrying an active profile. */
-export function signToken(claims: JwtClaims): string {
+export function signToken(claims: JwtClaims, expiresIn?: SignOptions['expiresIn']): string {
   const options: SignOptions = {
-    expiresIn: config.JWT_EXPIRES_IN as SignOptions['expiresIn'],
+    expiresIn: expiresIn ?? (config.JWT_EXPIRES_IN as SignOptions['expiresIn']),
   };
   // Pass a plain object copy so jsonwebtoken can attach iat/exp.
   return jwt.sign({ ...claims }, config.JWT_SECRET, options);

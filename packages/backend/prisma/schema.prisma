@@ -38,8 +38,104 @@ model User {
   invitesCreated Invite[]  @relation("InviteCreatedBy")
   invitedBy      Invite?   @relation("InviteUsedBy")
   auditEvents    AuditEvent[]
+  deviceSessions DeviceSession[]
+  deviceApprovals DeviceAuthorization[]
+  playbackSessions PlaybackSession[]
 
   @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Device link (TV clients such as Roku) + playback sessions
+// ─────────────────────────────────────────────────────────────
+
+/// A pending "enter this code on the web" authorization started by a TV
+/// client. The device code is stored hashed; the short user code is what a
+/// person types at /link. Expires quickly and is single-use.
+model DeviceAuthorization {
+  id                  String    @id @default(cuid())
+  deviceCodeHash      String    @unique
+  userCode            String    @unique
+  deviceId            String
+  deviceName          String
+  platform            String
+  appVersion          String
+  status              String    @default("PENDING") // PENDING | APPROVED | DENIED | CONSUMED
+  pollIntervalSeconds Int       @default(5)
+  lastPolledAt        DateTime?
+  expiresAt           DateTime
+  approvedById        String?
+  approvedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  approvedBy User? @relation(fields: [approvedById], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([approvedById])
+  @@map("device_authorizations")
+}
+
+/// A linked TV device. Holds the hashed refresh token; access tokens are
+/// short-lived JWTs that carry this session's id so revocation is immediate.
+model DeviceSession {
+  id               String    @id @default(cuid())
+  userId           String
+  deviceId         String
+  deviceName       String
+  platform         String
+  appVersion       String
+  refreshTokenHash String    @unique
+  refreshVersion   Int       @default(1)
+  activeProfileId  String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  revokedReason    String?
+  lastSeenAt       DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playbackSessions PlaybackSession[]
+
+  @@unique([userId, deviceId])
+  @@index([expiresAt])
+  @@index([userId, revokedAt])
+  @@map("device_sessions")
+}
+
+/// Server-side record of one playback run on a device client. Progress
+/// heartbeats update it (and WatchProgress); admins can see and end it.
+model PlaybackSession {
+  id                  String    @id @default(cuid())
+  accountId           String
+  profileId           String
+  deviceSessionId     String
+  mediaItemId         String
+  episodeId           String?
+  method              String    // direct | hls
+  contentType         String
+  audioStreamIndex    Int?
+  subtitleStreamIndex Int?
+  positionSeconds     Float     @default(0)
+  durationSeconds     Float?
+  state               String    @default("ACTIVE") // ACTIVE | PAUSED | BUFFERING | ENDED
+  expiresAt           DateTime
+  lastHeartbeatAt     DateTime  @default(now())
+  endedAt             DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  account       User          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  profile       Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  deviceSession DeviceSession @relation(fields: [deviceSessionId], references: [id], onDelete: Cascade)
+  mediaItem     MediaItem     @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  episode       Episode?      @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@index([deviceSessionId, state])
+  @@index([profileId, updatedAt])
+  @@index([expiresAt])
+  @@map("playback_sessions")
 }
 
 model AuditEvent {
@@ -73,6 +169,7 @@ model Profile {
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   watchProgress  WatchProgress[]
   requests       Request[]
+  playbackSessions PlaybackSession[]
 
   @@index([userId])
   @@map("profiles")
@@ -127,6 +224,7 @@ model MediaItem {
   mediaStreams  MediaStream[]
   mediaInfo     MediaInfo?
   playbackMarkers PlaybackMarker[]
+  playbackSessions PlaybackSession[]
 
   @@unique([tmdbId, type])
   @@index([type])
@@ -150,6 +248,7 @@ model Episode {
   mediaInfo     MediaInfo?
   playbackMarkers PlaybackMarker[]
   mediaSegments MediaSegment[]
+  playbackSessions PlaybackSession[]
 
   @@unique([mediaItemId, season, episode])
   @@index([mediaItemId])

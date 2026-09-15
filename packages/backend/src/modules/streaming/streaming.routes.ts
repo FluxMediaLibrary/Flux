@@ -26,7 +26,7 @@ import { ApiError } from '../../lib/errors.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isValidCastSession } from '../../lib/cast-sessions.js';
 import { getServerSettings } from '../settings/settings.service.js';
 import { resolveHardwareAcceleration } from '../../lib/transcode-capabilities.js';
@@ -892,6 +892,45 @@ export const streamingRoutes: FastifyPluginAsync = async (
   );
 
   // ── GET /:mediaItemId/trickplay/:file — serve sprite sheets and VTT ─────────
+
+  // ── GET /:mediaItemId/subtitles/:index.vtt — extract an embedded text track ──
+  // Roku and Cast receivers can only load sidecar WebVTT, so text-based
+  // subtitle streams are converted once with FFmpeg and cached under the
+  // transcode root keyed by source path + stream index.
+  app.get(
+    '/:mediaItemId/subtitles/:file',
+    { preHandler: [app.requireProfileStream] },
+    async (request, reply) => {
+      const { mediaItemId, file } = request.params as { mediaItemId: string; file: string };
+      const { episodeId } = request.query as { episodeId?: string };
+      const match = file.match(/^(\d{1,3})\.vtt$/);
+      if (!match) throw ApiError.badRequest('Invalid subtitle asset', 'INVALID_SUBTITLE_ASSET');
+      const streamIndex = Number(match[1]);
+      const { filePath: sourceFile } = await getMediaFilePath(mediaItemId, episodeId);
+      const cacheDir = safeJoin(config.TRANSCODE_ROOT, 'subtitles');
+      const cacheKey = createHash('sha1').update(`${sourceFile}::${streamIndex}`).digest('hex');
+      const cachePath = safeJoin(cacheDir, `${cacheKey}.vtt`);
+      if (!fs.existsSync(cachePath)) {
+        await fs.promises.mkdir(cacheDir, { recursive: true });
+        const partial = `${cachePath}.partial`;
+        const ok = await new Promise<boolean>((resolve) => {
+          const proc = spawn('ffmpeg', ['-y', '-nostdin', '-v', 'error', '-i', sourceFile, '-map', `0:${streamIndex}`, '-f', 'webvtt', partial], { stdio: 'ignore' });
+          proc.on('error', () => resolve(false));
+          proc.on('exit', (code) => resolve(code === 0));
+        });
+        if (!ok) {
+          await fs.promises.rm(partial, { force: true }).catch(() => undefined);
+          throw ApiError.badRequest('This subtitle track cannot be converted to text', 'SUBTITLE_NOT_TEXT');
+        }
+        await fs.promises.rename(partial, cachePath);
+      }
+      receiverCors(reply);
+      return reply
+        .header('Content-Type', 'text/vtt; charset=utf-8')
+        .header('Cache-Control', 'private, max-age=86400')
+        .send(fs.createReadStream(cachePath));
+    },
+  );
 
   app.get(
     '/:mediaItemId/trickplay/:file',

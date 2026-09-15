@@ -26,6 +26,8 @@ import { appRoutes } from './modules/app/app.routes.js';
 import { clientRoutes } from './modules/client/client.routes.js';
 import { settingsRoutes } from './modules/settings/settings.routes.js';
 import { setupRoutes } from './modules/setup/setup.routes.js';
+import { deviceAuthRoutes, deviceManagementRoutes } from './modules/devices/device-auth.routes.js';
+import { rokuClientRoutes, rokuRoutes } from './modules/roku/roku.routes.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -57,6 +59,8 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(
     async (api) => {
       await api.register(authRoutes, { prefix: '/auth' });
+      await api.register(deviceAuthRoutes, { prefix: '/auth' });
+      await api.register(deviceManagementRoutes, { prefix: '/devices' });
       await api.register(setupRoutes, { prefix: '/setup' });
       await api.register(clientRoutes, { prefix: '/client' });
       await api.register(profileRoutes, { prefix: '/profiles' });
@@ -71,6 +75,8 @@ export async function buildServer(): Promise<FastifyInstance> {
       await api.register(appRoutes, { prefix: '/app' });
       await api.register(notificationRoutes, { prefix: '/notifications' });
       await api.register(settingsRoutes, { prefix: '/settings' });
+      await api.register(rokuRoutes, { prefix: '/roku' });
+      await api.register(rokuClientRoutes, { prefix: '/clients' });
       await api.register(adminRoutes, { prefix: '/admin' });
     },
     { prefix: '/api' },

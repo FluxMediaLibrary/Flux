@@ -155,6 +155,9 @@ export function Navbar() {
                 Change Flux server
               </button>
             )}
+            <button onClick={() => { setMenu(null); router.push('/link'); }}>
+              Link a TV
+            </button>
             <button onClick={() => { setMenu(null); switchProfile(); router.replace('/profiles'); }}>
               Switch profile
             </button>

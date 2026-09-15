@@ -1,0 +1,42 @@
+# Flux for Roku
+
+SceneGraph channel that plays a Flux library on Roku devices. Source lives in
+`src/`; `dist/` holds packaged zips (older releases were only ever kept as
+zips — `src/` was restored from `flux-roku-1.0.11.zip` and fixed up).
+
+## How it talks to the server
+
+| Step | Endpoint |
+|---|---|
+| Server check | `GET /api/client/bootstrap` (must report `rokuSupported`, `authentication.deviceLink`) |
+| Version / config | `GET /api/clients/roku/version`, `GET /api/clients/roku/config` |
+| Link the TV | `POST /api/auth/device` → show code → user approves at `<frontend>/link` → TV polls `POST /api/auth/device/status` |
+| Tokens | short-lived access JWT + refresh token, `POST /api/auth/refresh`, `POST /api/auth/logout` |
+| Profiles | `GET /api/roku/profiles`, `POST /api/roku/profiles/select` |
+| Content | `GET /api/roku/home`, `/library/movies`, `/library/shows`, `/search`, `/requests`, `/media/:id`, `/shows/:id/seasons/:n/episodes`, `/episodes/:id` |
+| Playback | `POST /api/roku/playback/resolve|progress|stop|refresh`, `GET /api/roku/playback/next` |
+
+Playback is decided on the server: MP4/MOV with H.264 (or HEVC on 4K models)
+and AAC/AC3/EAC3 audio direct-plays; everything else goes through Flux's HLS
+path with the same encoder settings the web player uses. Text subtitles are
+served as WebVTT sidecars. Progress heartbeats update the same watch history as
+web and mobile, so Continue Watching stays in sync.
+
+## Build and sideload
+
+```bash
+node apps/roku/package.mjs                    # → apps/roku/dist/flux-roku-<version>.zip
+ROKU_DEV_TARGET=192.168.1.50 ROKU_DEV_PASSWORD=xxxx node apps/roku/package.mjs --install
+```
+
+Enable Developer Mode on the Roku (Home ×3, Up ×2, Right, Left, Right, Left,
+Right) to get the sideload password. Bump `build_version` in `src/manifest`
+for every release and update `ROKU_CLIENT` in
+`packages/backend/src/modules/roku/roku.routes.ts` so the server can tell
+old channels to update.
+
+## Remote navigation
+
+Every screen handles Up/Down/Left/Right/OK/Back and always keeps something
+focused: rows → hero actions → navigation on Home; actions → seasons on
+Details; the player captures input and needs Back twice to exit.

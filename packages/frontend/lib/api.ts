@@ -45,6 +45,8 @@ import type {
   LibraryScanReportDTO,
   ResolveLibraryScanFileRequest,
   TranscodeDiagnosticsDTO,
+  PendingDeviceLinkDTO,
+  LinkedDeviceDTO,
   UpdateSettingsBundleRequest,
   SettingsTestResultDTO,
   DownloadClientDTO,
@@ -581,6 +583,23 @@ export const api = {
 
   cancelRequest(id: string) {
     return request<void>(`/api/requests/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
+  // Device link (TVs)
+  getPendingDeviceLink(code: string) {
+    return request<PendingDeviceLinkDTO>(`/api/devices/pending/${encodeURIComponent(code)}`);
+  },
+  approveDeviceLink(userCode: string) {
+    return request<PendingDeviceLinkDTO>('/api/devices/approve', { body: { userCode } });
+  },
+  denyDeviceLink(userCode: string) {
+    return request<void>('/api/devices/deny', { body: { userCode } });
+  },
+  listLinkedDevices(all = false) {
+    return request<LinkedDeviceDTO[]>(`/api/devices${all ? '?all=1' : ''}`);
+  },
+  revokeLinkedDevice(id: string) {
+    return request<void>(`/api/devices/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
 
   // Library import scan (admin)

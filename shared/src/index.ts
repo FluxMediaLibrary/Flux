@@ -68,6 +68,51 @@ export interface JwtClaims {
   role: Role;
   activeProfileId?: string;
   purpose?: 'account' | 'stream' | 'cast-playback';
+  /** Present on tokens issued to a linked TV device; revocation is checked per request. */
+  deviceSessionId?: string;
+}
+
+// ─── Device link (TV clients) ─────────────────────────────────────────────────
+
+export interface DeviceLinkStartDTO {
+  deviceCode: string;
+  userCode: string;
+  verificationUrl: string;
+  verificationUrlComplete: string;
+  expiresIn: number;
+  pollInterval: number;
+}
+
+export interface DeviceTokenPairDTO {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
+
+export type DeviceLinkStatusDTO =
+  | { state: 'pending'; pollInterval: number }
+  | { state: 'slow_down'; pollInterval: number }
+  | { state: 'denied' }
+  | { state: 'expired' }
+  | ({ state: 'approved'; account: AccountDTO } & DeviceTokenPairDTO);
+
+export interface PendingDeviceLinkDTO {
+  userCode: string;
+  deviceName: string;
+  platform: string;
+  appVersion: string;
+  expiresAt: string;
+}
+
+export interface LinkedDeviceDTO {
+  id: string;
+  deviceName: string;
+  platform: string;
+  appVersion: string;
+  accountEmail: string;
+  activeProfileId: string | null;
+  lastSeenAt: string;
+  createdAt: string;
 }
 
 export interface ClientBootstrapDTO {
@@ -83,6 +128,10 @@ export interface ClientBootstrapDTO {
     accentColor: string;
     backgroundColor: string;
   };
+  /** TV clients check these before offering device link. */
+  rokuSupported: boolean;
+  authentication: { deviceLink: boolean };
+  features: { requests: boolean; search: boolean };
 }
 
 export interface LoginRequest {
@@ -663,6 +712,19 @@ export type RequestStage =
   | 'AVAILABLE'
   | 'FAILED'
   | 'REJECTED';
+
+/** Human wording for a request stage, shared by web, TV and admin surfaces. */
+export function requestStageLabel(request: { stage: RequestStage; progress: number | null }): string {
+  switch (request.stage) {
+    case 'REQUESTED': return 'Requested';
+    case 'APPROVED': return 'Approved';
+    case 'DOWNLOADING': return request.progress != null ? `Downloading ${Math.round(request.progress * 100)}%` : 'Downloading';
+    case 'PROCESSING': return 'Processing';
+    case 'AVAILABLE': return 'In Library';
+    case 'FAILED': return 'Failed';
+    case 'REJECTED': return 'Rejected';
+  }
+}
 
 export interface RequestDTO {
   id: string;

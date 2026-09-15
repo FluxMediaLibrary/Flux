@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="SeasonScreen" extends="Group" initialFocus="episodes">
+  <interface>
+    <field id="mediaId" type="string" />
+    <field id="showTitle" type="string" onChange="renderHeader" />
+    <field id="season" type="integer" onChange="renderHeader" />
+    <field id="episodesData" type="array" onChange="renderEpisodes" />
+    <field id="episodeSelected" type="assocarray" alwaysNotify="true" />
+    <field id="backRequested" type="boolean" alwaysNotify="true" />
+    <field id="focusIndex" type="array" onChange="restoreFocus" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/screens/SeasonScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
+  <children>
+    <FluxBackground />
+    <Rectangle width="1920" height="270" color="#171A1F" opacity="0.74" />
+    <Poster uri="pkg:/images/logo.png" width="52" height="52" translation="[72,62]" loadDisplayMode="scaleToFit" />
+    <Label text="SEASON" width="500" height="32" translation="[144,62]" font="font:SmallBoldSystemFont" color="#60A5FA" />
+    <Label id="header" width="1500" height="65" translation="[72,138]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
+    <Label text="EPISODES" width="500" height="36" translation="[72,336]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
+    <Label id="empty" text="No episodes are available in this season." width="1300" height="70" translation="[72,414]" font="font:MediumSystemFont" color="#AAA9AA" visible="false" />
+    <MarkupList id="emptyActions" translation="[72,506]" itemComponentName="FluxActionItem" itemSize="[480,64]" numRows="1" drawFocusFeedback="false" visible="false" />
+    <RowList id="episodes" translation="[72,390]" numRows="1" rowLabelOffset="[[0,14]]" itemSize="[1776,438]" rowItemSize="[[248,372]]" rowItemSpacing="[[28,0]]" itemComponentName="MediaCard" showRowLabel="[false]" focusBitmapUri="pkg:/images/focus.9.png" />
+  </children>
+</component>

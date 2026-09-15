@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Shared television-safe canvas. Keep this first in every screen's child list. -->
+<component name="FluxBackground" extends="Group">
+  <children>
+    <Rectangle id="canvas" width="1920" height="1080" color="#0D0F12" />
+    <Rectangle width="1920" height="5" color="#3B82F6" opacity="0.82" />
+    <Rectangle width="1920" height="130" translation="[0,5]" color="#171A1F" opacity="0.44" />
+    <Rectangle width="1920" height="1" translation="[0,134]" color="#2A3447" opacity="0.72" />
+    <Rectangle width="5" height="1080" color="#3B82F6" opacity="0.2" />
+  </children>
+</component>

@@ -23,10 +23,13 @@ import type { AdminPermission, Role } from '@flux/shared';
 import { verifyToken, type CastPlaybackClaims } from '../lib/jwt.js';
 import { ApiError } from '../lib/errors.js';
 import { prisma } from '../lib/db.js';
+import { isDeviceSessionActive } from '../modules/devices/device-auth.service.js';
 
 export interface AuthedAccount {
   id: string;
   role: Role;
+  /** Set when the request comes from a linked TV device. */
+  deviceSessionId?: string;
 }
 
 declare module 'fastify' {
@@ -100,7 +103,11 @@ function applyClaims(request: FastifyRequest, token: string, allowMediaPurpose: 
   if (!allowMediaPurpose && ['stream', 'cast-playback'].includes(claims.purpose ?? '')) {
     throw ApiError.unauthorized('This token cannot access account APIs', 'TOKEN_PURPOSE_INVALID');
   }
-  request.account = { id: claims.sub, role: claims.role };
+  request.account = {
+    id: claims.sub,
+    role: claims.role,
+    ...(claims.deviceSessionId ? { deviceSessionId: claims.deviceSessionId } : {}),
+  };
   request.activeProfileId = claims.activeProfileId;
   if (claims.purpose === 'cast-playback') {
     const cast = claims as unknown as CastPlaybackClaims;
@@ -111,13 +118,16 @@ function applyClaims(request: FastifyRequest, token: string, allowMediaPurpose: 
   }
 }
 
-async function ensureAccountEnabled(accountId: string): Promise<void> {
-  const account = await prisma.user.findUnique({
-    where: { id: accountId },
-    select: { disabled: true },
-  });
+async function ensureAccountEnabled(accountId: string, deviceSessionId?: string): Promise<void> {
+  const [account, deviceOk] = await Promise.all([
+    prisma.user.findUnique({ where: { id: accountId }, select: { disabled: true } }),
+    deviceSessionId ? isDeviceSessionActive(deviceSessionId) : Promise.resolve(true),
+  ]);
   if (!account || account.disabled) {
     throw ApiError.forbidden('This account is disabled', 'ACCOUNT_DISABLED');
+  }
+  if (!deviceOk) {
+    throw ApiError.unauthorized('This device is no longer linked', 'DEVICE_SESSION_INVALID');
   }
 }
 
@@ -132,7 +142,7 @@ const authPlugin = fp(async (app: FastifyInstance) => {
     _reply: FastifyReply,
   ) => {
     authenticate(request);
-    await ensureAccountEnabled(request.account!.id);
+    await ensureAccountEnabled(request.account!.id, request.account!.deviceSessionId);
   };
 
   const requireAdmin: preHandlerHookHandler = async (
@@ -140,7 +150,7 @@ const authPlugin = fp(async (app: FastifyInstance) => {
     _reply: FastifyReply,
   ) => {
     authenticate(request);
-    await ensureAccountEnabled(request.account!.id);
+    await ensureAccountEnabled(request.account!.id, request.account!.deviceSessionId);
     if (request.account?.role !== 'ADMIN') {
       throw ApiError.forbidden('Admin role required');
     }
@@ -158,6 +168,9 @@ const authPlugin = fp(async (app: FastifyInstance) => {
     if (!account || account.disabled) {
       throw ApiError.forbidden('This account is disabled', 'ACCOUNT_DISABLED');
     }
+    if (request.account!.deviceSessionId && !(await isDeviceSessionActive(request.account!.deviceSessionId))) {
+      throw ApiError.unauthorized('This device is no longer linked', 'DEVICE_SESSION_INVALID');
+    }
     if (account.role !== 'ADMIN' && !account.permissions.includes(permission)) {
       throw ApiError.forbidden(`Permission required: ${permission}`, 'PERMISSION_REQUIRED');
     }
@@ -168,7 +181,7 @@ const authPlugin = fp(async (app: FastifyInstance) => {
     _reply: FastifyReply,
   ) => {
     authenticate(request);
-    await ensureAccountEnabled(request.account!.id);
+    await ensureAccountEnabled(request.account!.id, request.account!.deviceSessionId);
     if (!request.activeProfileId) {
       throw ApiError.forbidden(
         'No active profile selected. Activate a profile first.',

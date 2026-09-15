@@ -6185,3 +6185,18 @@ html { scroll-behavior: smooth; }
 /* Request lifecycle on title pages */
 .tmdb-request-state { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .tmdb-request-reason { display: block; width: 100%; color: var(--danger); font-size: 0.82rem; }
+
+/* Link a TV */
+.link-shell { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; }
+.link-card { width: 100%; max-width: 480px; background: var(--bg-elev); border: 1px solid var(--surface-border); border-radius: var(--radius); padding: 32px 28px; box-shadow: var(--shadow); }
+.link-form { display: grid; gap: 10px; }
+.link-label { font-size: 0.85rem; color: var(--text-muted); }
+.link-input { font-size: 1.6rem; letter-spacing: 0.18em; text-align: center; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; }
+.link-success { padding: 10px 12px; border-radius: var(--radius-sm); background: rgba(34,197,94,.12); color: #bbf7d0; margin-bottom: 14px; }
+.link-pending { display: grid; gap: 8px; }
+.link-devices { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--surface-border); }
+.link-devices h2 { font-size: 0.95rem; margin-bottom: 10px; }
+.link-devices ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.link-devices li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 10px; border-radius: var(--radius-sm); background: rgba(255,255,255,.03); }
+.link-devices li span { display: grid; gap: 2px; min-width: 0; }
+.link-devices li small { color: var(--text-dim); font-size: 0.78rem; }

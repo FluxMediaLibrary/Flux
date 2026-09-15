@@ -1,20 +1,11 @@
-import type { RequestDTO, RequestStage } from '@flux/shared';
+import { requestStageLabel, type RequestDTO, type RequestStage } from '@flux/shared';
 
 /**
- * One place for how a request's lifecycle is worded and coloured across the
- * browse grid, hero, title page and home rows.
+ * How a request's lifecycle is coloured across the browse grid, hero, title
+ * page and home rows. Wording comes from the shared contract so TV clients
+ * say the same thing.
  */
-export function requestStageLabel(request: Pick<RequestDTO, 'stage' | 'progress'>): string {
-  switch (request.stage) {
-    case 'REQUESTED': return 'Requested';
-    case 'APPROVED': return 'Approved';
-    case 'DOWNLOADING': return request.progress != null ? `Downloading ${Math.round(request.progress * 100)}%` : 'Downloading';
-    case 'PROCESSING': return 'Processing';
-    case 'AVAILABLE': return 'In Library';
-    case 'FAILED': return 'Failed';
-    case 'REJECTED': return 'Rejected';
-  }
-}
+export { requestStageLabel };
 
 export function requestStagePillClass(stage: RequestStage): string {
   switch (stage) {

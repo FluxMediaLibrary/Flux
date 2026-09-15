@@ -23,9 +23,12 @@ export const clientRoutes: FastifyPluginAsync = async (app) => {
       branding: {
         name: settings.serverName,
         logoUrl: new URL('/icon-512.png', settings.frontendUrl).toString(),
-        accentColor: '#8b5cf6',
+        accentColor: '#3b82f6',
         backgroundColor: '#0d0f12',
       },
+      rokuSupported: true,
+      authentication: { deviceLink: true },
+      features: { requests: true, search: true },
     };
   });
 };
