@@ -19,6 +19,8 @@ export interface NativeCastState {
   volume: number;
   muted: boolean;
   detail: string | null;
+  /** True while Android is re-establishing the receiver session after a network change or stall. */
+  reconnecting: boolean;
 }
 
 declare global {
@@ -59,6 +61,7 @@ const EMPTY_STATE: NativeCastState = {
   volume: 1,
   muted: false,
   detail: null,
+  reconnecting: false,
 };
 
 function finiteNumber(value: unknown, fallback: number): number {
@@ -101,9 +104,11 @@ function normalizeState(value: unknown, current: NativeCastState): NativeCastSta
   if (!value || typeof value !== 'object') return current;
   const input = value as Record<string, unknown>;
   const eventState = typeof input.state === 'string' ? input.state : '';
+  // 'suspended' (network drop) and 'recovering-stalled-playback' keep the
+  // session: Android resumes it on its own and follows up with 'connected'.
   const connected = typeof input.connected === 'boolean'
     ? input.connected
-    : ['connected', 'media-loaded', 'playback'].includes(eventState)
+    : ['connected', 'media-loaded', 'playback', 'loading-media', 'suspended', 'recovering-stalled-playback'].includes(eventState)
       ? true
       : ['disconnected', 'error'].includes(eventState)
         ? false
@@ -125,7 +130,8 @@ function normalizeState(value: unknown, current: NativeCastState): NativeCastSta
     deviceName: typeof input.deviceName === 'string' ? input.deviceName : current.deviceName,
     volume: Math.max(0, Math.min(1, finiteNumber(input.volume, current.volume))),
     muted: typeof input.muted === 'boolean' ? input.muted : current.muted,
-    detail: typeof input.detail === 'string' ? input.detail : current.detail,
+    detail: typeof input.detail === 'string' ? input.detail : eventState === 'connected' || eventState === 'playback' ? null : current.detail,
+    reconnecting: eventState === 'suspended' || eventState === 'recovering-stalled-playback',
   };
 }
 

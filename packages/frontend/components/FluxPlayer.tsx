@@ -1114,7 +1114,7 @@ function FluxPlayerChrome({
       {castRemoteActive && (
         <div className="fx-cast-remote-banner" role="status">
           <span>CASTING TO</span>
-          <strong>{nativeCast.state.deviceName ?? 'TV'}</strong>
+          <strong>{nativeCast.state.deviceName ?? 'TV'}{nativeCast.state.reconnecting ? ' · reconnecting…' : ''}</strong>
           <small>{castMediaCurrent ? nativeCast.state.title ?? title : title}{castMediaCurrent && nativeCast.state.subtitle ? ` · ${nativeCast.state.subtitle}` : ''}</small>
         </div>
       )}

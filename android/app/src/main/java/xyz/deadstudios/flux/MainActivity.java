@@ -7,6 +7,7 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.ConnectivityManager;
+import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.net.http.SslError;
@@ -86,6 +87,32 @@ public final class MainActivity extends AppCompatActivity {
 
     private CastContext castContext;
     private SessionManager sessionManager;
+    /**
+     * Network transitions (Wi-Fi drop, cellular hand-off, phone unlock) are the
+     * usual reason a Cast remote goes stale. When connectivity returns we
+     * re-sync the receiver state to the WebView and reload the page if it had
+     * failed, instead of leaving the user with a frozen remote.
+     */
+    private final ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
+        @Override public void onAvailable(@NonNull Network network) {
+            main.post(() -> {
+                Log.i(TAG, "Network available; re-syncing");
+                if (errorPanel.getVisibility() == View.VISIBLE) {
+                    loadStartUrl();
+                }
+                CastSession session = currentCastSession();
+                if (session != null) {
+                    observeRemoteMediaClient(session);
+                    notifyCastState("connected", "network-restored");
+                }
+            });
+        }
+        @Override public void onLost(@NonNull Network network) {
+            main.post(() -> {
+                if (currentCastSession() != null) notifyCastState("suspended", "network-lost");
+            });
+        }
+    };
     private NativePlaybackContext playbackContext;
     private NativePlaybackContext pendingCastContext;
     private NativePlaybackContext activeCastContext;
@@ -836,11 +863,35 @@ public final class MainActivity extends AppCompatActivity {
     protected void onStart() {
         super.onStart();
         if (sessionManager != null) sessionManager.addSessionManagerListener(castSessionListener, CastSession.class);
+        ConnectivityManager manager = getSystemService(ConnectivityManager.class);
+        if (manager != null) {
+            try {
+                manager.registerDefaultNetworkCallback(networkCallback);
+            } catch (Exception error) {
+                Log.w(TAG, "Network callback registration failed", error);
+            }
+        }
+        // Coming back from the background (or the lock screen): the receiver may
+        // have moved on without us. Re-attach and push the current state so the
+        // remote controls reflect what the TV is actually doing.
+        CastSession session = currentCastSession();
+        if (session != null) {
+            observeRemoteMediaClient(session);
+            notifyCastState("connected", "app-resumed");
+        }
     }
 
     @Override
     protected void onStop() {
         if (sessionManager != null) sessionManager.removeSessionManagerListener(castSessionListener, CastSession.class);
+        ConnectivityManager manager = getSystemService(ConnectivityManager.class);
+        if (manager != null) {
+            try {
+                manager.unregisterNetworkCallback(networkCallback);
+            } catch (Exception ignored) {
+                // Not registered (registration failed in onStart).
+            }
+        }
         super.onStop();
     }
 
@@ -849,11 +900,15 @@ public final class MainActivity extends AppCompatActivity {
         super.onResume();
         webView.onResume();
         UpdateManager.checkForUpdate(this, false);
+        if (currentCastSession() != null) publishCastPlaybackState();
     }
 
     @Override
     protected void onPause() {
-        webView.onPause();
+        // While casting, the WebView is the remote: keep its timers alive so
+        // progress heartbeats and receiver state keep flowing when the phone
+        // is locked. Local playback pauses via the normal WebView path.
+        if (currentCastSession() == null) webView.onPause();
         super.onPause();
     }
 
