@@ -15,13 +15,13 @@ Full record with rationale: `docs/OVERHAUL.md`. Driving spec:
 | Dependabot advisories | resolved, `npm audit` clean |
 | Transcode diagnostics + verified HW accel | done |
 | Request lifecycle stages + cancel | done, tested |
-| Roku: source restored (`apps/roku/src`), device link, `/api/roku/*` | done; **not sideloaded on a device yet** |
+| Roku: source restored (`apps/roku/src`), device link, `/api/roku/*` | done, API verified live; **not sideloaded on a device yet** |
 | Deployment (compose health checks, `FLUX_MEDIA_PATH`, preflight) | done |
 | Android Cast recovery | code done, compiles; **no signed release built** |
 | List-surface performance (media-lite projection + indexes) | done |
 | Categorised logging | done |
 | Web UI visual redesign | **not started** (see docs/OVERHAUL.md "Remaining work") |
-| Fresh install / upgrade end-to-end run in Docker | **not run** |
+| Fresh install end-to-end (clean Postgres/Redis, wizard, scan, direct/HLS play, Roku link + playback, revoke) | **done** — see docs/OVERHAUL.md Stage 11 |
 
 ## How to verify locally
 
@@ -37,14 +37,12 @@ New migrations (all additive/idempotent): `20260915000000_setup_and_storage_poli
 
 ## Next actions
 
-1. Run the stack in Docker from a clean `.env` (`./setup.sh`), walk the wizard,
-   scan a folder with a couple of movies, play one, check admin Storage/Playback.
-2. Sideload `node apps/roku/package.mjs` on a Roku, link it via `/link`, play
+1. Sideload `node apps/roku/package.mjs` on a Roku, link it via `/link`, play
    a movie and an episode, confirm Continue Watching updates on web.
-3. Build a signed Android release (`scripts/release-android.ps1`) with the Cast
+2. Build a signed Android release (`scripts/release-android.ps1`) with the Cast
    recovery changes; test lock/unlock and Wi-Fi drop while casting.
-4. UI pass per the master prompt (Phase 9/24/25) once a running stack is
-   available to look at.
+3. Further UI polish if wanted — screenshots of every page at 1440px and 400px
+   were reviewed; the member UI already matches the cinematic direction.
 
 ## Gotchas
 
@@ -53,5 +51,11 @@ New migrations (all additive/idempotent): `20260915000000_setup_and_storage_poli
   about a missing page.
 - `lib/redis.ts` uses `lazyConnect`; unit tests import backend modules with
   placeholder `DATABASE_URL`/`REDIS_URL`/`JWT_SECRET` env vars (see any `*.test.ts`).
+- Local dev stack used for validation: `docker run` postgres:16-alpine on
+  127.0.0.1:5433 and redis:7-alpine on 127.0.0.1:6380 (`flux-dev-pg`,
+  `flux-dev-redis`, started with `--rm`), backend via `tsx watch` with the env in
+  `<scratchpad>/fluxdata/dev.env`, frontend via `next dev -p 3000`.
+- `npm run prisma:generate` fails with EPERM while a backend is running (the
+  query engine DLL is locked); stop the dev backend first.
 - Heredocs containing `$$`/backslash-escapes are mangled by the shell tool on
   this machine; write patch scripts to files instead.

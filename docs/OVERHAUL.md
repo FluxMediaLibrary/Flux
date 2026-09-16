@@ -229,12 +229,32 @@ _(appended per stage below)_
 - `lib/logger.ts`: one categorised pino root shared with Fastify; console.*
   removed from the backend.
 
+### Stage 11 — fresh-install validation (live stack)
+
+Ran against a clean Postgres/Redis with no TMDb key and no bootstrap admin:
+wizard (admin creation, second admin rejected, settings, storage policy,
+invalid root rejected, TMDb key test/save, complete), library scan of generated
+files (Heat/Severance matched, unknown film left for manual match, rescan skips
+indexed files), direct play with range requests, forced HLS + transcode
+diagnostics, Roku device link (pending → approve → approved → replay expired),
+profiles, home/library/search/detail/season/episode, playback resolve (direct
+for MP4/H.264/AAC, HLS for MKV/HEVC/AC3 with a WebVTT sidecar), progress and
+stop syncing into web watch history and the admin dashboard, refresh-token
+rotation (old token rejected) and device revocation (token rejected at once).
+Every page was screenshotted at 1440px and 400px.
+
+Fixed along the way: null ratings (camelCase metadata keys), preferred-root
+path normalisation, title+year tie-break in the scan matcher, Linux-only
+device-node check, false "Could not reach the Flux API" banner (AbortError was
+being converted to a network error), SSE CORS on the admin live stream, and
+three admin layout overflows.
+
 ## Remaining work (not done in this pass)
 
-- **Web UI redesign (Phase 9/24/25):** no wholesale visual redesign was
-  attempted because it cannot be verified without a running stack; the member
-  UI already follows the Jellyfin-style direction. Candidates: consolidate the
-  6k-line `globals.css` into component-scoped files, replace `<img>` with a
+- **Web UI:** reviewed every page at desktop and phone widths; the member UI
+  already follows the cinematic/Jellyfin direction and the admin centre is
+  dense but coherent, so no wholesale restyle was done. Candidates: consolidate
+  the 6k-line `globals.css` into component-scoped files, replace `<img>` with a
   sized image helper, keyboard/focus audit of the player and search overlay.
 - **Library grid pagination/virtualisation:** payload is now light but still
   the whole library; add server paging + virtual grid for >5k items.
@@ -242,8 +262,9 @@ _(appended per stage below)_
   by reading every screen; it has not been sideloaded in this pass.
 - **Android release:** `MainActivity` compiles (`gradle :app:compileDebugJavaWithJavac`);
   a signed release has not been produced (needs the keystore workflow).
-- **Fresh-install / upgrade validation (Phase 30):** migrations are additive and
-  idempotent; an end-to-end run against Docker was not executed here.
+- **Upgrade validation from an older database:** migrations are additive and
+  idempotent and a fresh install was walked end to end; an in-place upgrade of a
+  populated production database has not been rehearsed.
 - **Admin sessions "terminate":** `PlaybackSession` rows exist for Roku; web
   heartbeats are still `WatchProgress` only.
 
