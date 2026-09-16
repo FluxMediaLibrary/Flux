@@ -20,14 +20,14 @@ Full record with rationale: `docs/OVERHAUL.md`. Driving spec:
 | Android Cast recovery | code done, compiles; **no signed release built** |
 | List-surface performance (media-lite projection + indexes) | done |
 | Categorised logging | done |
-| Web UI visual redesign | **not started** (see docs/OVERHAUL.md "Remaining work") |
+| Web UI | reviewed at desktop + phone widths, overflow/false-error fixes applied; no wholesale restyle (see docs/OVERHAUL.md) |
 | Fresh install end-to-end (clean Postgres/Redis, wizard, scan, direct/HLS play, Roku link + playback, revoke) | **done** — see docs/OVERHAUL.md Stage 11 |
 
 ## How to verify locally
 
 ```bash
 npm run typecheck && npm run lint
-npm test --workspace @flux/backend      # 50 tests
+npm test --workspace @flux/backend      # 51 tests
 npm test --workspace @flux/desktop
 cd packages/frontend && npx next build  # passes on Next 16.3.5
 ```
