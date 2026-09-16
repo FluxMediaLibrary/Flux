@@ -29,13 +29,13 @@ import {
 
 /** Bump when the Roku channel gains a feature the server must support. */
 export const ROKU_CLIENT = {
-  minimumVersion: '1.0.11',
-  latestVersion: '1.1.0',
+  minimumVersion: '1.1.0',
+  latestVersion: '1.2.0',
   minimumServerVersion: '0.1.0',
   releaseNotes: [
-    'Season episode lists load again.',
-    'Playback sessions appear in the Flux admin dashboard.',
-    'Text subtitles (SRT/ASS) can be shown on the TV.',
+    'Redesigned interface that matches the Flux web app.',
+    'Full-bleed artwork, larger posters and readable 10-foot typography.',
+    'Season episode lists load again; text subtitles can be shown on the TV.',
   ],
 };
 

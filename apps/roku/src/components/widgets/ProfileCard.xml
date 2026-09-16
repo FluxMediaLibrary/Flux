@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!-- Profile tile: 220x220 avatar (or initial on a coloured tile) + name. Footprint 220x290. -->
 <component name="ProfileCard" extends="Group">
   <interface>
     <field id="itemContent" type="node" onChange="render" />
@@ -7,10 +8,12 @@
   <script type="text/brightscript" uri="pkg:/components/widgets/ProfileCard.brs" />
   <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Rectangle id="focusBorder" width="272" height="272" translation="[14,-4]" color="#60A5FA" visible="false" />
-    <Rectangle width="260" height="260" translation="[20,2]" color="#171A1F" />
-    <Poster id="avatar" width="252" height="252" translation="[24,6]" loadDisplayMode="scaleToFill" />
-    <Label id="name" width="300" height="60" translation="[0,285]" horizAlign="center" font="font:LargeBoldSystemFont" color="#F4F4F5" />
+    <Group id="tile">
+      <Poster id="tileFill" uri="pkg:/images/card-lg.9.png" width="220" height="220" blendColor="#3B82F6" />
+      <Label id="initial" width="220" height="220" horizAlign="center" vertAlign="center" color="#FFFFFF" />
+      <Poster id="avatar" width="220" height="220" loadDisplayMode="scaleToFill" visible="false" />
+      <Poster id="focus" uri="pkg:/images/focus-ring.9.png" width="236" height="236" translation="[-8,-8]" visible="false" />
+    </Group>
+    <Label id="name" width="220" height="40" translation="[0,238]" horizAlign="center" color="#B4B6BC" />
   </children>
 </component>
-

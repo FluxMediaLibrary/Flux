@@ -15,17 +15,16 @@
   <script type="text/brightscript" uri="pkg:/components/controllers/BrowseController.brs" />
   <script type="text/brightscript" uri="pkg:/components/controllers/PlaybackController.brs" />
   <script type="text/brightscript" uri="pkg:/components/controllers/SettingsController.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <script type="text/brightscript" uri="pkg:/components/AppScene.brs" />
   <children>
     <FluxBackground id="background" />
     <Group id="contentHost" focusable="true" />
     <Group id="loadingOverlay" visible="false">
-      <Rectangle width="1920" height="1080" color="#0D0F12" opacity="0.84" />
-      <Rectangle id="loadingPanel" translation="[710,422]" width="500" height="236" color="#171A1F" />
-      <Rectangle translation="[710,422]" width="500" height="5" color="#3B82F6" />
-      <Label translation="[774,474]" width="372" height="42" text="Loading Flux" horizAlign="center" vertAlign="center" font="font:MediumBoldSystemFont" color="#F4F4F5" />
-      <Label translation="[774,524]" width="372" height="34" text="Connecting to your library" horizAlign="center" vertAlign="center" font="font:SmallSystemFont" color="#AAA9AA" />
-      <BusySpinner id="spinner" translation="[930,574]" uri="pkg:/images/spinner.png" visible="false" />
+      <Rectangle width="1920" height="1080" color="#0D0F12" opacity="0.55" />
+      <Poster id="loadingPanel" uri="pkg:/images/pill.9.png" width="300" height="64" translation="[810,508]" blendColor="#171A1F" />
+      <BusySpinner id="spinner" translation="[826,520]" uri="pkg:/images/spinner.png" visible="false" />
+      <Label id="loadingLabel" translation="[880,508]" width="210" height="64" text="Loading…" vertAlign="center" color="#F4F4F5" />
     </Group>
     <Timer id="startupWatchdog" repeat="false" duration="15" />
   </children>

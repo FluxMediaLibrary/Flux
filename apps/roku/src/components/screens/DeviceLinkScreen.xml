@@ -9,16 +9,29 @@
   <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
     <FluxBackground />
-    <Rectangle width="740" height="1080" color="#171A1F" opacity="0.76" />
-    <Poster uri="pkg:/images/logo.png" width="84" height="84" translation="[72,96]" loadDisplayMode="scaleToFit" />
-    <Label text="Link this&#10;Roku" width="540" height="150" translation="[72,246]" wrap="true" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
-    <Label id="instructions" width="540" height="160" translation="[72,468]" wrap="true" font="font:MediumSystemFont" color="#AAA9AA" />
-    <Label text="ENTER THIS CODE" width="900" height="36" translation="[868,220]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
-    <Rectangle width="860" height="240" translation="[868,278]" color="#171A1F" />
-    <Rectangle width="860" height="6" translation="[868,278]" color="#3B82F6" />
-    <Label id="userCode" width="860" height="150" translation="[868,326]" horizAlign="center" vertAlign="center" font="font:ExtraLargeBoldSystemFont" color="#60A5FA" />
-    <Label id="verificationUrl" width="860" height="100" translation="[868,588]" wrap="true" font="font:LargeBoldSystemFont" color="#F4F4F5" />
-    <MarkupList id="retryActions" translation="[868,774]" itemComponentName="FluxActionItem" itemSize="[420,72]" numRows="1" drawFocusFeedback="false" />
+    <Poster uri="pkg:/images/logo.png" width="56" height="56" translation="[96,60]" loadDisplayMode="scaleToFit" />
+    <Label id="brand" width="800" height="56" translation="[168,60]" vertAlign="center" color="#F4F4F5" />
+    <Group translation="[96,220]">
+      <Label id="stepOne" text="1" width="52" height="52" horizAlign="center" vertAlign="center" color="#FFFFFF" />
+      <Poster uri="pkg:/images/pill.9.png" width="52" height="52" blendColor="#3B82F6" opacity="0.25" />
+      <Label id="heading" text="Link this TV" width="900" height="72" translation="[76,-8]" color="#F4F4F5" />
+      <Label id="instructions" width="720" height="140" translation="[76,80]" wrap="true" color="#B4B6BC" />
+      <Label id="stepTwo" text="2" width="52" height="52" translation="[0,250]" horizAlign="center" vertAlign="center" color="#FFFFFF" />
+      <Poster uri="pkg:/images/pill.9.png" width="52" height="52" translation="[0,250]" blendColor="#3B82F6" opacity="0.25" />
+      <Label id="urlLead" text="On a phone or computer, open" width="720" height="34" translation="[76,258]" color="#B4B6BC" />
+      <Label id="verificationUrl" width="720" height="60" translation="[76,296]" wrap="true" color="#F4F4F5" />
+      <Label id="stepThree" text="3" width="52" height="52" translation="[0,420]" horizAlign="center" vertAlign="center" color="#FFFFFF" />
+      <Poster uri="pkg:/images/pill.9.png" width="52" height="52" translation="[0,420]" blendColor="#3B82F6" opacity="0.25" />
+      <Label id="codeLead" text="and enter this code" width="720" height="34" translation="[76,428]" color="#B4B6BC" />
+      <MarkupList id="retryActions" translation="[76,520]" itemComponentName="FluxButton" itemSize="[280,64]" numRows="1" drawFocusFeedback="false" />
+    </Group>
+    <Group translation="[1000,232]">
+      <Poster uri="pkg:/images/card-lg.9.png" width="824" height="420" blendColor="#171A1F" />
+      <Poster uri="pkg:/images/icon-tv.png" width="48" height="48" translation="[40,36]" blendColor="#60A5FA" />
+      <Label id="codeHeader" text="YOUR CODE" width="700" height="48" translation="[100,36]" vertAlign="center" color="#60A5FA" />
+      <Label id="userCode" width="824" height="180" translation="[0,110]" horizAlign="center" vertAlign="center" color="#F4F4F5" />
+      <Label id="expiry" width="824" height="40" translation="[0,320]" horizAlign="center" color="#7D8189" />
+    </Group>
+    <Label id="waiting" text="Waiting for approval…" width="824" height="40" translation="[1000,690]" horizAlign="center" color="#7D8189" />
   </children>
 </component>
-

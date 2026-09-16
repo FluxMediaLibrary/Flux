@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Pill button used inside MarkupGrid/MarkupList. The item ContentNode carries
+  `title`, optional `icon` (pkg:/ uri) and optional `primary` (bool).
+  Focused = accent fill + white text; primary unfocused = white fill;
+  otherwise raised surface.
+-->
+<component name="FluxButton" extends="Group">
+  <interface>
+    <field id="width" type="float" onChange="layout" />
+    <field id="height" type="float" onChange="layout" />
+    <field id="itemContent" type="node" onChange="render" />
+    <field id="focusPercent" type="float" onChange="renderFocus" />
+    <field id="listHasFocus" type="boolean" onChange="renderFocus" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxButton.brs" />
+  <children>
+    <Poster id="fill" uri="pkg:/images/pill.9.png" blendColor="#21262D" />
+    <Poster id="icon" width="28" height="28" visible="false" />
+    <Label id="title" vertAlign="center" horizAlign="center" color="#F4F4F5" />
+  </children>
+</component>

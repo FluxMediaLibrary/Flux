@@ -9,17 +9,23 @@
   <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
     <FluxBackground />
-    <Poster id="backdrop" width="1920" height="560" opacity="0.56" loadDisplayMode="scaleToFill" />
-    <Rectangle width="1920" height="560" color="#0D0F12" opacity="0.58" />
-    <Rectangle width="1920" height="1" translation="[0,560]" color="#2A3447" />
-    <Poster id="thumbnail" width="760" height="428" translation="[72,166]" loadDisplayMode="scaleToFill" />
-    <Rectangle width="760" height="428" translation="[72,166]" color="#2A3447" opacity="0.12" />
-    <Label id="showTitle" width="820" height="42" translation="[900,168]" font="font:MediumBoldSystemFont" color="#60A5FA" />
-    <Label id="title" width="850" height="100" translation="[896,214]" wrap="true" maxLines="2" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
-    <Label id="metadata" width="820" height="44" translation="[900,330]" font="font:MediumSystemFont" color="#AAA9AA" />
-    <Label id="overview" width="800" height="140" translation="[900,390]" wrap="true" maxLines="4" font="font:MediumSystemFont" color="#F4F4F5" />
-    <Label id="progress" width="1000" height="42" translation="[900,616]" font="font:SmallSystemFont" color="#AAA9AA" />
-    <Label id="availability" text="This episode is not currently available to play." width="900" height="58" translation="[900,676]" font="font:MediumBoldSystemFont" color="#F59E0B" visible="false" />
-    <MarkupGrid id="actions" translation="[72,662]" itemComponentName="FluxActionItem" itemSize="[310,62]" itemSpacing="[16,0]" numColumns="3" numRows="1" drawFocusFeedback="false" />
+    <Poster id="backdrop" width="1920" height="760" loadDisplayMode="scaleToFill" opacity="0.7" />
+    <Poster uri="pkg:/images/scrim-left.png" width="1500" height="760" loadDisplayMode="scaleToFill" />
+    <Poster uri="pkg:/images/scrim-bottom.png" width="1920" height="420" translation="[0,340]" loadDisplayMode="scaleToFill" />
+    <Rectangle width="1920" height="160" color="#0D0F12" opacity="0.4" />
+    <FluxTopBar id="topbar" />
+    <Group translation="[96,190]">
+      <Poster uri="pkg:/images/card-lg.9.png" width="600" height="338" blendColor="#171A1F" />
+      <Poster id="thumbnail" width="600" height="338" loadDisplayMode="scaleToFill" />
+      <Rectangle id="progressTrack" width="568" height="6" translation="[16,316]" color="#000000" opacity="0.55" visible="false" />
+      <Rectangle id="progressFill" width="0" height="6" translation="[16,316]" color="#3B82F6" visible="false" />
+    </Group>
+    <Label id="showTitle" width="1000" height="30" translation="[744,186]" color="#60A5FA" />
+    <Label id="title" width="1080" height="130" translation="[744,220]" wrap="true" maxLines="2" color="#F4F4F5" />
+    <Label id="metadata" width="1000" height="34" translation="[744,356]" color="#B4B6BC" />
+    <Label id="overview" width="1040" height="136" translation="[744,400]" wrap="true" maxLines="4" color="#D4D4D8" />
+    <Label id="progress" width="1000" height="30" translation="[744,548]" color="#7D8189" />
+    <MarkupGrid id="actions" translation="[744,596]" itemComponentName="FluxButton" itemSize="[260,64]" itemSpacing="[16,0]" numColumns="3" numRows="1" drawFocusFeedback="false" />
+    <Label id="availability" text="This episode is not available to play yet." width="1000" height="64" translation="[744,596]" vertAlign="center" color="#F59E0B" visible="false" />
   </children>
 </component>

@@ -19,15 +19,14 @@
   <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
     <FluxBackground />
-    <Poster id="logo" uri="pkg:/images/logo.png" width="48" height="48" translation="[72,38]" loadDisplayMode="scaleToFit" />
-    <Label id="header" width="920" height="52" translation="[138,42]" font="font:LargeBoldSystemFont" color="#F4F4F5" />
-    <Label id="status" width="420" height="34" translation="[1424,52]" horizAlign="right" font="font:SmallSystemFont" color="#F59E0B" />
-    <Rectangle width="1776" height="1" translation="[72,108]" color="#2A3447" />
-    <Label text="EXPLORE" width="160" height="28" translation="[72,126]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
-    <MarkupGrid id="navigation" translation="[72,158]" itemComponentName="FluxActionItem" itemSize="[184,48]" itemSpacing="[14,0]" numColumns="9" numRows="1" drawFocusFeedback="false" />
-    <HeroBanner id="hero" translation="[72,238]" />
+    <HeroBanner id="hero" />
+    <FluxTopBar id="topbar" activeDestination="home" />
     <Timer id="heroTimer" repeat="true" duration="8" />
-    <Label id="empty" text="Your Flux library is ready for its first title. Add media on the server, then refresh this screen." width="1120" height="90" translation="[96,690]" wrap="true" font="font:MediumSystemFont" color="#AAA9AA" visible="false" />
-    <RowList id="rows" translation="[72,675]" numRows="1" rowLabelOffset="[[0,16]]" itemSize="[1776,438]" rowItemSize="[[248,372]]" rowItemSpacing="[[28,0]]" itemComponentName="MediaCard" showRowLabel="[true]" focusBitmapUri="pkg:/images/focus.9.png" />
+    <Group id="empty" visible="false" translation="[96,300]">
+      <Label width="1400" height="70" text="Your library is empty" color="#F4F4F5" id="emptyTitle" />
+      <Label width="1400" height="120" wrap="true" text="Add media on the Flux server — import a download or scan your media folders from the admin Library page — then press OK to refresh." color="#B4B6BC" translation="[0,80]" id="emptyBody" />
+      <MarkupList id="emptyActions" translation="[0,230]" itemComponentName="FluxButton" itemSize="[240,64]" numRows="1" drawFocusFeedback="false" />
+    </Group>
+    <RowList id="rows" translation="[96,640]" numRows="1" rowLabelOffset="[[0,10]]" itemSize="[1728,424]" rowItemSize="[[196,360],[392,300]]" rowItemSpacing="[[24,0],[24,0]]" itemComponentName="RailCard" rowLabelColor="#F4F4F5" showRowLabel="[true]" drawFocusFeedback="false" rowFocusAnimationStyle="fixedFocusWrap" />
   </children>
 </component>

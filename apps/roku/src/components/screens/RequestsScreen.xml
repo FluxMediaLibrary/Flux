@@ -9,13 +9,14 @@
   <script type="text/brightscript" uri="pkg:/source/Utils.brs" />
   <children>
     <FluxBackground />
-    <Rectangle width="604" height="1080" color="#171A1F" opacity="0.72" />
-    <Label text="Requests" width="470" height="70" translation="[72,120]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
-    <Label text="Availability, in one place." width="430" height="72" translation="[76,210]" wrap="true" font="font:LargeBoldSystemFont" color="#60A5FA" />
-    <Label text="Requests you make from Flux appear here as they move into your library." width="430" height="120" translation="[76,322]" wrap="true" font="font:MediumSystemFont" color="#AAA9AA" />
-    <Rectangle width="1250" height="1" translation="[604,164]" color="#2A3447" />
-    <Label text="YOUR QUEUE" width="700" height="36" translation="[682,100]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
-    <Label id="empty" text="No requests yet. Requests you make from Flux will appear here." width="1000" height="70" translation="[682,244]" font="font:MediumSystemFont" color="#AAA9AA" visible="false" />
-    <MarkupList id="requests" translation="[682,190]" itemComponentName="FluxActionItem" itemSize="[1080,88]" itemSpacing="[0,10]" numRows="8" drawFocusFeedback="false" />
+    <FluxTopBar id="topbar" />
+    <Label id="titleLabel" text="Requests" width="900" height="64" translation="[96,150]" color="#F4F4F5" />
+    <Label id="summary" width="1600" height="34" translation="[96,218]" color="#7D8189" />
+    <MarkupList id="requests" translation="[96,282]" itemComponentName="FluxListItem" itemSize="[1728,84]" itemSpacing="[0,8]" numRows="8" drawFocusFeedback="false" />
+    <Group id="emptyState" visible="false" translation="[96,300]">
+      <Label id="emptyTitle" width="1400" height="50" text="No requests yet" color="#F4F4F5" />
+      <Label id="emptyBody" width="1400" height="80" wrap="true" text="Request movies and series from the Flux web app or phone app. Their progress — approved, downloading, available — shows up here." color="#B4B6BC" translation="[0,54]" />
+      <MarkupList id="emptyActions" translation="[0,160]" itemComponentName="FluxButton" itemSize="[240,64]" numRows="1" drawFocusFeedback="false" />
+    </Group>
   </children>
 </component>

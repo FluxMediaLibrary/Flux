@@ -1,43 +1,48 @@
 sub init()
+    m.theme = FluxTheme()
     m.rows = m.top.findNode("rows")
-    m.navigation = m.top.findNode("navigation")
-    m.header = m.top.findNode("header")
+    m.topbar = m.top.findNode("topbar")
     m.hero = m.top.findNode("hero")
     m.heroTimer = m.top.findNode("heroTimer")
+    m.empty = m.top.findNode("empty")
+    m.emptyActions = m.top.findNode("emptyActions")
     m.heroIndex = 0
     m.heroInteracted = false
     m.rows.observeField("rowItemSelected", "onSelected")
     m.rows.observeField("rowItemFocused", "onFocused")
-    m.navigation.observeField("itemSelected", "onDestinationSelected")
+    m.topbar.observeField("destinationSelected", "onDestinationSelected")
     m.hero.observeField("actionSelected", "onHeroActionSelected")
     m.heroTimer.observeField("fire", "onHeroTimer")
+    m.emptyActions.observeField("itemSelected", "onEmptyAction")
+    m.top.findNode("emptyTitle").font = FluxFont(44, true)
+    m.top.findNode("emptyBody").font = FluxFont(26, false)
+    m.rows.rowLabelFont = FluxFont(30, true)
     renderNavigation()
 end sub
 
 sub renderNavigation()
-    navigation = CreateObject("roSGNode", "ContentNode")
-    destinations = ["Home", "Movies", "Shows", "Continue Watching"]
-    if m.top.requestsEnabled then destinations.Push("Requests")
-    destinations.Append(["Search", "Profiles", "Server", "Settings"])
-    for each destination in destinations
-        item = navigation.CreateChild("ContentNode")
-        item.title = destination
-        item.id = LCase(destination)
-    end for
-    m.navigation.content = navigation
+    destinations = [
+        { id: "home", title: "Home" },
+        { id: "movies", title: "Movies" },
+        { id: "shows", title: "Shows" },
+        { id: "search", title: "Search" }
+    ]
+    if m.top.requestsEnabled then destinations.Push({ id: "requests", title: "Requests" })
+    destinations.Push({ id: "settings", title: "Settings" })
+    m.topbar.destinations = destinations
 end sub
 
 sub renderHeader()
-    m.header.text = m.top.serverName
+    m.topbar.serverName = m.top.serverName
 end sub
 
 sub renderStatus()
-    m.top.findNode("status").text = m.top.homeStatus
+    m.topbar.contextLabel = m.top.homeStatus
+    if m.top.homeStatus <> "" then m.topbar.contextTone = "warning" else m.topbar.contextTone = "muted"
 end sub
 
 sub renderBranding()
     m.hero.accentColor = m.top.accentColor
-    if m.top.logoUrl <> invalid and m.top.logoUrl <> "" then m.top.findNode("logo").uri = m.top.logoUrl
 end sub
 
 sub renderHome()
@@ -45,6 +50,8 @@ sub renderHome()
     if m.top.homeData = invalid then return
     homeRows = m.top.homeData.rows
     if homeRows = invalid then homeRows = []
+    sizes = []
+    heights = []
     for each rowData in homeRows
         rowItems = rowData.items
         if rowItems = invalid then rowItems = []
@@ -52,24 +59,31 @@ sub renderHome()
         row = root.CreateChild("ContentNode")
         row.title = rowData.title
         row.id = rowData.id
+        wide = rowData.id = "continue-watching"
+        if wide
+            sizes.Push([392, 300])
+            heights.Push(364)
+        else
+            sizes.Push([196, 360])
+            heights.Push(424)
+        end if
         if rowData.error <> invalid
             item = row.CreateChild("ContentNode")
             item.id = "retry:" + rowData.id
             item.title = "Retry"
             item.description = rowData.error.message
             item.hdPosterUrl = "pkg:/images/placeholder-poster.png"
-            item.addFields({ retryRowId: rowData.id, mediaType: "retry", progress: invalid, watched: false, unplayedCount: invalid, parentMediaId: invalid, backdropUrl: "pkg:/images/placeholder-backdrop.png", subtitle: "Row unavailable", year: invalid, runtimeMinutes: invalid, contentRating: invalid, rating: invalid, genres: [], available: false })
+            item.addFields({ retryRowId: rowData.id, mediaType: "retry", progress: invalid, watched: false, unplayedCount: invalid, parentMediaId: invalid, backdropUrl: "pkg:/images/placeholder-backdrop.png", thumbnailUrl: "pkg:/images/placeholder-backdrop.png", subtitle: "Row unavailable", year: invalid, runtimeMinutes: invalid, contentRating: invalid, rating: invalid, genres: [], available: false })
         else
             for each media in rowItems
-                item = row.CreateChild("ContentNode")
-                item.id = media.id
-                item.title = media.title
-                item.description = media.overview
-                item.hdPosterUrl = FluxArtworkUrl(media, "poster", "pkg:/images/placeholder-poster.png")
-                item.addFields({ retryRowId: "", mediaType: media.mediaType, progress: media.progress, watched: media.watched, unplayedCount: media.unplayedCount, parentMediaId: media.parentMediaId, backdropUrl: FluxArtworkUrl(media, "backdrop", "pkg:/images/placeholder-backdrop.png"), subtitle: media.subtitle, year: media.year, runtimeMinutes: media.runtimeMinutes, contentRating: media.contentRating, rating: media.rating, genres: media.genres, available: media.available })
+                row.AppendChild(FluxContentFromCard(media))
             end for
         end if
     end for
+    if sizes.Count() > 0
+        m.rows.rowItemSize = sizes
+        m.rows.rowHeights = heights
+    end if
     m.rows.content = root
     hasContent = false
     firstRow = invalid
@@ -77,7 +91,7 @@ sub renderHome()
         firstRow = root.GetChild(0)
         if firstRow <> invalid and firstRow.GetChildCount() > 0 then hasContent = true
     end if
-    m.top.findNode("empty").visible = not hasContent
+    m.empty.visible = not hasContent
     m.rows.visible = hasContent
     m.hero.visible = hasContent
     if hasContent
@@ -89,8 +103,17 @@ sub renderHome()
         configureHeroRotation()
         m.rows.SetFocus(true)
     else
-        m.navigation.SetFocus(true)
+        actions = CreateObject("roSGNode", "ContentNode")
+        refresh = actions.CreateChild("ContentNode")
+        refresh.title = "Refresh"
+        refresh.addFields({ id: "home", icon: "", primary: true })
+        m.emptyActions.content = actions
+        m.emptyActions.SetFocus(true)
     end if
+end sub
+
+sub onEmptyAction()
+    m.top.destinationSelected = "home"
 end sub
 
 sub onFocused()
@@ -159,17 +182,21 @@ sub onSelected()
     m.top.mediaSelected = { id: item.id, mediaType: item.mediaType, parentMediaId: item.parentMediaId, focusIndex: indices }
 end sub
 
-sub onDestinationSelected()
-    if m.navigation.content = invalid then return
-    selected = m.navigation.content.GetChild(m.navigation.itemSelected)
-    if selected <> invalid then m.top.destinationSelected = selected.id
+sub onDestinationSelected(event as Object)
+    destination = event.GetData()
+    if destination = "home"
+        ' Already here: drop focus back into the rows.
+        if m.rows.visible then m.rows.SetFocus(true)
+        return
+    end if
+    m.top.destinationSelected = destination
 end sub
 
 sub focusContinueWatching()
     if not m.top.focusContinueWatching or m.rows.content = invalid then return
     for rowIndex = 0 to m.rows.content.GetChildCount() - 1
         row = m.rows.content.GetChild(rowIndex)
-        if row <> invalid and LCase(row.title) = "continue watching" and row.GetChildCount() > 0
+        if row <> invalid and row.id = "continue-watching" and row.GetChildCount() > 0
             m.rows.jumpToRowItem = [rowIndex, 0]
             m.rows.SetFocus(true)
             return
@@ -180,18 +207,32 @@ end sub
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if not press then return false
     pauseHeroRotation()
-    if key = "up" and m.rows.HasFocus() and m.hero.hasActions
-        m.hero.SetFocus(true)
-        return true
-    else if key = "up" and m.hero.IsInFocusChain()
-        m.navigation.SetFocus(true)
-        return true
-    else if key = "down" and m.navigation.IsInFocusChain() and m.hero.hasActions
-        m.hero.SetFocus(true)
-        return true
-    else if key = "down" and m.hero.IsInFocusChain()
-        m.rows.SetFocus(true)
-        return true
+    tabs = m.topbar.findNode("tabs")
+    if key = "up"
+        if m.rows.HasFocus() and m.rows.rowItemFocused.Count() = 2 and m.rows.rowItemFocused[0] = 0
+            if m.hero.hasActions then m.hero.SetFocus(true) else m.topbar.focusRequested = true
+            return true
+        else if m.hero.IsInFocusChain()
+            m.topbar.focusRequested = true
+            return true
+        else if m.emptyActions.HasFocus()
+            m.topbar.focusRequested = true
+            return true
+        end if
+    else if key = "down"
+        if tabs.HasFocus()
+            if m.hero.visible and m.hero.hasActions
+                m.hero.SetFocus(true)
+            else if m.rows.visible
+                m.rows.SetFocus(true)
+            else
+                m.emptyActions.SetFocus(true)
+            end if
+            return true
+        else if m.hero.IsInFocusChain()
+            m.rows.SetFocus(true)
+            return true
+        end if
     end if
     return false
 end function

@@ -1,5 +1,7 @@
 sub init()
-    m.top.observeField("focusedChild", "onFocus")
+    m.top.findNode("wordmark").font = FluxFont(48, true)
+    m.top.findNode("tagline").font = FluxFont(24, false)
+    m.top.findNode("barAnimation").control = "start"
     m.timer = CreateObject("roSGNode", "Timer")
     m.timer.repeat = false
     m.timer.duration = 10
@@ -7,12 +9,7 @@ sub init()
     m.timer.control = "start"
 end sub
 
-sub onFocus()
-    ' If focus lands here, the scene is alive
-end sub
-
 sub onSplashTimeout(event as Object)
     m.timer.control = "stop"
-    ' Signal parent that splash timed out
-    m.top.findNode("tagline").text = "Taking too long? Check your server connection."
+    m.top.findNode("tagline").text = "Still connecting… check that the server is reachable from this network"
 end sub

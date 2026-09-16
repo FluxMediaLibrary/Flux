@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Landscape card (392x221 still + text below). Footprint 392x300.
+  Used for seasons/episodes and the Continue Watching row.
+-->
+<component name="EpisodeCard" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="render" />
+    <field id="focusPercent" type="float" onChange="renderFocus" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/widgets/EpisodeCard.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
+  <children>
+    <Group id="art">
+      <Poster uri="pkg:/images/card.9.png" width="392" height="221" blendColor="#171A1F" />
+      <Poster id="still" width="392" height="221" loadDisplayMode="scaleToFill" />
+      <Poster id="dim" uri="pkg:/images/card.9.png" width="392" height="221" blendColor="#000000" opacity="0" />
+      <Group id="playHint" translation="[164,78]" visible="false">
+        <Poster uri="pkg:/images/pill.9.png" width="64" height="64" blendColor="#000000" opacity="0.55" />
+        <Poster uri="pkg:/images/icon-play.png" width="40" height="40" translation="[12,12]" blendColor="#FFFFFF" />
+      </Group>
+      <Group id="numberBadge" translation="[12,12]">
+        <Poster id="numberPill" uri="pkg:/images/pill.9.png" width="52" height="30" blendColor="#000000" opacity="0.6" />
+        <Label id="numberText" width="52" height="30" horizAlign="center" vertAlign="center" color="#FFFFFF" />
+      </Group>
+      <Group id="watchedBadge" translation="[350,12]" visible="false">
+        <Poster uri="pkg:/images/pill.9.png" width="30" height="30" blendColor="#22C55E" />
+        <Poster uri="pkg:/images/icon-check.png" width="20" height="20" translation="[5,5]" blendColor="#052E16" />
+      </Group>
+      <Rectangle id="progressTrack" width="368" height="6" translation="[12,203]" color="#000000" opacity="0.55" visible="false" />
+      <Rectangle id="progressFill" width="0" height="6" translation="[12,203]" color="#3B82F6" visible="false" />
+      <Poster id="focus" uri="pkg:/images/focus-ring.9.png" width="408" height="237" translation="[-8,-8]" visible="false" />
+    </Group>
+    <Label id="title" width="392" height="30" translation="[0,233]" color="#F4F4F5" />
+    <Label id="subtitle" width="392" height="26" translation="[0,263]" color="#7D8189" />
+  </children>
+</component>

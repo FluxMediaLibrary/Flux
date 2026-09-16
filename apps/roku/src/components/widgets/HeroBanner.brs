@@ -5,67 +5,70 @@ sub init()
     m.backdrop.observeField("loadStatus", "onBackdropLoadStatus")
     m.actions = m.top.findNode("actions")
     m.actions.observeField("itemSelected", "onActionSelected")
+    m.top.findNode("eyebrow").font = FluxFont(22, true)
+    m.top.findNode("title").font = FluxFont(64, true)
+    m.top.findNode("metadata").font = FluxFont(24, false)
+    m.top.findNode("overview").font = FluxFont(26, false)
 end sub
 
 sub renderHero()
     data = m.top.heroData
     if data = invalid then return
     backdropUrl = data.backdropUrl
-    if backdropUrl = invalid or backdropUrl = "" then backdropUrl = "pkg:/images/placeholder-backdrop.png"
-    m.backdrop.uri = backdropUrl
+    if backdropUrl = invalid or backdropUrl = "" then backdropUrl = m.backdropFallback
+    if m.backdrop.uri <> backdropUrl then m.backdrop.uri = backdropUrl
     m.top.findNode("title").text = data.title
-    m.top.findNode("overview").text = data.overview
+    overview = data.overview
+    if overview = invalid then overview = ""
+    m.top.findNode("overview").text = overview
     eyebrow = "FEATURED"
     if data.mediaType = "episode" then eyebrow = "CONTINUE WATCHING"
+    if data.mediaType = "retry" then eyebrow = "ROW UNAVAILABLE"
     m.top.findNode("eyebrow").text = eyebrow
-    metadata = ""
-    if data.year <> invalid then metadata = appendHeroMetadata(metadata, data.year.ToStr())
-    if data.contentRating <> invalid and data.contentRating <> "" then metadata = appendHeroMetadata(metadata, data.contentRating)
-    if data.runtimeMinutes <> invalid then metadata = appendHeroMetadata(metadata, data.runtimeMinutes.ToStr() + " min")
-    if data.rating <> invalid then metadata = appendHeroMetadata(metadata, FormatJson(data.rating) + "/10")
-    if data.genres <> invalid and data.genres.Count() > 0 then metadata = appendHeroMetadata(metadata, data.genres.Join(", "))
-    if metadata = "" and data.subtitle <> invalid then metadata = data.subtitle
-    if data.mediaType <> invalid then metadata = appendHeroMetadata(metadata, UCase(data.mediaType))
-    m.top.findNode("metadata").text = metadata
-    accent = m.top.accentColor
-    if accent = invalid then accent = m.theme.accent
-    m.top.findNode("accent").color = accent
-    m.top.findNode("progressFill").color = accent
 
-    hasProgress = data.progress <> invalid and data.progress.percent <> invalid and data.progress.percent > 0 and not data.progress.completed
+    parts = []
+    if data.year <> invalid then parts.Push(data.year.ToStr())
+    if data.contentRating <> invalid and data.contentRating <> "" then parts.Push(data.contentRating)
+    parts.Push(FluxRuntime(data.runtimeMinutes))
+    if data.rating <> invalid and data.rating > 0 then parts.Push(Left(FormatJson(data.rating), 3) + " / 10")
+    if data.genres <> invalid and data.genres.Count() > 0
+        genres = []
+        for each genre in data.genres
+            if genres.Count() >= 3 then exit for
+            genres.Push(genre)
+        end for
+        parts.Push(genres.Join(", "))
+    end if
+    if data.mediaType = "episode" and data.subtitle <> invalid then parts.Unshift(data.subtitle)
+    m.top.findNode("metadata").text = FluxJoinMeta(parts)
+    m.top.findNode("progressFill").color = m.top.accentColor
+
+    percent = FluxProgressPercent(data.progress)
+    hasProgress = percent > 0.01 and percent < 0.98
     m.top.findNode("progressTrack").visible = hasProgress
     m.top.findNode("progressFill").visible = hasProgress
-    if hasProgress
-        percent = data.progress.percent
-        if percent > 1 then percent = 1
-        m.top.findNode("progressFill").width = Int(650 * percent)
-    end if
+    if hasProgress then m.top.findNode("progressFill").width = Int(420 * percent)
 
     actions = CreateObject("roSGNode", "ContentNode")
     if data.available
         play = actions.CreateChild("ContentNode")
         if hasProgress then play.title = "Resume" else play.title = "Play"
-        play.addFields({ id: "play" })
+        play.addFields({ id: "play", icon: "pkg:/images/icon-play.png", primary: true })
     end if
     if data.mediaType <> "retry"
         details = actions.CreateChild("ContentNode")
         details.title = "Details"
-        details.addFields({ id: "details" })
+        details.addFields({ id: "details", icon: "", primary: false })
     end if
     m.actions.content = actions
+    if actions.GetChildCount() > 0 then m.actions.numColumns = actions.GetChildCount()
     m.top.hasActions = actions.GetChildCount() > 0
+    m.actions.visible = m.top.hasActions
 end sub
-
-function appendHeroMetadata(current as String, value as String) as String
-    if value = "" then return current
-    if current = "" then return value
-    return current + "  |  " + value
-end function
 
 sub onActionSelected()
     if m.actions.content = invalid then return
-    index = m.actions.itemSelected
-    item = m.actions.content.GetChild(index)
+    item = m.actions.content.GetChild(m.actions.itemSelected)
     if item = invalid then return
     m.top.actionSelected = { action: item.id, item: m.top.heroData }
 end sub

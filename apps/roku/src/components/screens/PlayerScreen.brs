@@ -24,6 +24,23 @@ sub init()
     m.exitTimer.observeField("fire", "clearExitControls")
     m.transportTimer.observeField("fire", "hideTransport")
     m.exitArmed = false
+    m.seekKnob = m.top.findNode("seekKnob")
+    m.playTitle = m.top.findNode("playTitle")
+    m.playSubtitle = m.top.findNode("playSubtitle")
+    m.playTitle.font = FluxFont(32, true)
+    m.playSubtitle.font = FluxFont(24, false)
+    m.currentTime.font = FluxFont(22, true)
+    m.durationTime.font = FluxFont(22, true)
+    m.top.findNode("transportHint").font = FluxFont(22, false)
+    m.top.findNode("bufferingLabel").font = FluxFont(24, true)
+    m.top.findNode("skipIntroLabel").font = FluxFont(26, true)
+    m.top.findNode("upNextEyebrow").font = FluxFont(20, true)
+    m.top.findNode("nextTitle").font = FluxFont(28, true)
+    m.top.findNode("nextSubtitle").font = FluxFont(22, false)
+    m.top.findNode("exitLabel").font = FluxFont(24, true)
+    for each id in ["playbackMenuTitle", "audioTitle", "subtitleTitle", "qualityTitle"]
+        m.top.findNode(id).font = FluxFont(30, true)
+    end for
     renderPlaybackOptions()
 end sub
 
@@ -62,6 +79,8 @@ sub startPlayback()
         if selectedSubtitleUrl <> "" then content.SubtitleConfig = { TrackName: selectedSubtitleUrl }
     end if
     m.video.content = content
+    m.playTitle.text = playback.title
+    if playback.subtitle <> invalid then m.playSubtitle.text = playback.subtitle else m.playSubtitle.text = ""
     if playback.method = "direct" then m.positionOffset = 0 else m.positionOffset = playback.positionSeconds
     m.video.control = "play"
     if playback.method = "direct" and playback.positionSeconds > 0 then m.video.seek = playback.positionSeconds
@@ -84,7 +103,9 @@ sub startPlayback()
             if track.channels <> invalid then label = label + " · " + track.channels.ToStr() + " ch"
             item.title = label
             item.id = track.index.ToStr()
-            item.addFields({ language: track.language })
+            value = ""
+            if track.selected = true then value = "Selected"
+            item.addFields({ language: track.language, value: value, detail: "" })
         end for
     end if
     m.audioTracks.content = audioContent
@@ -117,7 +138,8 @@ sub renderTransport()
         if percent < 0 then percent = 0
         if percent > 1 then percent = 1
     end if
-    m.seekFill.width = Int(1536 * percent)
+    m.seekFill.width = Int(1728 * percent)
+    m.seekKnob.translation = [96 + Int(1728 * percent) - 9, 934]
     m.currentTime.text = FormatTransportTime(position)
     if duration = invalid then m.durationTime.text = "--:--" else m.durationTime.text = FormatTransportTime(duration)
 end sub
@@ -146,6 +168,7 @@ sub renderPlaybackOptions()
         item = content.CreateChild("ContentNode")
         item.id = option.id
         item.title = option.title
+        item.addFields({ value: "", detail: "" })
     end for
     m.playbackOptions.content = content
 end sub
@@ -155,7 +178,7 @@ sub renderSubtitleTracks(playback as Object)
     off = content.CreateChild("ContentNode")
     off.id = "off"
     off.title = "Captions off"
-    off.addFields({ enabled: false, language: "" })
+    off.addFields({ enabled: false, language: "", value: "", detail: "" })
     if playback.subtitleTracks <> invalid
         for each track in playback.subtitleTracks
             if track.index = invalid then continue for
@@ -164,10 +187,11 @@ sub renderSubtitleTracks(playback as Object)
             if language = invalid or language = "" then language = "Undetermined"
             title = track.title
             if title = invalid or title = "" then title = language
-            if track.selected then title = title + " (Selected)"
+            value = ""
+            if track.selected then value = "Selected"
             item.id = track.index.ToStr()
             item.title = title
-            item.addFields({ enabled: true, language: language })
+            item.addFields({ enabled: true, language: language, value: value, detail: "" })
         end for
     end if
     m.subtitleTracks.content = content
@@ -178,9 +202,11 @@ sub renderQualityOptions()
     for each bitrate in [8000000, 20000000, 40000000]
         item = content.CreateChild("ContentNode")
         label = Int(bitrate / 1000000).ToStr() + " Mbps"
-        if bitrate = m.top.qualityPreference then label = label + " (Current)"
+        value = ""
+        if bitrate = m.top.qualityPreference then value = "Current"
         item.id = bitrate.ToStr()
         item.title = label
+        item.addFields({ value: value, detail: "" })
     end for
     m.qualityOptions.content = content
 end sub

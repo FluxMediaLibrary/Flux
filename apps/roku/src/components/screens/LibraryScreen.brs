@@ -1,17 +1,45 @@
 sub init()
+    m.theme = FluxTheme()
     m.items = m.top.findNode("items")
+    m.filters = m.top.findNode("filters")
+    m.topbar = m.top.findNode("topbar")
     m.titleLabel = m.top.findNode("titleLabel")
     m.pageLabel = m.top.findNode("pageLabel")
+    m.emptyState = m.top.findNode("emptyState")
+    m.emptyActions = m.top.findNode("emptyActions")
     m.items.observeField("itemSelected", "onSelected")
-    m.top.findNode("emptyActions").observeField("itemSelected", "onEmptyAction")
+    m.filters.observeField("itemSelected", "onFilterSelected")
+    m.emptyActions.observeField("itemSelected", "onEmptyAction")
+    m.titleLabel.font = FluxFont(52, true)
+    m.pageLabel.font = FluxFont(24, false)
+    m.top.findNode("emptyTitle").font = FluxFont(36, true)
+    m.top.findNode("emptyBody").font = FluxFont(26, false)
+    m.topbar.contextLabel = "* sort   ·   Replay watched   ·   Play genre"
+    renderFilters()
 end sub
 
 sub renderTitle()
     m.titleLabel.text = m.top.title
 end sub
 
-sub renderSort()
-    m.top.findNode("sortDisplay").text = "Sort: " + m.top.sortLabel + "  |  " + m.top.watchedLabel + "  |  " + m.top.genreLabel + "  (* sort, Replay watched, Play/Pause genre)"
+sub renderFilters()
+    content = CreateObject("roSGNode", "ContentNode")
+    entries = [
+        { id: "sort", title: "Sort: " + m.top.sortLabel },
+        { id: "watched", title: "Show: " + m.top.watchedLabel },
+        { id: "genre", title: "Genre: " + m.top.genreLabel }
+    ]
+    data = m.top.pageData
+    if data <> invalid and data.hasPrevious = true then entries.Push({ id: "prev", title: "Previous page" })
+    if data <> invalid and data.hasNext = true then entries.Push({ id: "next", title: "Next page" })
+    for each entry in entries
+        item = content.CreateChild("ContentNode")
+        item.id = entry.id
+        item.title = entry.title
+        item.addFields({ icon: "", primary: false })
+    end for
+    m.filters.content = content
+    m.filters.numColumns = content.GetChildCount()
 end sub
 
 sub renderItems()
@@ -19,40 +47,54 @@ sub renderItems()
     if data = invalid then return
     root = CreateObject("roSGNode", "ContentNode")
     for each media in data.items
-        item = root.CreateChild("ContentNode")
-        item.id = media.id
-        item.title = media.title
-        item.description = media.overview
-        item.hdPosterUrl = FluxArtworkUrl(media, "poster", "pkg:/images/placeholder-poster.png")
-        item.addFields({ mediaType: media.mediaType, parentMediaId: media.parentMediaId, progress: media.progress, watched: media.watched, unplayedCount: media.unplayedCount })
+        root.AppendChild(FluxContentFromCard(media))
     end for
     m.items.content = root
     empty = root.GetChildCount() = 0
     m.items.visible = not empty
-    m.top.findNode("empty").visible = empty
-    emptyActions = m.top.findNode("emptyActions")
-    emptyActions.visible = empty
+    m.emptyState.visible = empty
+    total = data.total
+    if total = invalid or total < 0 then total = 0
+    pageCount = data.totalPages
+    if pageCount = invalid or pageCount < 1 then pageCount = 1
+    page = data.page
+    if page = invalid or page < 1 then page = 1
+    label = total.ToStr() + " title"
+    if total <> 1 then label = label + "s"
+    if pageCount > 1 then label = label + "   ·   Page " + page.ToStr() + " of " + pageCount.ToStr()
+    m.pageLabel.text = label
+    renderFilters()
     if empty
         actions = CreateObject("roSGNode", "ContentNode")
         action = actions.CreateChild("ContentNode")
         action.title = "Back to Home"
-        emptyActions.content = actions
-        emptyActions.SetFocus(true)
+        action.addFields({ id: "back", icon: "", primary: true })
+        m.emptyActions.content = actions
+        m.emptyActions.SetFocus(true)
+    else
+        m.items.SetFocus(true)
     end if
-    total = data.total
-    if total = invalid or total < 0 then total = 0
-    limit = data.limit
-    if limit = invalid or limit <= 0 then limit = 1
-    page = data.page
-    if page = invalid or page < 1 then page = 1
-    pageCount = Int((total + limit - 1) / limit)
-    if pageCount < 1 then pageCount = 1
-    m.pageLabel.text = "Page " + page.ToStr() + " of " + pageCount.ToStr()
-    if not empty then m.items.SetFocus(true)
 end sub
 
 sub onEmptyAction()
     m.top.backRequested = true
+end sub
+
+sub onFilterSelected()
+    if m.filters.content = invalid then return
+    item = m.filters.content.GetChild(m.filters.itemSelected)
+    if item = invalid then return
+    if item.id = "sort"
+        m.top.sortRequested = true
+    else if item.id = "watched"
+        m.top.watchedRequested = true
+    else if item.id = "genre"
+        m.top.genreRequested = true
+    else if item.id = "prev"
+        m.top.pageChangeRequested = -1
+    else if item.id = "next"
+        m.top.pageChangeRequested = 1
+    end if
 end sub
 
 sub onSelected()
@@ -74,6 +116,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     focused = m.items.itemFocused
     itemCount = 0
     if m.items.content <> invalid then itemCount = m.items.content.GetChildCount()
+    tabs = m.topbar.findNode("tabs")
     if key = "options"
         m.top.sortRequested = true
         return true
@@ -83,10 +126,29 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     else if key = "play"
         m.top.genreRequested = true
         return true
-    else if key = "right" and m.top.pageData <> invalid and m.top.pageData.hasMore and focused >= itemCount - 1
+    else if key = "up"
+        if m.items.HasFocus() and focused < m.items.numColumns
+            m.filters.SetFocus(true)
+            return true
+        else if m.filters.HasFocus()
+            m.topbar.focusRequested = true
+            return true
+        else if m.emptyActions.HasFocus()
+            m.filters.SetFocus(true)
+            return true
+        end if
+    else if key = "down"
+        if tabs.HasFocus()
+            m.filters.SetFocus(true)
+            return true
+        else if m.filters.HasFocus()
+            if m.items.visible then m.items.SetFocus(true) else m.emptyActions.SetFocus(true)
+            return true
+        end if
+    else if key = "right" and m.items.HasFocus() and m.top.pageData <> invalid and m.top.pageData.hasNext = true and focused >= itemCount - 1
         m.top.pageChangeRequested = 1
         return true
-    else if key = "left" and m.top.pageData <> invalid and m.top.pageData.page > 1 and focused <= 0
+    else if key = "left" and m.items.HasFocus() and m.top.pageData <> invalid and m.top.pageData.page > 1 and focused <= 0
         m.top.pageChangeRequested = -1
         return true
     end if

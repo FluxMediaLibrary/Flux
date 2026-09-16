@@ -336,7 +336,13 @@ export async function rokuSeasonEpisodes(showId: string, season: number, profile
     season,
     episodes: episodes.map((episode) => {
       const card = episodeCard({ ...episode, mediaItem: show }, progressByEpisode.get(episode.id));
-      return { ...card, title: episode.title ?? `Episode ${episode.episode}`, subtitle: `Episode ${episode.episode}${episode.runtime ? ` · ${episode.runtime} min` : ''}` };
+      return {
+        ...card,
+        title: episode.title ?? `Episode ${episode.episode}`,
+        subtitle: `Episode ${episode.episode}${episode.runtime ? ` · ${episode.runtime} min` : ''}`,
+        seasonNumber: episode.season,
+        episodeNumber: episode.episode,
+      };
     }),
   };
 }

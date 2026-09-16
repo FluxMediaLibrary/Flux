@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Shared header: brand mark + server name on the left, section tabs in the
+  middle, a context label on the right. 100px tall, sits inside the title-safe
+  top margin. Tabs are a MarkupGrid so screens can focus/observe them.
+-->
+<component name="FluxTopBar" extends="Group">
+  <interface>
+    <field id="serverName" type="string" onChange="render" />
+    <field id="destinations" type="array" onChange="renderTabs" />
+    <field id="activeDestination" type="string" onChange="render" />
+    <field id="contextLabel" type="string" onChange="render" />
+    <field id="contextTone" type="string" value="muted" onChange="render" />
+    <field id="destinationSelected" type="string" alwaysNotify="true" />
+    <!-- Set true from a screen to move focus onto the active tab. -->
+    <field id="focusRequested" type="boolean" alwaysNotify="true" onChange="focusTabs" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTopBar.brs" />
+  <children>
+    <Poster uri="pkg:/images/logo.png" width="44" height="44" translation="[96,58]" loadDisplayMode="scaleToFit" />
+    <Label id="brand" translation="[154,52]" width="360" height="56" vertAlign="center" color="#F4F4F5" />
+    <MarkupGrid id="tabs" translation="[600,52]" itemComponentName="FluxNavItem" itemSize="[150,56]" itemSpacing="[8,0]" numColumns="7" numRows="1" drawFocusFeedback="false" />
+    <Label id="context" translation="[1324,52]" width="500" height="56" horizAlign="right" vertAlign="center" color="#7D8189" />
+  </children>
+</component>

@@ -47,5 +47,8 @@
   "dependencies": {
     "postcss": "8.5.28",
     "sharp": "0.35.4"
+  },
+  "devDependencies": {
+    "brighterscript": "^0.73.5"
   }
 }

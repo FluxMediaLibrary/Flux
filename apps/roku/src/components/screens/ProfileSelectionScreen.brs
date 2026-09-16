@@ -1,6 +1,9 @@
 sub init()
+    m.theme = FluxTheme()
     m.profileList = m.top.findNode("profileList")
     m.profileList.observeField("itemSelected", "onSelected")
+    m.top.findNode("heading").font = FluxFont(56, true)
+    m.top.findNode("sub").font = FluxFont(26, false)
 end sub
 
 sub renderProfiles()
@@ -17,6 +20,13 @@ sub renderProfiles()
         item.title = profileName
         if profile.avatarUrl <> invalid then item.hdPosterUrl = profile.avatarUrl
     end for
+    count = content.GetChildCount()
+    if count > 5 then count = 5
+    if count < 1 then count = 1
+    ' Centre the tiles: 220 wide, 56 gap.
+    width = count * 220 + (count - 1) * 56
+    m.profileList.translation = [(1920 - width) / 2, 480]
+    m.profileList.numColumns = count
     m.profileList.content = content
     if content.GetChildCount() > 0 then m.profileList.SetFocus(true)
 end sub

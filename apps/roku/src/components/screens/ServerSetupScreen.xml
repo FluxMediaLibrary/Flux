@@ -8,15 +8,17 @@
   <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
     <FluxBackground />
-    <Rectangle width="720" height="1080" color="#171A1F" opacity="0.76" />
-    <Poster uri="pkg:/images/logo.png" width="92" height="92" translation="[72,112]" loadDisplayMode="scaleToFit" />
-    <Label text="Connect&#10;to Flux" width="540" height="152" translation="[72,254]" wrap="true" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
-    <Label text="Your library.&#10;Every screen." width="540" height="100" translation="[72,456]" wrap="true" font="font:LargeBoldSystemFont" color="#60A5FA" />
-    <Label text="Connect this Roku to a local or public Flux server." width="540" height="100" translation="[72,614]" wrap="true" font="font:MediumSystemFont" color="#AAA9AA" />
-    <Label text="SERVER ADDRESS" width="780" height="36" translation="[834,204]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
-    <Rectangle width="900" height="440" translation="[834,252]" color="#171A1F" />
-    <MarkupList id="actions" translation="[870,304]" itemComponentName="FluxActionItem" itemSize="[828,72]" itemSpacing="[0,10]" numRows="2" drawFocusFeedback="false" />
-    <Label id="errorLabel" width="828" height="90" translation="[870,530]" wrap="true" font="font:SmallSystemFont" color="#EF4444" />
+    <Group translation="[96,220]">
+      <Poster uri="pkg:/images/logo.png" width="96" height="96" loadDisplayMode="scaleToFit" />
+      <Label id="heading" text="Connect to your Flux server" width="900" height="140" translation="[0,132]" wrap="true" maxLines="2" color="#F4F4F5" />
+      <Label id="lead" text="Flux is self-hosted. Enter the address you use to open it in a browser — a public domain such as https://flux.example.com or a home address such as http://192.168.1.20:4938." width="820" height="150" translation="[0,290]" wrap="true" color="#B4B6BC" />
+      <MarkupList id="actions" translation="[0,470]" itemComponentName="FluxButton" itemSize="[380,64]" itemSpacing="[0,14]" numRows="2" drawFocusFeedback="false" />
+      <Label id="errorLabel" width="820" height="90" translation="[0,630]" wrap="true" color="#EF4444" />
+    </Group>
+    <Group translation="[1060,260]">
+      <Poster uri="pkg:/images/card-lg.9.png" width="764" height="440" blendColor="#171A1F" />
+      <Label id="tipHeader" text="WHERE TO FIND IT" width="700" height="30" translation="[40,36]" color="#60A5FA" />
+      <Label id="tipBody" width="684" height="330" translation="[40,86]" wrap="true" color="#B4B6BC" text="Open Flux on a phone or computer and copy the address from the browser bar.&#10;&#10;An administrator can also see it under Settings → General → Frontend URL.&#10;&#10;The TV must be able to reach that address on this network." />
+    </Group>
   </children>
 </component>
-

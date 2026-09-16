@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Full-bleed hero: backdrop across the whole width, scrims fading into the
+  canvas so the copy on the left is legible and the rows below blend in.
+  Placed at y=0 by the Home screen; text starts below the top bar.
+-->
 <component name="HeroBanner" extends="Group" initialFocus="actions">
   <interface>
     <field id="heroData" type="assocarray" onChange="renderHero" />
@@ -9,18 +14,16 @@
   <script type="text/brightscript" uri="pkg:/components/widgets/HeroBanner.brs" />
   <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
-    <Rectangle width="1776" height="390" color="#171A1F" />
-    <Poster id="backdrop" width="1776" height="390" loadDisplayMode="scaleToFill" opacity="0.78" />
-    <Rectangle width="1010" height="390" color="#0D0F12" opacity="0.88" />
-    <Rectangle width="470" height="390" translation="[750,0]" color="#0D0F12" opacity="0.42" />
-    <Rectangle width="1776" height="1" translation="[0,389]" color="#2A3447" />
-    <Rectangle id="accent" width="7" height="250" translation="[58,70]" color="#3B82F6" />
-    <Label id="eyebrow" width="650" height="32" translation="[94,60]" font="font:SmallBoldSystemFont" color="#60A5FA" />
-    <Label id="title" width="850" height="82" translation="[94,96]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
-    <Label id="metadata" width="810" height="34" translation="[94,188]" font="font:SmallSystemFont" color="#AAA9AA" />
-    <Label id="overview" width="770" height="76" translation="[94,226]" wrap="true" maxLines="3" font="font:SmallSystemFont" color="#F4F4F5" />
-    <Rectangle id="progressTrack" width="650" height="7" translation="[94,308]" color="#2A3447" visible="false" />
-    <Rectangle id="progressFill" width="0" height="7" translation="[94,308]" color="#3B82F6" visible="false" />
-    <MarkupGrid id="actions" translation="[94,328]" itemComponentName="FluxActionItem" itemSize="[252,48]" itemSpacing="[12,0]" numColumns="3" numRows="1" drawFocusFeedback="false" />
+    <Poster id="backdrop" width="1920" height="720" loadDisplayMode="scaleToFill" opacity="0.9" />
+    <Poster uri="pkg:/images/scrim-left.png" width="1300" height="720" loadDisplayMode="scaleToFill" />
+    <Poster uri="pkg:/images/scrim-bottom.png" width="1920" height="380" translation="[0,340]" loadDisplayMode="scaleToFill" />
+    <Rectangle width="1920" height="180" translation="[0,0]" color="#0D0F12" opacity="0.35" />
+    <Label id="eyebrow" width="900" height="30" translation="[96,196]" color="#60A5FA" />
+    <Label id="title" width="980" height="130" translation="[96,232]" wrap="true" maxLines="2" color="#F4F4F5" />
+    <Label id="metadata" width="980" height="34" translation="[96,372]" color="#B4B6BC" />
+    <Label id="overview" width="880" height="96" translation="[96,418]" wrap="true" maxLines="3" color="#D4D4D8" />
+    <Rectangle id="progressTrack" width="420" height="6" translation="[96,532]" color="#2A2F37" visible="false" />
+    <Rectangle id="progressFill" width="0" height="6" translation="[96,532]" color="#3B82F6" visible="false" />
+    <MarkupGrid id="actions" translation="[96,556]" itemComponentName="FluxButton" itemSize="[220,64]" itemSpacing="[16,0]" numColumns="3" numRows="1" drawFocusFeedback="false" />
   </children>
 </component>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Full-width row for settings/menus: title left, optional `value` right,
+  optional `detail` under the title. Rounded raised surface when focused.
+-->
+<component name="FluxListItem" extends="Group">
+  <interface>
+    <field id="width" type="float" onChange="layout" />
+    <field id="height" type="float" onChange="layout" />
+    <field id="itemContent" type="node" onChange="render" />
+    <field id="focusPercent" type="float" onChange="renderFocus" />
+    <field id="listHasFocus" type="boolean" onChange="renderFocus" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxListItem.brs" />
+  <children>
+    <Poster id="fill" uri="pkg:/images/card.9.png" blendColor="#21262D" opacity="0" />
+    <Label id="title" color="#F4F4F5" />
+    <Label id="detail" color="#7D8189" visible="false" />
+    <Label id="value" color="#B4B6BC" horizAlign="right" />
+    <Poster id="chevron" uri="pkg:/images/icon-chevron.png" width="24" height="24" blendColor="#7D8189" visible="false" />
+  </children>
+</component>

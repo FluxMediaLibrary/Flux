@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Poster card (196x294 artwork + title below). Total footprint 196x360.
+  Badges: watched check (top-right), unplayed count (top-left), progress bar
+  along the poster's bottom edge. Focus = rounded ring + slight scale.
+-->
 <component name="MediaCard" extends="Group">
   <interface>
     <field id="itemContent" type="node" onChange="render" />
@@ -6,18 +11,24 @@
   </interface>
   <script type="text/brightscript" uri="pkg:/components/widgets/MediaCard.brs" />
   <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
-  <script type="text/brightscript" uri="pkg:/source/Utils.brs" />
   <children>
-    <Rectangle id="focus" width="260" height="384" translation="[-6,-6]" color="#60A5FA" visible="false" />
-    <Rectangle width="248" height="372" color="#171A1F" />
-    <Poster id="poster" width="248" height="372" loadDisplayMode="scaleToFill" />
-    <Rectangle id="watchedBadge" width="86" height="30" translation="[152,12]" color="#22C55E" visible="false" />
-    <Label id="watchedBadgeText" text="WATCHED" width="86" height="30" translation="[152,12]" horizAlign="center" vertAlign="center" font="font:SmallBoldSystemFont" color="#0D0F12" visible="false" />
-    <Rectangle id="countBadge" width="140" height="30" translation="[12,12]" color="#21262D" opacity="0.94" visible="false" />
-    <Label id="countBadgeText" width="140" height="30" translation="[12,12]" horizAlign="center" vertAlign="center" font="font:SmallBoldSystemFont" color="#F4F4F5" visible="false" />
-    <Rectangle width="248" height="86" translation="[0,286]" color="#0D0F12" opacity="0.9" />
-    <Label id="title" width="222" height="62" translation="[13,296]" wrap="true" maxLines="2" font="font:SmallBoldSystemFont" color="#F4F4F5" />
-    <Rectangle id="progressTrack" width="248" height="6" translation="[0,366]" color="#2A3447" visible="false" />
-    <Rectangle id="progressFill" width="0" height="6" translation="[0,366]" color="#3B82F6" visible="false" />
+    <Group id="art">
+      <Poster uri="pkg:/images/card.9.png" width="196" height="294" blendColor="#171A1F" />
+      <Poster id="poster" width="196" height="294" loadDisplayMode="scaleToFill" />
+      <Poster uri="pkg:/images/card.9.png" width="196" height="294" blendColor="#000000" opacity="0" id="dim" />
+      <Rectangle id="progressTrack" width="176" height="6" translation="[10,276]" color="#000000" opacity="0.55" visible="false" />
+      <Rectangle id="progressFill" width="0" height="6" translation="[10,276]" color="#3B82F6" visible="false" />
+      <Group id="watchedBadge" translation="[156,10]" visible="false">
+        <Poster uri="pkg:/images/pill.9.png" width="30" height="30" blendColor="#22C55E" />
+        <Poster uri="pkg:/images/icon-check.png" width="20" height="20" translation="[5,5]" blendColor="#052E16" />
+      </Group>
+      <Group id="countBadge" translation="[10,10]" visible="false">
+        <Poster id="countPill" uri="pkg:/images/pill.9.png" width="40" height="30" blendColor="#3B82F6" />
+        <Label id="countBadgeText" width="40" height="30" horizAlign="center" vertAlign="center" color="#FFFFFF" />
+      </Group>
+      <Poster id="focus" uri="pkg:/images/focus-ring.9.png" width="212" height="310" translation="[-8,-8]" visible="false" />
+    </Group>
+    <Label id="title" width="196" height="30" translation="[0,306]" color="#F4F4F5" />
+    <Label id="subtitle" width="196" height="26" translation="[0,336]" color="#7D8189" />
   </children>
 </component>

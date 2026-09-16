@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<component name="FluxActionItem" extends="Group">
+<!-- Top-bar tab: text with an accent underline when focused (matches the web navbar). -->
+<component name="FluxNavItem" extends="Group">
   <interface>
     <field id="width" type="float" onChange="layout" />
     <field id="height" type="float" onChange="layout" />
@@ -8,10 +9,9 @@
     <field id="listHasFocus" type="boolean" onChange="renderFocus" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
-  <script type="text/brightscript" uri="pkg:/components/widgets/FluxActionItem.brs" />
+  <script type="text/brightscript" uri="pkg:/components/widgets/FluxNavItem.brs" />
   <children>
-    <Rectangle id="surface" color="#171A1F" opacity="0" />
-    <Rectangle id="accent" width="4" color="#3B82F6" opacity="0" />
-    <Label id="title" translation="[22,0]" vertAlign="center" font="font:MediumBoldSystemFont" color="#AAA9AA" />
+    <Label id="title" vertAlign="center" horizAlign="center" color="#B4B6BC" />
+    <Rectangle id="underline" height="4" color="#3B82F6" opacity="0" />
   </children>
 </component>

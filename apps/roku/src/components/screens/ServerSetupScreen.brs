@@ -1,27 +1,28 @@
 sub init()
+    m.theme = FluxTheme()
     m.actions = m.top.findNode("actions")
     m.errorLabel = m.top.findNode("errorLabel")
+    m.top.findNode("heading").font = FluxFont(54, true)
+    m.top.findNode("lead").font = FluxFont(26, false)
+    m.top.findNode("tipHeader").font = FluxFont(22, true)
+    m.top.findNode("tipBody").font = FluxFont(24, false)
+    m.errorLabel.font = FluxFont(24, false)
     content = CreateObject("roSGNode", "ContentNode")
-    for each label in ["Enter server address", "How to find my server"]
-        item = content.CreateChild("ContentNode")
-        item.title = label
-    end for
+    enter = content.CreateChild("ContentNode")
+    enter.title = "Enter server address"
+    enter.addFields({ id: "enter", icon: "", primary: true })
     m.actions.content = content
     m.actions.observeField("itemSelected", "onActionSelected")
     m.actions.SetFocus(true)
 end sub
 
 sub onActionSelected()
-    if m.actions.itemSelected = 0
-        dialog = CreateObject("roSGNode", "KeyboardDialog")
-        dialog.title = "Flux server address"
-        dialog.text = "https://"
-        dialog.buttons = ["Connect", "Cancel"]
-        dialog.observeField("buttonSelected", "onKeyboardButton")
-        m.top.GetScene().dialog = dialog
-    else
-        m.errorLabel.text = "Use the public address configured by your Flux administrator, or an HTTP LAN address such as http://192.168.1.20:6948."
-    end if
+    dialog = CreateObject("roSGNode", "KeyboardDialog")
+    dialog.title = "Flux server address"
+    dialog.text = "https://"
+    dialog.buttons = ["Connect", "Cancel"]
+    dialog.observeField("buttonSelected", "onKeyboardButton")
+    m.top.GetScene().dialog = dialog
 end sub
 
 sub onKeyboardButton(event as Object)
@@ -29,8 +30,9 @@ sub onKeyboardButton(event as Object)
     if event.GetData() = 0
         normalized = NormalizeServerUrl(dialog.text)
         if normalized = ""
-            m.errorLabel.text = "Enter a complete HTTP or HTTPS server address."
+            m.errorLabel.text = "Enter a complete address starting with http:// or https://, without a path."
         else
+            m.errorLabel.text = ""
             m.top.serverSubmitted = normalized
         end if
     end if

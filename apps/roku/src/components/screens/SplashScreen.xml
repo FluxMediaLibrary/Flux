@@ -4,13 +4,13 @@
   <script type="text/brightscript" uri="pkg:/components/widgets/FluxTheme.brs" />
   <children>
     <FluxBackground />
-    <Rectangle width="610" height="1080" color="#171A1F" opacity="0.72" />
-    <Rectangle width="7" height="1080" color="#3B82F6" />
-    <Poster uri="pkg:/images/logo.png" width="144" height="144" translation="[72,188]" loadDisplayMode="scaleToFit" />
-    <Label text="FLUX" width="460" height="96" translation="[72,398]" font="font:ExtraLargeBoldSystemFont" color="#F4F4F5" />
-    <Label id="tagline" text="Your media. Your server." width="460" height="90" translation="[76,510]" wrap="true" font="font:LargeBoldSystemFont" color="#AAA9AA" />
-    <Label text="PREPARING YOUR LIBRARY" width="900" height="42" translation="[760,468]" font="font:SmallBoldSystemFont" color="#6B6B6C" />
-    <Rectangle width="900" height="3" translation="[760,542]" color="#2A3447" />
-    <Rectangle width="270" height="3" translation="[760,542]" color="#3B82F6" />
+    <Poster uri="pkg:/images/logo.png" width="120" height="120" translation="[900,380]" loadDisplayMode="scaleToFit" />
+    <Label id="wordmark" text="Flux" width="1920" height="70" translation="[0,520]" horizAlign="center" color="#F4F4F5" />
+    <Label id="tagline" text="Connecting to your library" width="1920" height="36" translation="[0,596]" horizAlign="center" color="#7D8189" />
+    <Rectangle width="320" height="4" translation="[800,660]" color="#21262D" />
+    <Rectangle id="bar" width="96" height="4" translation="[800,660]" color="#3B82F6" />
+    <Animation id="barAnimation" duration="1.4" repeat="true" easeFunction="linear">
+      <Vector2DFieldInterpolator key="[0.0, 1.0]" keyValue="[[800, 660], [1024, 660]]" fieldToInterp="bar.translation" />
+    </Animation>
   </children>
 </component>

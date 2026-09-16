@@ -19,6 +19,7 @@ sub init()
     m.libraryGenre = ""
     m.recentSearches = ReadRecentSearches()
     m.top.backgroundColor = "#0d0f12"
+    m.top.findNode("loadingLabel").font = FluxFont(24, true)
     LogEvent("info", "startup", "application_started", { version: AppVersion() })
     showScreen("SplashScreen")
     m.watchdog.observeField("fire", "onStartupTimeout")
