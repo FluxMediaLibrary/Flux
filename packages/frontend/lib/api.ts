@@ -158,7 +158,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       signal: options.signal,
       cache: 'no-store',
     });
-  } catch {
+  } catch (err) {
+    // A caller-initiated abort (route change, superseded filter, StrictMode
+    // effect re-run) is not a connectivity problem; let callers ignore it.
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
     throw new FluxApiError({
       error: 'NetworkError',
       message: 'Could not reach the Flux API. Is the backend running?',
@@ -212,7 +215,10 @@ async function uploadForm<T>(
       signal: options.signal,
       cache: 'no-store',
     });
-  } catch {
+  } catch (err) {
+    // A caller-initiated abort (route change, superseded filter, StrictMode
+    // effect re-run) is not a connectivity problem; let callers ignore it.
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
     throw new FluxApiError({
       error: 'NetworkError',
       message: 'Could not reach the Flux API. Is the backend running?',

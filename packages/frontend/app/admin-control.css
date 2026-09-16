@@ -641,3 +641,7 @@
 .settings-device-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,.03); }
 .settings-device-row > div { display: grid; gap: 2px; min-width: 0; }
 .settings-device-row small { color: var(--text-dim); font-size: 0.78rem; }
+
+/* Long filesystem paths in settings/storage cards */
+.settings-meta-grid strong code { display: block; font-size: 0.78rem; font-weight: 500; line-height: 1.4; word-break: break-all; }
+.control-storage-breakdown small.control-path { display: block; word-break: break-all; }

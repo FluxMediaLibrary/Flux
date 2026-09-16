@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { ADMIN_PERMISSIONS, type UpdateAdminUserRequest } from '@flux/shared';
 import { z } from 'zod';
 import { ApiError } from '../../lib/errors.js';
+import { config } from '../../config.js';
 import {
   analyzeMissingLibraryMedia,
   analyzeLibraryItem,
@@ -113,12 +114,19 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   });
 
   app.get('/events', { preHandler: [app.requirePermission('VIEW_SYSTEM')] }, async (request, reply) => {
+    // Hijacked replies skip @fastify/cors, so a split-origin deployment (or
+    // `next dev` against the API) must get the CORS headers here explicitly.
+    const origin = request.headers.origin;
+    const corsHeaders = origin && origin === config.FRONTEND_ORIGIN.replace(/\/$/, '')
+      ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Credentials': 'true', Vary: 'Origin' }
+      : {};
     reply.hijack();
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
+      ...corsHeaders,
     });
     let writing = false;
     const send = async () => {

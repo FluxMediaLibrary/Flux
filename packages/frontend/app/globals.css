@@ -1081,7 +1081,8 @@ table.data tr:last-child td {
 }
 .admin-repair-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  /* Title + two action buttons need ~340px before the title gets clipped. */
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
 }
 .admin-repair-item {
   display: grid;

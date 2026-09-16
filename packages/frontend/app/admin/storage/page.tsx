@@ -19,6 +19,12 @@ function roleLabel(volume: StorageVolumeDTO): { label: string; purpose: string }
   }
 }
 
+/** Last two path segments, enough to tell roots apart without the full mount path. */
+function lastSegments(value: string): string {
+  const parts = value.split(/[\\/]+/).filter(Boolean);
+  return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : value;
+}
+
 function healthTone(health: StorageVolumeDTO['health']): 'good' | 'warn' | 'bad' {
   if (health === 'HEALTHY') return 'good';
   if (health === 'WARNING') return 'warn';
@@ -116,7 +122,7 @@ export default function AdminStoragePage() {
             </div>
             <div className="control-panel control-storage-breakdown">
               <div><span>Reserved free space</span><strong>{overview.policy.reservedFreeSpaceGb} GB</strong><small>kept free on every volume</small></div>
-              <div><span>Placement</span><strong>{overview.policy.placementStrategy === 'MOST_FREE' ? 'Most free first' : 'Preferred first'}</strong><small>{overview.policy.preferredMediaRoot ?? 'no preferred root'}</small></div>
+              <div><span>Placement</span><strong>{overview.policy.placementStrategy === 'MOST_FREE' ? 'Most free first' : 'Preferred first'}</strong><small className="control-path" title={overview.policy.preferredMediaRoot ?? undefined}>{overview.policy.preferredMediaRoot ? lastSegments(overview.policy.preferredMediaRoot) : 'no preferred root'}</small></div>
               <div><span>Media roots</span><strong>{mediaRootCount}</strong><small>configured via MEDIA_ROOTS</small></div>
               <div><span>Broken files</span><strong>{info.library.brokenFiles}</strong><small>database paths missing</small></div>
               <div className="control-storage-breakdown-action"><Link className="control-button" href="/admin/settings?tab=storage">Edit storage policy</Link></div>
