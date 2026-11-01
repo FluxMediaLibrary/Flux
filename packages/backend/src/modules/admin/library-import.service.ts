@@ -2,9 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '../../config.js';
 import { prisma } from '../../lib/db.js';
-import { getDetail, search } from '../tmdb/tmdb.service.js';
+import { getDetail, searchForImport } from '../tmdb/tmdb.service.js';
 import { isVideoFile } from '../../lib/filename.js';
-import { parseFile, normalizeImportTitle as normalize, type Candidate } from './library-import-parser.js';
+import { parseFile, type Candidate } from './library-import-parser.js';
+
+import { selectImportMatch } from './library-import-match.js';
 
 type Kind = 'MOVIE' | 'SHOW';
 type Job = { id: string; root: string; kind: Kind; status: 'running' | 'done' | 'failed'; total: number; processed: number; imported: number; skipped: number; errors: string[] };
@@ -51,11 +53,20 @@ export async function previewFolder(root: string, kind: Kind) {
 }
 
 async function match(candidate: Candidate) {
-  const results = await search(candidate.title, candidate.kind === 'MOVIE' ? 'movie' : 'show');
-  // Never guess on a fuzzy match: matching name and year are required if supplied.
-  const possibilities = results.filter((result) => normalize(result.title) === normalize(candidate.title) && (candidate.year === null || result.year === candidate.year));
-  if (possibilities.length !== 1) return null;
-  return getDetail(candidate.kind, possibilities[0]!.tmdbId);
+  const results = await searchForImport(candidate.title, candidate.kind, candidate.year);
+  let selected = selectImportMatch(candidate.title, candidate.year, results);
+  const query = candidate.title.toLowerCase().replace(/\bpart\s+/g, '').replace(/\biii\b/g, '3').replace(/\bii\b/g, '2').replace(/\bvs\.?\b/g, 'v');
+  if (!selected && query !== candidate.title.toLowerCase()) {
+    results.push(...await searchForImport(query, candidate.kind, candidate.year));
+    selected = selectImportMatch(candidate.title, candidate.year, results);
+  }
+  if (!selected && results.length === 0 && candidate.year !== null) {
+    results.push(...await searchForImport(candidate.title, candidate.kind, null));
+    selected = selectImportMatch(candidate.title, candidate.year, results);
+  }
+  if (selected) return { detail: await getDetail(candidate.kind, selected.tmdbId), reason: '' };
+  const suggestions = results.slice(0, 5).map((result) => `${result.title} (${result.year ?? 'unknown year'}) [${result.tmdbId}]`).join('; ');
+  return { detail: null, reason: suggestions ? `No unambiguous title/year match. TMDb returned: ${suggestions}` : 'TMDb returned no results for this title/year' };
 }
 
 async function run(job: Job) {
@@ -73,10 +84,11 @@ async function run(job: Job) {
         }
         const key = `${candidate.kind}:${candidate.title}:${candidate.year}`;
         if (!cache.has(key)) cache.set(key, await match(candidate));
-        const detail = cache.get(key);
+        const matched = cache.get(key)!;
+        const detail = matched.detail;
         if (!detail) {
           job.skipped++;
-          if (job.errors.length < 30) job.errors.push(`${candidate.file}: No unique TMDb match for ${candidate.title}${candidate.year ? ` (${candidate.year})` : ''}`);
+          if (job.errors.length < 30) job.errors.push(`${candidate.file}: ${matched.reason}`);
           continue;
         }
         const common = {

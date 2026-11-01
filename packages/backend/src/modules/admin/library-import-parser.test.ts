@@ -40,6 +40,17 @@ test('specials and a root pointing directly at a show are recognized', () => {
   assert.equal(candidate?.episode, 1);
 });
 
+test('season folders with show names use the parent show title', () => {
+  for (const seasonFolder of ['s07 - Workaholics', 'Season 07 - Workaholics']) {
+    for (const filename of ['s07e08 - Termidate.mkv', '08 - Termidate.mkv']) {
+      const candidate = parseFile(root, path.join(root, 'Workaholics', seasonFolder, filename), 'SHOW');
+      assert.equal(candidate?.title, 'Workaholics');
+      assert.equal(candidate?.season, 7);
+      assert.equal(candidate?.episode, 8);
+    }
+  }
+});
+
 test('ambiguous episode names are not assigned invented season numbers', () => {
   assert.equal(parseFile(root, path.join(root, 'Example', '03.mkv'), 'SHOW'), null);
 });

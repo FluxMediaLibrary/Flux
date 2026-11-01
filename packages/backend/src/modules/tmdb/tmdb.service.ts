@@ -76,6 +76,8 @@ interface TmdbReviewRaw {
 }
 interface TmdbSearchItemRaw {
   id: number;
+  original_title?: string;
+  original_name?: string;
   media_type?: string; // present on multi search
   title?: string; // movie
   name?: string; // tv
@@ -273,6 +275,19 @@ async function annotateLibrary(
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
+
+export async function searchForImport(query: string, type: MediaType, year: number | null) {
+  const data = await tmdbFetch<TmdbSearchResponseRaw>(`/search/${tmdbPathSegment(type)}`, {
+    query,
+    ...(year === null ? {} : { [type === 'MOVIE' ? 'year' : 'first_air_date_year']: String(year) }),
+  });
+  return (data.results ?? []).map((raw) => ({
+    tmdbId: raw.id,
+    title: raw.title ?? raw.name ?? '',
+    originalTitle: raw.original_title ?? raw.original_name,
+    year: yearFromDate(raw.release_date ?? raw.first_air_date),
+  }));
+}
 
 export async function search(
   query: string,

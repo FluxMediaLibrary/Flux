@@ -21,7 +21,7 @@ export function parseFile(root: string, file: string, kind: Kind): Candidate | n
     return parsed.title ? { file, kind, ...parsed } : null;
   }
   const folders = relative.slice(0, -1);
-  const seasonIndex = folders.findIndex((part) => /^(?:season|s)[ ._-]*\d+$/i.test(part) || /^specials$/i.test(part));
+  const seasonIndex = folders.findIndex((part) => /^(?:season|s)[ ._-]*\d+(?:$|[ ._-])/i.test(part) || /^specials$/i.test(part));
   const seasonFolder = seasonIndex >= 0 ? folders[seasonIndex]! : null;
   const pair = basename.match(/(?:^|[^\p{L}\d])s(\d{1,2})[ ._-]*e(\d{1,3})(?!\d)/iu)
     ?? basename.match(/(?:^|[^\d])(\d{1,2})x(\d{1,3})(?!\d)/i)
