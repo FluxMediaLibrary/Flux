@@ -2,14 +2,16 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '../../config.js';
 import { prisma } from '../../lib/db.js';
+import { ApiError } from '../../lib/errors.js';
 import { getDetail, searchForImport } from '../tmdb/tmdb.service.js';
 import { isVideoFile } from '../../lib/filename.js';
 import { parseFile, type Candidate } from './library-import-parser.js';
 
 import { selectImportMatch } from './library-import-match.js';
+import { importLogPath, writeImportLog } from './library-import-log.js';
 
 type Kind = 'MOVIE' | 'SHOW';
-type Job = { id: string; root: string; kind: Kind; status: 'running' | 'done' | 'failed'; total: number; processed: number; imported: number; skipped: number; errors: string[] };
+type Job = { id: string; root: string; kind: Kind; status: 'running' | 'done' | 'failed'; total: number; processed: number; imported: number; skipped: number; errors: string[]; logPath: string; logError?: string };
 
 const jobs = new Map<string, Job>();
 let activeJob: string | null = null;
@@ -70,6 +72,13 @@ async function match(candidate: Candidate) {
 }
 
 async function run(job: Job) {
+  const entries: string[] = [];
+  let status: 'done' | 'failed' = 'done';
+  function skip(file: string, reason: string) {
+    job.skipped++;
+    if (job.errors.length < 30) job.errors.push(`${file}: ${reason}`);
+    entries.push(`SKIPPED ${JSON.stringify({ file, reason })}`);
+  }
   try {
     const files = await collectFiles(job.root);
     const candidates = files.map((file) => parseFile(job.root, file, job.kind));
@@ -78,8 +87,7 @@ async function run(job: Job) {
     for (const candidate of candidates) {
       try {
         if (!candidate) {
-          job.skipped++;
-          if (job.errors.length < 30) job.errors.push(`${files[job.processed]}: Could not recognize title or season/episode numbers`);
+          skip(files[job.processed]!, 'Could not recognize title or season/episode numbers');
           continue;
         }
         const key = `${candidate.kind}:${candidate.title}:${candidate.year}`;
@@ -87,8 +95,7 @@ async function run(job: Job) {
         const matched = cache.get(key)!;
         const detail = matched.detail;
         if (!detail) {
-          job.skipped++;
-          if (job.errors.length < 30) job.errors.push(`${candidate.file}: ${matched.reason}`);
+          skip(candidate.file, matched.reason);
           continue;
         }
         const common = {
@@ -102,7 +109,7 @@ async function run(job: Job) {
           update: {},
         });
         if (candidate.kind === 'MOVIE') {
-          if (item.filePath && item.filePath !== candidate.file) { job.skipped++; continue; }
+          if (item.filePath && item.filePath !== candidate.file) { skip(candidate.file, `Movie already has a different library path: ${item.filePath}`); continue; }
           if (!item.filePath) await prisma.mediaItem.update({ where: { id: item.id }, data: { filePath: candidate.file } });
         } else {
           const episode = await prisma.episode.upsert({
@@ -110,27 +117,37 @@ async function run(job: Job) {
             create: { mediaItemId: item.id, season: candidate.season!, episode: candidate.episode!, filePath: candidate.file },
             update: {},
           });
-          if (episode.filePath && episode.filePath !== candidate.file) { job.skipped++; continue; }
+          if (episode.filePath && episode.filePath !== candidate.file) { skip(candidate.file, `Episode already has a different library path: ${episode.filePath}`); continue; }
           if (!episode.filePath) await prisma.episode.update({ where: { id: episode.id }, data: { filePath: candidate.file } });
         }
         job.imported++;
+        entries.push(`IMPORTED ${JSON.stringify({ file: candidate.file, title: detail.title, year: detail.year, tmdbId: detail.tmdbId, season: candidate.season, episode: candidate.episode })}`);
       } catch (error) {
-        job.skipped++;
-        if (job.errors.length < 30) job.errors.push(`${candidate?.file ?? 'unknown'}: ${error instanceof Error ? error.message : 'Import failed'}`);
+        skip(candidate?.file ?? files[job.processed]!, error instanceof Error ? error.message : 'Import failed');
       } finally { job.processed++; }
     }
-    job.status = 'done';
   } catch (error) {
-    job.status = 'failed';
-    job.errors.push(error instanceof Error ? error.message : 'Import failed');
-  } finally { activeJob = null; }
+    status = 'failed';
+    const reason = error instanceof Error ? error.message : 'Import failed';
+    job.errors.push(reason);
+    entries.push(`FAILED ${JSON.stringify({ reason })}`);
+  } finally {
+    try {
+      await writeImportLog(job.logPath, { ...job, status }, entries);
+    } catch (error) {
+      job.logError = `Could not save import log: ${error instanceof Error ? error.message : 'Write failed'}`;
+      job.errors.push(job.logError);
+    }
+    job.status = status;
+    activeJob = null;
+  }
 }
 
 export async function startImport(root: string, kind: Kind) {
   const safeRoot = await allowedRoot(root);
   if (activeJob) throw new Error('Another library import is running');
   const id = crypto.randomUUID();
-  const job: Job = { id, root: safeRoot, kind, status: 'running', total: 0, processed: 0, imported: 0, skipped: 0, errors: [] };
+  const job: Job = { id, root: safeRoot, kind, status: 'running', total: 0, processed: 0, imported: 0, skipped: 0, errors: [], logPath: importLogPath(config.MEDIA_ROOTS[0]!, id) };
   jobs.set(id, job);
   if (jobs.size > 20) jobs.delete(jobs.keys().next().value!);
   activeJob = id;
@@ -139,3 +156,18 @@ export async function startImport(root: string, kind: Kind) {
 }
 
 export function getImportJob(id: string) { return jobs.get(id) ?? null; }
+
+export async function getImportLog(id: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    throw ApiError.badRequest('Invalid import job ID');
+  }
+  const job = jobs.get(id);
+  if (job?.status === 'running') throw ApiError.conflict('The import log will be ready when the import finishes');
+  if (job?.logError) throw ApiError.internal(job.logError);
+  try {
+    return await fs.readFile(importLogPath(config.MEDIA_ROOTS[0]!, id), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw ApiError.notFound('No log was saved for this import');
+    throw error;
+  }
+}

@@ -599,7 +599,16 @@ export const api = {
     return request<{ id: string }>('/api/admin/library/import/start', { method: 'POST', body: { root, kind } });
   },
   getImportJob(id: string) {
-    return request<{ id: string; status: 'running' | 'done' | 'failed'; total: number; processed: number; imported: number; skipped: number; errors: string[] }>(`/api/admin/library/import/jobs/${encodeURIComponent(id)}`);
+    return request<{ id: string; status: 'running' | 'done' | 'failed'; total: number; processed: number; imported: number; skipped: number; errors: string[]; logError?: string }>(`/api/admin/library/import/jobs/${encodeURIComponent(id)}`);
+  },
+  async downloadImportLog(id: string): Promise<Blob> {
+    const token = getToken();
+    const response = await fetch(`${BASE_URL}/api/admin/library/import/jobs/${encodeURIComponent(id)}/log`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      cache: 'no-store',
+    });
+    if (!response.ok) await handleResponse(response);
+    return response.blob();
   },
   syncAllAdminShowEpisodes() {
     return request<AdminBulkEpisodeSyncResultDTO>('/api/admin/library/sync-episodes', {

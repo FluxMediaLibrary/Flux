@@ -16,6 +16,8 @@ export default function ImportLibraryPage() {
   const [job, setJob] = useState<Job | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
 
   useEffect(() => {
     api.getImportFolders().then((result) => {
@@ -45,9 +47,30 @@ export default function ImportLibraryPage() {
     setBusy(true); setError('');
     try {
       const { id } = await api.startImport(preview.root, kind);
+      setDownloadError('');
       setJob(await api.getImportJob(id));
     } catch (err) { setError(err instanceof Error ? err.message : 'Import failed'); }
     finally { setBusy(false); }
+  }
+
+  async function downloadLog() {
+    if (!job || job.status === 'running' || downloading) return;
+    setDownloading(true); setDownloadError('');
+    try {
+      const blob = await api.downloadImportLog(job.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'dump.log';
+      document.body.appendChild(link);
+      try { link.click(); }
+      finally {
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : 'Log download failed');
+    } finally { setDownloading(false); }
   }
 
   return (
@@ -79,6 +102,13 @@ export default function ImportLibraryPage() {
         <h2>Import {job.status}</h2>
         <p>{job.processed.toLocaleString()} / {job.total.toLocaleString()} processed · {job.imported.toLocaleString()} imported · {job.skipped.toLocaleString()} skipped</p>
         <progress value={job.processed} max={Math.max(1, job.total)} style={{ width: '100%' }} />
+        {job.status !== 'running' && <div style={{ marginTop: 12 }}>
+          <button className="btn" type="button" onClick={downloadLog} disabled={downloading || Boolean(job.logError)} aria-busy={downloading} style={{ minHeight: 44, borderColor: 'var(--text-muted)' }}>
+            {downloading ? 'Downloading…' : 'Download dump.log'}
+          </button>
+          <p>Full log for this import, including every skipped file and its reason.</p>
+          {(downloadError || job.logError) && <p role="alert">{downloadError || job.logError}</p>}
+        </div>}
         {job.errors.length > 0 && <details><summary>Issues ({job.errors.length} shown)</summary><ul>{job.errors.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
       </section>}
     </main>

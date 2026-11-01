@@ -45,7 +45,7 @@ import {
   validateIntroScanTargets,
 } from '../media-segments/intro-jobs.service.js';
 import { prisma } from '../../lib/db.js';
-import { getImportJob, importFolders, previewFolder, startImport } from './library-import.service.js';
+import { getImportJob, getImportLog, importFolders, previewFolder, startImport } from './library-import.service.js';
 
 const updateUserSchema = z.object({
   role: z.enum(['ADMIN', 'MEMBER']).optional(),
@@ -109,6 +109,15 @@ export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     const job = getImportJob(id);
     if (!job) throw ApiError.notFound('Import job not found');
     return job;
+  });
+  app.get('/library/import/jobs/:id/log', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const log = await getImportLog(id);
+    return reply
+      .header('Content-Type', 'text/plain; charset=utf-8')
+      .header('Content-Disposition', 'attachment; filename="dump.log"')
+      .header('Cache-Control', 'no-store')
+      .send(log);
   });
   app.get('/overview', { preHandler: [app.requirePermission('VIEW_SYSTEM')] }, async () => {
     return getAdminOverview();
