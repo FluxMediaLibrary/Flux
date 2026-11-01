@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import type {
   AdminLibraryAcquisitionTargetDTO,
   AdminLibraryHealthDTO,
@@ -421,6 +422,7 @@ export default function AdminLibraryPage() {
     <div className="admin-library control-page">
       <PageHeader title="Library" description="File availability, episode coverage, metadata, and media analysis state." actions={
         <>
+          <Link href="/admin/library/import" className="control-button">Import folder</Link>
           <button
             type="button"
             className="control-button"

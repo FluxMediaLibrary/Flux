@@ -589,6 +589,18 @@ export const api = {
   getAdminLibrary() {
     return request<AdminLibraryHealthDTO>('/api/admin/library');
   },
+  getImportFolders() {
+    return request<{ folders: string[] }>('/api/admin/library/import/folders');
+  },
+  previewImport(root: string, kind: 'MOVIE' | 'SHOW') {
+    return request<{ root: string; files: number; recognized: number; sample: Array<{ file: string; title: string; year: number | null; season?: number; episode?: number }> }>('/api/admin/library/import/preview', { method: 'POST', body: { root, kind } });
+  },
+  startImport(root: string, kind: 'MOVIE' | 'SHOW') {
+    return request<{ id: string }>('/api/admin/library/import/start', { method: 'POST', body: { root, kind } });
+  },
+  getImportJob(id: string) {
+    return request<{ id: string; status: 'running' | 'done' | 'failed'; total: number; processed: number; imported: number; skipped: number; errors: string[] }>(`/api/admin/library/import/jobs/${encodeURIComponent(id)}`);
+  },
   syncAllAdminShowEpisodes() {
     return request<AdminBulkEpisodeSyncResultDTO>('/api/admin/library/sync-episodes', {
       method: 'POST',

@@ -45,6 +45,7 @@ import {
   validateIntroScanTargets,
 } from '../media-segments/intro-jobs.service.js';
 import { prisma } from '../../lib/db.js';
+import { getImportJob, importFolders, previewFolder, startImport } from './library-import.service.js';
 
 const updateUserSchema = z.object({
   role: z.enum(['ADMIN', 'MEMBER']).optional(),
@@ -89,6 +90,26 @@ const queueIntroScansSchema = z.object({
 });
 
 export const adminRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
+  const importRequest = z.object({ root: z.string().min(1), kind: z.enum(['MOVIE', 'SHOW']) });
+
+  app.get('/library/import/folders', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async () => ({ folders: importFolders() }));
+
+  app.post('/library/import/preview', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const { root, kind } = importRequest.parse(request.body);
+    return previewFolder(root, kind);
+  });
+
+  app.post('/library/import/start', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const { root, kind } = importRequest.parse(request.body);
+    return startImport(root, kind);
+  });
+
+  app.get('/library/import/jobs/:id', { preHandler: [app.requirePermission('MANAGE_LIBRARY')] }, async (request) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const job = getImportJob(id);
+    if (!job) throw ApiError.notFound('Import job not found');
+    return job;
+  });
   app.get('/overview', { preHandler: [app.requirePermission('VIEW_SYSTEM')] }, async () => {
     return getAdminOverview();
   });
