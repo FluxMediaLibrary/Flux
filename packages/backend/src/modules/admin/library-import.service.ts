@@ -3,12 +3,12 @@ import path from 'node:path';
 import { config } from '../../config.js';
 import { prisma } from '../../lib/db.js';
 import { getDetail, search } from '../tmdb/tmdb.service.js';
+import { isVideoFile } from '../../lib/filename.js';
+import { parseFile, normalizeImportTitle as normalize, type Candidate } from './library-import-parser.js';
 
 type Kind = 'MOVIE' | 'SHOW';
-type Candidate = { file: string; title: string; year: number | null; kind: Kind; season?: number; episode?: number };
 type Job = { id: string; root: string; kind: Kind; status: 'running' | 'done' | 'failed'; total: number; processed: number; imported: number; skipped: number; errors: string[] };
 
-const extensions = new Set(['.mkv', '.mp4', '.avi', '.mov', '.m4v', '.webm', '.ts']);
 const jobs = new Map<string, Job>();
 let activeJob: string | null = null;
 
@@ -36,37 +36,11 @@ async function collectFiles(root: string): Promise<string[]> {
       const full = path.join(directory, entry.name);
       if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) queue.push(full);
-      else if (entry.isFile() && extensions.has(path.extname(entry.name).toLowerCase())) files.push(full);
+      else if (entry.isFile() && isVideoFile(entry.name)) files.push(full);
       if (files.length + queue.length > 50_000) throw new Error('Folder contains too many entries for one import');
     }
   }
   return files.sort();
-}
-
-function titleYear(input: string): { title: string; year: number | null } {
-  const clean = input.replace(/\{[^}]*\}/g, '').replace(/\[[^\]]*\]/g, '').trim();
-  const yearMatch = clean.match(/\((19\d{2}|20\d{2})\)/);
-  return {
-    title: clean.slice(0, yearMatch?.index ?? clean.length).replace(/[._-]+/g, ' ').replace(/\s+/g, ' ').trim(),
-    year: yearMatch ? Number(yearMatch[1]) : null,
-  };
-}
-
-function parseFile(root: string, file: string, kind: Kind): Candidate | null {
-  if (kind === 'MOVIE') {
-    const parsed = titleYear(path.basename(file, path.extname(file)));
-    return parsed.title ? { file, kind, ...parsed } : null;
-  }
-  const relative = path.relative(root, file).split(path.sep);
-  if (relative.length < 3) return null;
-  const seasonName = relative.find((part) => /^season\s*\d+$/i.test(part));
-  const season = seasonName ? Number(seasonName.match(/\d+/)![0]) : null;
-  const basename = path.basename(file, path.extname(file));
-  const episodeMatch = basename.match(/S\d{1,2}E(\d{1,3})/i) ?? basename.match(/^(\d{1,3})(?:\s|[-._])/);
-  const episode = episodeMatch ? Number(episodeMatch[1]) : null;
-  if (season === null || episode === null || !Number.isInteger(episode) || episode > 999) return null;
-  const parsed = titleYear(relative[0]!);
-  return { file, kind, season, episode, ...parsed };
 }
 
 export async function previewFolder(root: string, kind: Kind) {
@@ -74,10 +48,6 @@ export async function previewFolder(root: string, kind: Kind) {
   const files = await collectFiles(safeRoot);
   const candidates = files.map((file) => parseFile(safeRoot, file, kind));
   return { root: safeRoot, files: files.length, recognized: candidates.filter(Boolean).length, sample: candidates.filter((item): item is Candidate => Boolean(item)).slice(0, 12).map((c) => ({ ...c, file: path.relative(safeRoot, c.file) })) };
-}
-
-function normalize(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 async function match(candidate: Candidate) {
@@ -96,11 +66,19 @@ async function run(job: Job) {
     const cache = new Map<string, Awaited<ReturnType<typeof match>>>();
     for (const candidate of candidates) {
       try {
-        if (!candidate) { job.skipped++; continue; }
+        if (!candidate) {
+          job.skipped++;
+          if (job.errors.length < 30) job.errors.push(`${files[job.processed]}: Could not recognize title or season/episode numbers`);
+          continue;
+        }
         const key = `${candidate.kind}:${candidate.title}:${candidate.year}`;
         if (!cache.has(key)) cache.set(key, await match(candidate));
         const detail = cache.get(key);
-        if (!detail) { job.skipped++; continue; }
+        if (!detail) {
+          job.skipped++;
+          if (job.errors.length < 30) job.errors.push(`${candidate.file}: No unique TMDb match for ${candidate.title}${candidate.year ? ` (${candidate.year})` : ''}`);
+          continue;
+        }
         const common = {
           title: detail.title, year: detail.year ?? null, overview: detail.overview,
           posterPath: detail.posterPath, backdropPath: detail.backdropPath, genres: detail.genres,
