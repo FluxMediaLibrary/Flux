@@ -1,12 +1,11 @@
 /**
  * Library path construction + path-traversal safety.
  *
- * Builds the on-disk library layout (spec §4.1.6):
- *   movies → {MEDIA_ROOT}/movies/Title (Year)/Title (Year).ext
- *   tv     → {MEDIA_ROOT}/tv/Show Name/Season 01/Show Name - S01E01.ext
+ * Builds the on-disk library layout using the configured movie and TV
+ * directories, with optional media-type subfolders.
  *
- * Every produced path is asserted to resolve INSIDE its configured root, so a
- * malicious title/episode value can never escape MEDIA_ROOTS.
+ * Every produced path is asserted to resolve inside its selected directory, so
+ * a malicious title/episode value cannot escape the configured library path.
  *
  * Supports multiple media roots (MEDIA_ROOTS env var, comma-separated).
  * New files are placed on the root with the most free space above the
@@ -16,12 +15,24 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { config } from '../config.js';
+import type { ServerSettings } from '@prisma/client';
 
 /** All resolved media root directories. */
 export const MEDIA_ROOTS = config.MEDIA_ROOTS.map((r) => path.resolve(r));
 
 /** Primary media root — fallback when spillover selection fails. */
 export const PRIMARY_MEDIA_ROOT = MEDIA_ROOTS[0]!;
+
+export type MediaPathSettings = Pick<ServerSettings, 'createMediaTypeSubfolders' | 'moviesDirectory' | 'tvDirectory'>;
+
+/** Configured roots used for admin storage reporting and safe media deletion. */
+export function getMediaStorageRoots(settings: MediaPathSettings): string[] {
+  return [...new Set([
+    ...MEDIA_ROOTS,
+    settings.moviesDirectory,
+    settings.tvDirectory,
+  ].filter(Boolean).map((root) => path.resolve(root)))];
+}
 
 /**
  * Try each media root in order to resolve a file path to an absolute path.
@@ -128,9 +139,12 @@ export async function moviePlacement(
   title: string,
   year: number | null,
   ext: string,
+  settings: MediaPathSettings,
 ): Promise<MoviePlacement> {
-  const root = await selectMediaRoot();
-  const moviesRoot = path.posix.join(root, 'movies');
+  const root = settings.moviesDirectory.trim()
+    ? path.resolve(settings.moviesDirectory)
+    : await selectMediaRoot();
+  const moviesRoot = settings.createMediaTypeSubfolders ? safeJoin(root, 'movies') : root;
   const label = year ? `${sanitizeSegment(title)} (${year})` : sanitizeSegment(title);
   const dir = safeJoin(moviesRoot, label);
   const file = safeJoin(dir, `${label}${ext}`);
@@ -152,9 +166,12 @@ export async function episodePlacement(
   season: number,
   episode: number,
   ext: string,
+  settings: MediaPathSettings,
 ): Promise<EpisodePlacement> {
-  const root = await selectMediaRoot();
-  const tvRoot = path.posix.join(root, 'tv');
+  const root = settings.tvDirectory.trim()
+    ? path.resolve(settings.tvDirectory)
+    : await selectMediaRoot();
+  const tvRoot = settings.createMediaTypeSubfolders ? safeJoin(root, 'tv') : root;
   const show = sanitizeSegment(showTitle);
   const showDir = safeJoin(tvRoot, show);
   const seasonDir = safeJoin(showDir, `Season ${pad2(season)}`);

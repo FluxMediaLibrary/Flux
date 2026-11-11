@@ -850,10 +850,17 @@ export interface IntegrationSettingsDTO {
   tmdbSource: 'DATABASE' | 'ENVIRONMENT';
 }
 
+export interface MediaSettingsDTO {
+  createMediaTypeSubfolders: boolean;
+  moviesDirectory: string;
+  tvDirectory: string;
+}
+
 export interface SettingsBundleDTO {
   general: GeneralSettingsDTO;
   downloads: DownloadSettingsDTO;
   playback: PlaybackSettingsDTO;
+  media: MediaSettingsDTO;
   notifications: NotificationSettingsDTO;
   integrations: IntegrationSettingsDTO;
 }
@@ -862,6 +869,7 @@ export interface UpdateSettingsBundleRequest {
   general?: Partial<GeneralSettingsDTO>;
   downloads?: Partial<DownloadSettingsDTO>;
   playback?: Partial<PlaybackSettingsDTO>;
+  media?: Partial<MediaSettingsDTO>;
   integrations?: { tmdbApiKey?: string | null };
 }
 

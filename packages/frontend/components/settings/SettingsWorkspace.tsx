@@ -15,7 +15,7 @@ import type {
 import { api, FluxApiError } from '@/lib/api';
 import { LoadingState, PageError, PageHeader } from '@/components/admin/AdminUI';
 
-type Tab = 'general' | 'downloads' | 'download-clients' | 'quality-profiles' | 'playback' | 'notifications' | 'integrations';
+type Tab = 'general' | 'downloads' | 'download-clients' | 'quality-profiles' | 'playback' | 'notifications' | 'integrations' | 'media';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'general', label: 'General' },
   { id: 'downloads', label: 'Downloads' },
@@ -24,6 +24,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'playback', label: 'Playback' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'integrations', label: 'Integrations' },
+  { id: 'media', label: 'Excited Name' },
 ];
 
 const EMPTY_CLIENT: SaveDownloadClientRequest = {
@@ -118,7 +119,8 @@ export function SettingsWorkspace() {
   const anyDirty = useMemo(() => {
     if (!draft || !original) return false;
     return !same(draft.general, original.general) || !same(draft.downloads, original.downloads)
-      || !same(draft.playback, original.playback) || !same(draft.notifications, original.notifications)
+      || !same(draft.playback, original.playback) || !same(draft.media, original.media)
+      || !same(draft.notifications, original.notifications)
       || Boolean(discordSecret || smtpSecret || tmdbSecret)
       || Boolean(clientEditor && !same(clientEditor, clientBaseline))
       || Boolean(profileEditor && !same(profileEditor, profileBaseline));
@@ -140,7 +142,7 @@ export function SettingsWorkspace() {
     window.history.pushState(null, '', `${pathname}?${params.toString()}`);
   }
 
-  function updateSection<K extends 'general' | 'downloads' | 'playback' | 'notifications'>(section: K, values: Partial<SettingsBundleDTO[K]>) {
+  function updateSection<K extends 'general' | 'downloads' | 'playback' | 'notifications' | 'media'>(section: K, values: Partial<SettingsBundleDTO[K]>) {
     setDraft((current) => current ? { ...current, [section]: { ...current[section], ...values } } : current);
   }
 
@@ -163,7 +165,7 @@ export function SettingsWorkspace() {
     if (!draft || hasValidationErrors) return;
     setSaving(true); setError(null); setNotice(null);
     try {
-      if (activeTab === 'general' || activeTab === 'downloads' || activeTab === 'playback') {
+      if (activeTab === 'general' || activeTab === 'downloads' || activeTab === 'playback' || activeTab === 'media') {
         const result = await api.updateSettings({ [activeTab]: draft[activeTab] });
         setOriginal(result); setDraft(result);
       } else if (activeTab === 'notifications') {
@@ -292,6 +294,7 @@ export function SettingsWorkspace() {
       {activeTab === 'download-clients' && <ClientsTab clients={clients} editor={clientEditor} setEditor={setClientEditor} edit={editClient} remove={removeClient} test={testClient} errors={clientEditor ? validateClient(clientEditor) : {}} busy={saving || testing} />}
       {activeTab === 'quality-profiles' && <ProfilesTab profiles={profiles} editor={profileEditor} setEditor={setProfileEditor} edit={editProfile} remove={removeProfile} errors={profileEditor ? validateProfile(profileEditor) : {}} testProfileId={testProfileId} setTestProfileId={setTestProfileId} releaseTitle={releaseTitle} setReleaseTitle={setReleaseTitle} releaseSize={releaseSize} setReleaseSize={setReleaseSize} runTest={runReleaseTest} result={releaseResult} busy={saving || testing} />}
       {activeTab === 'playback' && <PlaybackTab value={draft.playback} update={(values) => updateSection('playback', values)} errors={validation} />}
+      {activeTab === 'media' && <MediaTab value={draft.media} update={(values) => updateSection('media', values)} errors={validation} />}
       {activeTab === 'notifications' && <NotificationsTab value={draft.notifications} update={(values) => updateSection('notifications', values)} discordSecret={discordSecret} setDiscordSecret={setDiscordSecret} smtpSecret={smtpSecret} setSmtpSecret={setSmtpSecret} test={runNotificationTest} busy={testing} errors={validation} />}
       {activeTab === 'integrations' && <IntegrationsTab value={draft.integrations} secret={tmdbSecret} setSecret={setTmdbSecret} clear={clearTmdbKey} busy={saving} errors={validation} />}
 
@@ -338,6 +341,10 @@ function RuleEditor({ rules, onChange }: { rules: QualityRuleDTO[]; onChange: (r
   return <div className="settings-rules"><header><div><strong>Attribute rules</strong><span>Preferred rules may use positive or negative scores.</span></div><button className="control-button" onClick={() => onChange([...rules, { id: `rule-${Date.now()}`, attribute: '', kind: 'PREFERRED', score: 0 }])}>Add rule</button></header>{rules.length === 0 ? <p>No attribute rules.</p> : rules.map((rule, index) => <div className="settings-rule" key={rule.id}><input className="control-input" value={rule.attribute} onChange={(event) => updateRule(index, { attribute: event.target.value })} placeholder="Remux, Dolby Vision, CAM…" /><select className="control-select" value={rule.kind} onChange={(event) => updateRule(index, { kind: event.target.value as QualityRuleDTO['kind'] })}><option value="REQUIRED">Required</option><option value="PREFERRED">Preferred</option><option value="REJECTED">Rejected</option></select><input className="control-input score" type="number" disabled={rule.kind !== 'PREFERRED'} value={rule.score} onChange={(event) => updateRule(index, { score: Number(event.target.value) })} /><button className="control-button danger" aria-label={`Remove ${rule.attribute || 'rule'}`} onClick={() => onChange(rules.filter((_, ruleIndex) => ruleIndex !== index))}>×</button></div>)}</div>;
 }
 function ReleaseResult({ result }: { result: ReleaseScoreDTO }) { const parsed = result.parsed; return <div className={`settings-release-result ${result.accepted ? 'accepted' : 'rejected'}`}><header><strong>{result.accepted ? 'Accepted' : 'Rejected'}</strong><span>Total score {result.totalScore >= 0 ? '+' : ''}{result.totalScore}</span></header><dl><div><dt>Resolution</dt><dd>{parsed.resolution ?? 'Unknown'}</dd></div><div><dt>Source</dt><dd>{parsed.source ?? 'Unknown'}</dd></div><div><dt>Codec</dt><dd>{parsed.codec ?? 'Unknown'}</dd></div><div><dt>HDR</dt><dd>{parsed.hdr.join(', ') || 'Unknown'}</dd></div><div><dt>Audio</dt><dd>{[...parsed.audio, parsed.audioChannels].filter(Boolean).join(', ') || 'Unknown'}</dd></div><div><dt>Release group</dt><dd>{parsed.releaseGroup ?? 'Unknown'}</dd></div></dl>{result.matchedRules.length > 0 && <div className="settings-match-list"><strong>Matched rules</strong>{result.matchedRules.map((rule) => <span key={rule.id} className={rule.matched ? 'matched' : ''}>{rule.attribute} · {rule.kind.toLowerCase()}{rule.contribution ? ` · ${rule.contribution > 0 ? '+' : ''}${rule.contribution}` : ''}</span>)}</div>}{result.rejectionReasons.length > 0 && <div className="settings-rejections"><strong>Rejection reasons</strong>{result.rejectionReasons.map((reason) => <span key={reason}>{reason}</span>)}</div>}</div>; }
+
+function MediaTab({ value, update, errors }: { value: SettingsBundleDTO['media']; update: (value: Partial<SettingsBundleDTO['media']>) => void; errors: Record<string, string> }) {
+  return <div className="settings-stack"><Section title="Library directories" description="Set separate destinations for movies and TV. Leave a path blank to use the server's MEDIA_ROOTS configuration."><div className="settings-grid"><Field label="Movies directory" error={errors.moviesDirectory} hint="Absolute path visible to the backend. With Docker, use the container path."><input className="control-input" value={value.moviesDirectory} onChange={(event) => update({ moviesDirectory: event.target.value })} placeholder="Use configured media roots" spellCheck={false} /></Field><Field label="TV directory" error={errors.tvDirectory} hint="Absolute path visible to the backend. With Docker, use the container path."><input className="control-input" value={value.tvDirectory} onChange={(event) => update({ tvDirectory: event.target.value })} placeholder="Use configured media roots" spellCheck={false} /></Field></div><Toggle label="Create media type subfolders" detail="On: adds /movies and /tv under these paths. Off: places movie and show folders directly in them." checked={value.createMediaTypeSubfolders} onChange={(createMediaTypeSubfolders) => update({ createMediaTypeSubfolders })} /></Section></div>;
+}
 
 function PlaybackTab({ value, update, errors }: { value: SettingsBundleDTO['playback']; update: (value: Partial<SettingsBundleDTO['playback']>) => void; errors: Record<string, string> }) { return <div className="settings-stack"><Section title="Playback methods" description="These switches gate server playback decisions without changing the player implementation."><Toggle label="Direct Play" detail="Serve browser-compatible files without conversion." checked={value.directPlayEnabled} onChange={(directPlayEnabled) => update({ directPlayEnabled })} /><Toggle label="Direct Stream" detail="Allow remuxed HLS when only the container is incompatible." checked={value.directStreamEnabled} onChange={(directStreamEnabled) => update({ directStreamEnabled })} /><Toggle label="Transcoding" detail="Allow FFmpeg conversion for incompatible codecs and requested qualities." checked={value.transcodingEnabled} onChange={(transcodingEnabled) => update({ transcodingEnabled })} />{errors.playback && <small className="field-error">{errors.playback}</small>}</Section><Section title="Limits and acceleration" description="Bitrate limits are server policy for future adaptive sessions; empty values are unlimited."><div className="settings-grid"><Field label="Local bitrate limit (Mbps)"><input className="control-input" type="number" min="1" value={value.localBitrateLimitMbps ?? ''} onChange={(event) => update({ localBitrateLimitMbps: event.target.value ? Number(event.target.value) : null })} /></Field><Field label="Remote bitrate limit (Mbps)"><input className="control-input" type="number" min="1" value={value.remoteBitrateLimitMbps ?? ''} onChange={(event) => update({ remoteBitrateLimitMbps: event.target.value ? Number(event.target.value) : null })} /></Field><Field label="Hardware acceleration"><select className="control-select" value={value.hardwareAcceleration} onChange={(event) => update({ hardwareAcceleration: event.target.value as SettingsBundleDTO['playback']['hardwareAcceleration'] })}><option value="NONE">Disabled</option><option value="AUTO">Automatic</option><option value="VAAPI">VAAPI</option><option value="QSV">Intel Quick Sync</option><option value="NVENC">NVIDIA NVENC</option><option value="VIDEOTOOLBOX">VideoToolbox</option></select></Field></div></Section><Section title="Language preferences" description="Preferred audio selection is applied when a matching analyzed stream exists."><div className="settings-grid"><Field label="Audio language"><input className="control-input" value={value.preferredAudioLanguage ?? ''} onChange={(event) => update({ preferredAudioLanguage: event.target.value || null })} placeholder="English" /></Field><Field label="Subtitle language"><input className="control-input" value={value.preferredSubtitleLanguage ?? ''} onChange={(event) => update({ preferredSubtitleLanguage: event.target.value || null })} placeholder="English" /></Field><Field label="Subtitle mode"><select className="control-select" value={value.subtitlesMode} onChange={(event) => update({ subtitlesMode: event.target.value as SettingsBundleDTO['playback']['subtitlesMode'] })}><option value="OFF">Off</option><option value="FOREIGN_ONLY">Foreign audio only</option><option value="ALWAYS">Always</option></select></Field></div></Section><Section title="Playback behavior" description="Applied to playback preparation and the existing player controls."><Toggle label="Autoplay" checked={value.autoplayEnabled} onChange={(autoplayEnabled) => update({ autoplayEnabled })} /><Toggle label="Show Skip Intro" checked={value.skipIntroEnabled} onChange={(skipIntroEnabled) => update({ skipIntroEnabled })} /><Field label="Resume behavior"><select className="control-select" value={value.resumeBehavior} onChange={(event) => update({ resumeBehavior: event.target.value as SettingsBundleDTO['playback']['resumeBehavior'] })}><option value="ASK">Ask when progress exists</option><option value="ALWAYS">Always resume</option><option value="RESTART">Always restart</option></select></Field></Section></div>; }
 

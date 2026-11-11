@@ -405,6 +405,9 @@ model ServerSettings {
   retryFailedDownloads      Boolean @default(true)
   minimumFreeSpaceGb        Int     @default(10)
   completedImportBehavior   String  @default("COPY")
+  createMediaTypeSubfolders Boolean @default(true)
+  moviesDirectory           String  @default("")
+  tvDirectory               String  @default("")
   torrentSeedRatio          Float?
   torrentSeedTimeMinutes    Int?
   torrentRemoveAfterSeeding Boolean @default(false)

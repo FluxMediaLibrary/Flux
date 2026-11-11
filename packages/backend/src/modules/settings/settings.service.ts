@@ -97,6 +97,11 @@ export async function getSettingsBundle(): Promise<SettingsBundleDTO> {
       torrentRemoveAfterSeeding: row.torrentRemoveAfterSeeding,
       usenetRemoveCompleted: row.usenetRemoveCompleted, usenetRemoveFailed: row.usenetRemoveFailed,
     },
+    media: {
+      createMediaTypeSubfolders: row.createMediaTypeSubfolders,
+      moviesDirectory: row.moviesDirectory,
+      tvDirectory: row.tvDirectory,
+    },
     playback: {
       directPlayEnabled: row.directPlayEnabled, directStreamEnabled: row.directStreamEnabled,
       transcodingEnabled: row.transcodingEnabled, localBitrateLimitMbps: row.localBitrateLimitMbps,
@@ -138,7 +143,7 @@ export async function updateSettings(input: UpdateSettingsBundleRequest): Promis
     const profile = await prisma.qualityProfile.findUnique({ where: { id: input.downloads.defaultQualityProfileId } });
     if (!profile?.enabled) throw ApiError.badRequest('The default quality profile must exist and be enabled', 'INVALID_DEFAULT_PROFILE');
   }
-  const data = { ...(input.general ?? {}), ...(input.downloads ?? {}), ...(input.playback ?? {}) } as Prisma.ServerSettingsUpdateInput;
+  const data = { ...(input.general ?? {}), ...(input.downloads ?? {}), ...(input.playback ?? {}), ...(input.media ?? {}) } as Prisma.ServerSettingsUpdateInput;
   if (input.integrations && Object.prototype.hasOwnProperty.call(input.integrations, 'tmdbApiKey')) {
     data.tmdbApiKey = input.integrations.tmdbApiKey;
   }

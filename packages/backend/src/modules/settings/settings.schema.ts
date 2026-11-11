@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import path from 'node:path';
 
 const nullablePositiveInt = z.number().int().positive().max(1_000_000).nullable();
 
@@ -40,6 +41,11 @@ export const updateSettingsSchema = z.object({
     autoplayEnabled: z.boolean().optional(),
     resumeBehavior: z.enum(['ASK', 'ALWAYS', 'RESTART']).optional(),
     skipIntroEnabled: z.boolean().optional(),
+  }).strict().optional(),
+  media: z.object({
+    createMediaTypeSubfolders: z.boolean().optional(),
+    moviesDirectory: z.string().trim().max(1000).refine((value) => !value || path.isAbsolute(value), 'Directory must be an absolute path').optional(),
+    tvDirectory: z.string().trim().max(1000).refine((value) => !value || path.isAbsolute(value), 'Directory must be an absolute path').optional(),
   }).strict().optional(),
   integrations: z.object({
     tmdbApiKey: z.string().trim().min(8).max(512).nullable().optional(),
